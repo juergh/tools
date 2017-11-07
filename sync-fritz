@@ -8,6 +8,7 @@ USER_FILES="\
     ${HOME}/.bashrc \
     ${HOME}/.caffrc \
     ${HOME}/.canonistack/ \
+    ${HOME}/.config/gtk-3.0/gtk.css \
     ${HOME}/.config/hexchat/servlist.conf \
     ${HOME}/.emacs \
     ${HOME}/.emacs.d/ \
@@ -23,6 +24,7 @@ ROOT_FILES="\
     /etc/auto.jabba \
     /etc/auto.fritz \
     /etc/auto.master \
+    /etc/security/limits.d/custom.conf \
     /etc/sudoers.d/${USER} \
 "
 
@@ -50,5 +52,5 @@ case "${1:-}" in
     *)
         echo "Usage: $(basename ${0}) to|from"
         exit 2
-        ;; 
+        ;;
 esac
