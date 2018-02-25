@@ -1,2 +1,2 @@
 #!/bin/bash
-printf "%x\n" $1
+printf "%x\n" "${1}"
