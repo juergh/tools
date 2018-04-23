@@ -25,6 +25,7 @@ Available options:
   -a, --arch ARCH  Architecture of the VM (defaults to the host architecture).
   -d, --debug      Enable debugging (set -x).
   -f, --force      Force the recreation of an existing VM.
+  -u, --uefi       Configure the VM to boot from UEFI
 EOF
 }
 
@@ -89,11 +90,19 @@ EOF
 
 function define_vm()
 {
-	local tmpf uuid mac_addr
+	local tmpf uuid mac_addr uefi
 
 	tmpf=$(mktemp)
 	uuid=$(uuidgen -r)
 	mac_addr="52:54:00:${uuid:0:2}:${uuid:2:2}:${uuid:4:2}"
+
+	uefi=
+	if [ ${UEFI} -eq 1 ] ; then
+		uefi="
+    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE.fd</loader>
+    <nvram>/var/lib/libvirt/qemu/nvram/${NAME}_VARS.fd</nvram>
+"
+	fi
 
 	cat <<EOF >"${tmpf}"
 <domain type='kvm'>
@@ -107,6 +116,7 @@ function define_vm()
   </resource>
   <os>
     <type arch='x86_64' machine='pc'>hvm</type>
+${uefi}
     <boot dev='hd'/>
   </os>
   <features>
@@ -206,6 +216,7 @@ EOF
 
 ARCH=
 FORCE=0
+UEFI=0
 DIST=
 
 while [ ${#} -gt 0 ] ; do
@@ -219,6 +230,9 @@ while [ ${#} -gt 0 ] ; do
             ;;
         -f|--force)
             FORCE=1
+            ;;
+        -u|--uefi)
+            UEFI=1
             ;;
         -*)
             echo "Error: Unexpected option: ${1}" >&2
@@ -244,11 +258,13 @@ fi
 # -----------------------------------------------------------------------------
 # Set global variables
 
-# Set the name of the VM (append its architecture if it's non-default)
+# Set the name of the VM
+NAME=${DIST}
+if [ ${UEFI} -eq 1 ] ; then
+	NAME=${NAME}-uefi
+fi
 if [ -n "${ARCH}" ] ; then
-	NAME=${DIST}-${ARCH}
-else
-	NAME=${DIST}
+	NAME=${NAME}-${ARCH}
 fi
 
 # Verify the distro-release combination
