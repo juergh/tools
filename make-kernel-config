@@ -1,0 +1,562 @@
+#!/bin/bash -eu
+#
+# A helper script for generating kernel config files for specific use-cases
+#
+
+# -----------------------------------------------------------------------------
+# Default configs
+
+function config_yes()
+{
+	CONFIG+=(
+		ACPI:y            # Required for power off
+		ATA:y
+		ATA_PIIX:y        # Basic ATA
+		BLK_DEV_SD:y
+		BLK_DEV_SR:y
+		CRASH_DUMP:y
+		EARLY_PRINTK:y
+		EXPERT:y
+		DEBUG_KERNEL:y
+		EFI_STUB:y
+		EXT4_FS:y
+		IKCONFIG:y
+		IKCONFIG_PROC:y
+		KALLSYMS:y
+		KALLSYMS_ALL:y
+		KEXEC:y
+		KEXEC_FILE:y
+		  CRYPTO_SHA256:y
+		MAGIC_SYSRQ:y
+		PROC_FS:y
+		RELOCATABLE:y     # Required for a crash kernel
+		SYSFS:y
+	)
+}
+
+function config_no()
+{
+	CONFIG+=(
+		DRM:n
+		HAMRADIO:n
+		NET:n
+		PARAVIRT:n
+		PCMCIA:n
+		SOUND:n
+		USB:n
+		VIRTUALIZATION:n
+	)
+}
+
+# -----------------------------------------------------------------------------
+# '9p' configs
+
+# shellcheck disable=SC2034
+help_9p="Enable 9P support"
+
+function config_9p()
+{
+	CONFIG+=(
+		9P_FS:m
+		  INET:y
+		    NET:y
+		9P_FSCACHE:y
+		  FSCACHE:m
+		9P_FS_POSIX_ACL:y
+		NET_9P:m
+	)
+
+	# Enable 9P VirtIO support
+	if check_opts virtio || check_opts libvirt ; then
+		CONFIG+=(
+			NET_9P_VIRTIO:m
+		)
+	fi
+}
+
+# -----------------------------------------------------------------------------
+# 'cdrom' configs
+
+# shellcheck disable=SC2034
+help_cdrom="Enable CDROM support"
+
+function config_cdrom()
+{
+	CONFIG+=(
+		BLK_DEV_SR:y
+		ISO9660_FS:y
+		JOLIET:y
+	)
+}
+
+# -----------------------------------------------------------------------------
+# 'cq58' configs
+
+# shellcheck disable=SC2034
+help_cq58="Enable support for Compaq CQ58"
+
+function config_cq58()
+{
+	CONFIG+=(
+		ATH9K:y   # Wireless network adapter
+		DRM_RADEON:y
+		R8169:y   # Ethernet controller
+	)
+}
+
+# -----------------------------------------------------------------------------
+# 'ftrace' configs
+
+# shellcheck disable=SC2034
+help_ftrace="Enable Ftrace support"
+
+function config_ftrace()
+{
+	CONFIG+=(
+		DYNAMIC_FTRACE:y
+		FTRACE_SYSCALLS:y
+		FUNCTION_GRAPH_TRACER:y
+		FUNCTION_TRACER:y
+		KPROBE_EVENT:y
+		STACK_TRACER:y
+	)
+}
+
+# -----------------------------------------------------------------------------
+# 'kvm' configs
+
+# shellcheck disable=SC2034
+help_kvm="Enable KVM support (both host and guest)"
+
+function config_kvm()
+{
+	CONFIG+=(
+		KVM_INTEL:y
+		  KVM:y
+		    NET:y
+		    VIRTUALIZATION:y
+
+		KVM_GUEST:y
+		  PARAVIRT:y
+		    HYPERVISOR_GUEST:y  # For newer kernels
+		    PARAVIRT_GUEST:y    # For older kernels
+	)
+}
+
+# -----------------------------------------------------------------------------
+# 'libvirt' configs
+
+# shellcheck disable=SC2034
+help_libvirt="Enable libvirt guest support (9p, cdrom, kvm, virtio)"
+
+function config_libvirt()
+{
+	config_9p
+	config_cdrom
+	config_kvm
+	config_virtio
+}
+
+# -----------------------------------------------------------------------------
+# 'livepatch' configs
+
+# shellcheck disable=SC2034
+help_livepatch="Enable livepatch support"
+
+function config_livepatch()
+{
+	CONFIG+=(
+		LIVEPATCH:y
+		  DEBUG_INFO:y
+		  DYNAMIC_FTRACE:y
+		  FTRACE:y
+		  FUNCTION_TRACER:y
+		  MODULES:y
+		  SYSFS:y
+	)
+}
+
+# -----------------------------------------------------------------------------
+# 'pti' configs
+
+# shellcheck disable=SC2034
+help_pti="Enable page table isolation"
+
+function config_pti()
+{
+	CONFIG+=(
+		DEBUG_INFO:y
+		DEBUG_VM:y
+		FUNCTION_GRAPH_TRACER:y
+		  FUNCTION_TRACER:y
+		PAGE_TABLE_ISOLATION:y
+		KAISER:y
+	)
+}
+
+# -----------------------------------------------------------------------------
+# 'virtio' configs
+
+# shellcheck disable=SC2034
+help_virtio="Enable VirtIO support (balloon, block, console, input, MMIO, net, PCI, SCSI)"
+
+function config_virtio()
+{
+    CONFIG+=(
+        NET:y
+        SCSI:y
+        SCSI_LOWLEVEL:y
+        VIRTIO_BALLOON:y
+        VIRTIO_MMIO:y
+        VIRTIO_MMIO_CMDLINE_DEVICES:y
+        VIRTIO_PCI:y
+        VIRTIO_PCI_LEGACY:y
+
+        SCSI_VIRTIO:m
+        VIRTIO_BLK:m
+        VIRTIO_CONSOLE:m
+        VIRTIO_INPUT:m
+        VIRTIO_NET:m
+    )
+}
+
+# -----------------------------------------------------------------------------
+# Function declarations
+
+function out()
+{
+	local rc=${?}
+
+	if [ ${rc} -eq 0 ] ; then
+		echo -e "\e[92m+++ PASS: Script passed!\e[0m"
+	else
+		echo -e "\e[91m+++ FAIL: Script failed!\e[0m" >&2
+	fi
+
+	exit ${rc}
+}
+
+function warn()
+{
+	echo -e "\e[93m${*}\e[0m"
+}
+
+function err()
+{
+	echo -e "\e[91m${*}\e[0m" >&2
+}
+
+function die()
+{
+	echo -e "\e[91m+++ Error: ${*}\e[0m" >&2
+	exit 1
+}
+
+function check_opts()
+{
+	local config
+
+	for config in "${OPT_CONFIG[@]}" ; do
+		if [ "${config}" = "${1}" ] ; then
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+function usage()
+{
+	local config
+
+	cat <<EOF
+Usage: make-kernel-config [<options>] <localversion>
+
+Generate kernel config files.
+
+Generic options:
+  -a, --arch <ARCH>        Generate a config for arch <ARCH>.
+  -c, --config <FILE>      Use config file <FILE> as the base config instead of
+                           the <ARCH> specific defconfig.
+  -h, --help               Show this help text.
+  -m, --modules [yes|no]   yes: Convert modules to core (m -> y).
+                           no:  Disable modules (m -> n).
+  -s, --show               Show the requested config options without generating
+                           a config file.
+
+Kernel config options:
+EOF
+
+	declare -F | awk '{ print $3 }' | grep '^config_' | sort | \
+		while read -r config ; do
+			config=${config#config_}
+			if [ "${config}" != "yes" ] && [ "${config}" != "no" ] ; then
+				help="help_${config}"
+				printf "  --%-12s%s\n" "${config}" "${!help}"
+			fi
+		done
+}
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+OPT_CONFIG=()
+OPT_CONFIG_FILE=
+OPT_LOCALVERSION=
+OPT_MODULES=
+OPT_SHOW=0
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-a|--arch)
+			shift
+			export ARCH=${1}
+			;;
+		-c|--config)
+			shift
+			if ! [ -e "${1}" ] ; then
+				die "No such config file: ${1}"
+			fi
+			OPT_CONFIG_FILE=${1}
+			;;
+		-h|--help)
+			usage
+			exit 0
+			;;
+		-m|--modules)
+			shift
+			[ "${1,,}" = "yes" ] || [ "${1,,}" = "no" ] || \
+				die "Invalid option for --modules: ${1}"
+			OPT_MODULES=${1,,}
+			;;
+		-s|--show)
+			OPT_SHOW=1
+			;;
+		--*)
+			if declare -F "config_${1#--}" >/dev/null ; then
+				OPT_CONFIG+=(${1#--})
+			else
+				die "Invalid option: ${1}"
+			fi
+			;;
+		*)
+			if [ -z "${OPT_LOCALVERSION}" ] ; then
+				OPT_LOCALVERSION="-${1#-}"
+			else
+				die "Invalid argument: ${1}"
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${OPT_LOCALVERSION}" ] ; then
+	usage
+	exit 2
+fi
+
+trap out EXIT INT TERM HUP
+
+# -----------------------------------------------------------------------------
+# Create the list of requested config options (this sets the CONFIG array)
+
+declare -a CONFIG=()
+
+config_yes
+if [ -z "${OPT_CONFIG_FILE}" ] ; then
+	config_no
+fi
+
+for opt_config in "${OPT_CONFIG[@]}" ; do
+	"config_${opt_config}"
+done
+
+# -----------------------------------------------------------------------------
+# Create a hash array with all the requested config options. Later options
+# overwrite earlier ones!
+
+declare -A opts_requested=()
+
+for config in "${CONFIG[@]}" ; do
+	IFS=: read -r opt val <<< "${config}"
+
+	# Disable modules or turn them into core
+	if [ "${val}" = "m" ] ; then
+		if [ "${OPT_MODULES}" = "no" ] ; then
+			val=n
+		elif [ "${OPT_MODULES}" = "yes" ] ; then
+			val=y
+		fi
+	fi
+
+	# Add the option to the array
+	opts_requested[${opt}]=${val}
+done
+
+# Add the localversion to the config list
+opts_requested[LOCALVERSION]=${OPT_LOCALVERSION}
+
+# -----------------------------------------------------------------------------
+# Show the config options
+
+if [ ${OPT_SHOW} -eq 1 ] ; then
+	echo "+++ Requested config options"
+	for opt in $(echo "${!opts_requested[*]}" | tr ' ' '\n' | sort) ; do
+		echo "${opt}: ${opts_requested[${opt}]}"
+	done
+	echo
+	exit 0
+fi
+
+# -----------------------------------------------------------------------------
+# Create a base config file
+
+if [ -n "${OPT_CONFIG_FILE}" ] ; then
+	if [ "${OPT_CONFIG_FILE}" -ef .config ] ; then
+		cp .config .config.orig
+	else
+		cp "${OPT_CONFIG_FILE}" .config
+	fi
+else
+	make defconfig
+fi
+
+# -----------------------------------------------------------------------------
+# Set the requested options
+
+echo
+echo "+++ Setting config options"
+for opt in "${!opts_requested[@]}" ; do
+	val=${opts_requested[${opt}]}
+	arg=
+	case "${val}" in
+		y)
+			cmd="--enable"
+			;;
+		n)
+			cmd="--disable"
+			;;
+		m)
+			cmd="--module"
+			;;
+		[0-9]*)
+			cmd="--set-val"
+			arg=${val}
+			;;
+		*)
+			cmd="--set-str"
+			arg=${val}
+			;;
+#		*)
+#			die "Invalid option: ${opt} (value ${val})"
+#			;;
+	esac
+	printf "%s %-9s %s %s\n" "./scripts/config" "${cmd}" "${opt}" "${arg}"
+	./scripts/config "${cmd}" "${opt}" "${arg}"
+done | sort -k3
+echo
+
+# -----------------------------------------------------------------------------
+# Regnerate the config file to clean up any dependencies
+
+# We want to use 'olddefconfig' but that target is only available in newer
+# kernels. Instead use 'oldnoconfig' which is the same (despite the misleading
+# name).
+make oldnoconfig
+
+# -----------------------------------------------------------------------------
+# Check that all the requested options are as expected
+
+declare -A opts_not_found=()
+
+echo
+echo "+++ Checking config options"
+for opt in $(echo "${!opts_requested[*]}" | tr ' ' '\n' | sort) ; do
+	val=${opts_requested[${opt}]}
+	arg=
+	case ${val} in
+		y)
+			pattern="^CONFIG_${opt}=y"
+			grep "${pattern}" .config || opts_not_found[${opt}]=${pattern}
+			;;
+		n)
+			pattern="^# CONFIG_${opt} is not set"
+			grep "${pattern}" .config || \
+				! grep -q "^CONFIG_${opt}=" .config || \
+				opts_not_found[${opt}]=${pattern}
+
+			;;
+		m)
+			pattern="^CONFIG_${opt}=m"
+			grep "${pattern}" .config || opts_not_found[${opt}]=${pattern}
+			;;
+		[0-9]*)
+			arg=${val}
+			pattern="^CONFIG_${opt}=${arg}"
+			grep "${pattern}" .config || opts_not_found[${opt}]=${pattern}
+			;;
+		\"*)
+			arg=${val}
+			pattern="^CONFIG_${opt}=${arg}"
+			grep "${pattern}" .config || opts_not_found[${opt}]=${pattern}
+			;;
+	esac
+done
+echo
+
+# -----------------------------------------------------------------------------
+# Process the requested options that weren't found
+
+if [ ${#opts_not_found[@]} -gt 0 ] ; then
+	declare -A opts_supported=()
+	declare -a opts_not_supported=()
+
+	# Create a hash array of the current kernel's supported options
+	for opt in $(find arch block certs crypto drivers fs init kernel lib mm \
+					  net samples security sound usr virt \
+					  -type f -name 'Kconfig*' -print0 | \
+					 xargs -0 grep '^config ' | \
+					 sed 's,.*config ,,' | sort -u) ; do
+		opts_supported[${opt}]=1
+	done
+
+	# Check the list of not-found options against the supported list
+	for opt in "${!opts_not_found[@]}" ; do
+		if [ ${opts_supported[${opt}]:-0} -eq 0 ] ; then
+			opts_not_supported+=(${opt})
+			unset opts_not_found["${opt}"]
+		fi
+	done
+
+	# Emit a warning for all unsupported options
+	if [ ${#opts_not_supported[@]} -gt 0 ] ; then
+		warn "+++ Warning: The following options are not supported by this " \
+			 "kernel:"
+		for opt in "${opts_not_supported[@]}" ; do
+			warn "  ${opt}"
+		done
+		echo
+	fi
+
+	# Emit an error for supported but not found options
+	if [ ${#opts_not_found[@]} -gt 0 ] ; then
+		err "+++ Error: The following options were not found:"
+		for pattern in "${opts_not_found[@]}" ; do
+			err "  ${pattern}"
+		done
+		echo
+		exit 1
+	fi
+fi
+
+# -----------------------------------------------------------------------------
+# Copy the config file
+
+KERNELVERSION=$(make -s kernelversion)
+CONFIGFILE=config-${KERNELVERSION}${OPT_LOCALVERSION}
+if [ -e "${CONFIGFILE}" ] ; then
+	cp "${CONFIGFILE}" "${CONFIGFILE}.orig"
+fi
+cp .config "${CONFIGFILE}"
+
+echo "+++ Created config file: ${CONFIGFILE}"

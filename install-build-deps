@@ -1,0 +1,35 @@
+#!/bin/bash -eu
+#
+# Parse debian/control and install all missing build dependencies
+#
+
+tmp=$(mktemp)
+# shellcheck disable=SC2064
+trap "rm ${tmp}" EXIT
+
+error=0
+dpkg-checkbuilddeps > "${tmp}" 2>&1 || error=${?}
+
+if [ "${error}" -eq 0 ] ; then
+    echo "All build deps are already installed"
+    exit 0
+fi
+
+if ! grep -q 'Unmet build dependencies' "${tmp}" ; then
+    cat "${tmp}"
+    exit "${error}"
+fi
+
+debs=$(dpkg-checkbuilddeps 2>&1 | \
+           sed -e 's/^.*Unmet build dependencies: //' \
+               -e 's/([^)]*)//g')
+
+if [ -z "${debs}" ] ; then
+    echo "Empty list of build dependencies??"
+    cat "${tmp}"
+    exit 1
+fi
+
+echo "Installing build dependencies"
+# shellcheck disable=SC2086
+apt -y install ${debs}

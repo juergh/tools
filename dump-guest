@@ -1,0 +1,83 @@
+#!/bin/bash -eu
+#
+# Dump the memory of a libivrt or QEMU guest
+#
+
+function cleanup()
+{
+	trap - EXIT TERM INT
+
+	if [ -e "${TMPFILE}" ] ; then
+		if [ -r "${TMPFILE}" ] ; then
+			rm "${TMPFILE}"
+		else
+			sudo rm "${TMPFILE}"
+		fi
+	fi
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: dump-guest [options] [<dumpfile>]
+
+Dump the memory of a libvirt/QEMU guest for analysis with crash.
+
+Options:
+  -d, --domain <DOMAIN>   Dump libvirt guest domamin <DOMAIN>
+  -s, --socket <SOCKET>   Dump QEMU guest with QEMU monitor socket <SOCKET>
+EOF
+}
+
+dump=
+domain=
+socket=
+
+while [ $# -ne 0 ] ; do
+	case "${1}" in
+		-d|--domain)
+			shift
+			socket=${1}
+			;;
+		-s|--socket)
+			shift
+			socket=${1}
+			;;
+		*)
+			if [ -n "${dump}" ] ; then
+				echo "Invalid argument: ${1}"
+				exit 2
+			fi
+			dump=${1}
+			;;
+	esac
+	shift
+done
+
+dump=${dump:-dump.$(date +'%Y%m%d%H%M')}
+
+TMPFILE=$(mktemp -u /tmp/dump-guest.XXXXXX)
+trap cleanup EXIT TERM INT 
+
+if [ -n "${domain}" ] ; then
+	virsh qemu-monitor-command ${domain} --hmp \
+		  --cmd "dump-guest-memory -z ${TMPFILE}"
+
+elif [ -n "${socket}" ] ; then
+	echo "dump-guest-memory -z ${TMPFILE}" | socat - UNIX-CONNECT:"${socket}"
+
+else
+	echo "Must specify either --socket or --domain"
+	exit 2
+fi
+
+if [ -r "${TMPFILE}" ] ; then
+	mv "${TMPFILE}" "${dump}"
+elif [ -e "${TMPFILE}" ] ; then
+	uid=$(id -un)
+	gid=$(id -gn)
+	sudo chown "${uid}:${gid}" "${TMPFILE}"
+	mv "${TMPFILE}" "${dump}"
+fi
+
+echo "Created dumpfile ${dump}"

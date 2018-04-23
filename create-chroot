@@ -1,0 +1,407 @@
+#!/bin/bash -eu
+#
+# Create a (kernel build) chroot
+#
+
+
+# -----------------------------------------------------------------------------
+# Include the following packages
+
+# The base DEB packages
+DEB_INCLUDE=(
+	build-essential
+	debhelper
+	devscripts
+	dpkg-dev
+	fakeroot
+	less
+	sudo
+	tzdata
+)
+
+# Additional DEB packages (primarily for kernel builds)
+DEB_PACKAGES=(
+	asciidoc
+	autoconf
+	automake
+	bc
+	binutils-dev
+	bison
+	dh-systemd
+	docbook-utils
+	flex
+	gawk
+	ghostscript
+	git
+	kernel-wedge
+	kpatch-build
+	libaudit-dev
+	libdistro-info-perl
+	libdw-dev
+	libelf-dev
+	libiberty-dev
+	liblzma-dev
+	libnewt-dev
+	libpci-dev
+	libpng12-dev
+	libssl-dev
+	libtool
+	libudev-dev
+	libunwind8-dev
+	liburi-perl
+	makedumpfile
+	openssl
+	pkg-config
+	python-dev
+	python3-apt
+	python3-launchpadlib
+	python3-requests
+	rsync
+	sbsigntool
+	sharutils
+	transfig
+	uuid-dev
+	wget
+	xmlto
+)
+
+# The base RPM packages
+RPM_INCLUDE=(
+	fakeroot
+	less
+	sudo
+	tzdata
+)
+
+# Additional RPM packages
+RPM_PACKAGES=(
+	rpmdevtools
+	wget
+)
+
+
+# -----------------------------------------------------------------------------
+# Create a Debian chroot
+
+function debian_create_chroot()
+{
+	local components opts package sources sudoer tz
+
+	case "${VENDOR}" in
+		ubuntu)
+			components="main,universe"
+			;;
+		*)
+			components="main"
+			;;
+	esac
+
+	if [ "${NO_CHECK_GPG}" -eq 1 ] ; then
+		opts="--no-check-gpg"
+	fi
+
+	# Create the base chroot
+	qemu-debootstrap \
+		${opts:-} \
+		--include="$(IFS=, ; echo "${DEB_INCLUDE[*]}")" \
+		--components="${components}" \
+		--arch="${ARCH}" \
+		"${DIST}" \
+		"${BASEDIR}"
+
+	# Add -updates
+	sources="${BASEDIR}/etc/apt/sources.list"
+	cp -f "${sources}" "${sources}.tmp"
+	grep "^deb .* ${DIST} .*" "${sources}" | \
+		sed "s, ${DIST} , ${DIST}-updates ," >> "${sources}.tmp"
+	mv "${sources}.tmp" "${sources}"
+
+	# Refresh the chroot
+	${SCHROOT} apt-get -y update
+	${SCHROOT} apt-get -y upgrade
+	${SCHROOT} apt-get -y dist-upgrade
+
+	# Set the chroot timezone to match the host
+	tz=$(cat /etc/timezone)
+	ln -fs "/usr/share/zoneinfo/${tz}" "${BASEDIR}/etc/localtime"
+	${SCHROOT} dpkg-reconfigure -f noninteractive tzdata
+
+	# Preseed kexec-tools
+	${SCHROOT} bash -c "echo kexec-tools kexec-tools/load_kexec boolean false | debconf-set-selections"
+
+	# Install the additional packages
+	if [ "${BASE}" -eq 0 ] ; then
+		for package in "${DEB_PACKAGES[@]}" ; do
+			${SCHROOT} apt-get -y install "${package}" 2>/dev/null || true
+		done
+	fi
+
+	# Clean the cache
+	${SCHROOT} apt-get clean
+}
+
+
+# -----------------------------------------------------------------------------
+# Create a Fedora chroot
+
+function fedora_create_chroot()
+{
+	local ver url rpms rpm package
+
+	mkdir -p "${BASEDIR}"
+
+	# The release version
+	ver=${DIST#*-}
+
+	case "${VENDOR}" in
+		fedora)
+			url="https://dl.fedoraproject.org/pub/fedora/linux/releases/${ver}/Everything/${ARCH}/os/Packages/"
+			;;
+		centos)
+			url="http://mirror.centos.org/${DIST}/${ver}/os/${ARCH}/Packages"
+			;;
+		opensuse)
+			url="http://download.opensuse.org/distribution/leap/${ver}/repo/oss/suse/${ARCH}/"
+			;;
+	esac
+
+	# The exact names of the release (and repos) RPMs
+	rpms=()
+	rpms+=($(curl -s "${url}/" | grep -o ">${VENDOR}-release-.*.rpm<" | \
+				 tr -d '><'))
+	rpms+=($(curl -s "${url}/" | grep -o ">${VENDOR}-repos-.*.rpm<" | \
+				 tr -d '><'))
+
+	# Download and install the release and repos RPMs
+	for rpm in "${rpms[@]}" ; do
+		( cd /tmp && rm -f "${rpm}" && wget "${url}/${rpm}" )
+		rpm -ivh --force-debian --nodeps --root "${BASEDIR}" "/tmp/${rpm}"
+	done
+
+	# Install the base system
+	yum --installroot="${BASEDIR}" --releasever="${ver}" --assumeyes \
+		--nogpgcheck install yum
+
+	# We need to reinstall the base system because the original installation
+	# put the RPM database in ~/.rpmdb
+	${SCHROOT} yum --releasever="${ver}" --assumeyes --nogpgcheck install yum \
+			   "${RPM_INCLUDE[@]}"
+
+	# Install the additional packages
+	if [ "${BASE}" -eq 0 ] ; then
+		for package in yum-utils dnf-plugins-core "${RPM_PACKAGES[@]}" ; do
+			${SCHROOT} yum --assumeyes install "${package}" 2>/dev/null || true
+		done
+		# Install kernel build dependencies
+		${SCHROOT} yum-builddep --assumeyes kernel
+	fi
+
+	# Clean the cache
+	${SCHROOT} yum clean all
+
+	# TODO: Enable the debuginfo repos
+}
+
+
+# -----------------------------------------------------------------------------
+# Exit handler
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT HUP TERM
+
+	# Unmount bound directories in case debootstrap failed
+	if mount | grep -q " on ${BASEDIR}/" ; then
+		mount | grep " on ${BASEDIR}/" | awk '{ print $3 }' | xargs umount
+	fi
+
+	# Emit a status message
+	if [ "${rc}" -eq 0 ] ; then
+		echo -e "\e[92mChroot created successfully\e[0m"
+	else
+		# Purge the chroot and config file
+		if [ "${KEEP}" -eq 0 ] ; then
+			rm -rf "${BASEDIR}" "/etc/schroot/chroot.d/${NAME}"
+		fi
+		echo -e "\e[91mError: Failed to create chroot!\e[0m" >&2
+	fi
+
+	exit "${rc}"
+}
+
+
+# -----------------------------------------------------------------------------
+# Usage
+
+function usage()
+{
+	cat <<EOF
+Usage: create-chroot [<options>] <dist> [<name>]
+q
+Create a chroot for kernel package builds.
+
+dist   A recognized distribution, like ubuntu-xenial, debian-jessie,
+       fedora-26, centos-7, ...
+name   The name of the chroot, defaults to <dist>-<arch> if not specified.
+
+Available options:
+  -a, --arch <arch>    Architecture of the chroot (defaults to the host
+                       architecture).
+  -b, --base           Create a base chroot without additional packages.
+  -d, --debug          Enable debugging (set -x).
+  -f, --force          Force the recreation of an existing chroot.
+  -k, --keep           Keep the chroot and config file after a build failure.
+  -n, --no-check-gpg   Don't check GPG signatures of retrieved Release files.
+
+EOF
+}
+
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+ARCH=
+BASE=0
+FORCE=0
+DIST=
+KEEP=0
+NAME=
+NO_CHECK_GPG=0
+
+while [ ${#} -gt 0 ] ; do
+	case ${1} in
+		-a|--arch)
+			ARCH="${2}"
+			shift
+			;;
+		-b|--base)
+			BASE=1
+			;;
+		-d|--debug)
+			set -x
+			;;
+		-f|--force)
+			FORCE=1
+			;;
+		-k|--keep)
+			KEEP=1
+			;;
+		-n|--no-check-gpg)
+			NO_CHECK_GPG=1
+			;;
+		-*)
+			echo "Error: Unexpected option: ${1}" >&2
+			exit 2
+			;;
+		*)
+			if [ -z "${DIST}" ] ; then
+				DIST="${1}"
+			elif [ -z "${NAME}" ] ; then
+				NAME="${1}"
+			else
+				echo "Error: Unexpected argument: ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${DIST}" ] ; then
+	usage
+	exit 2
+fi
+
+# Set the default vendor
+VENDOR=${DIST%%-*}
+
+case "${DIST}" in
+	fedora-*|centos-*|opensuse-*)
+		BASE_DIST=fedora
+		[ -n "${ARCH}" ] || ARCH=x86_64
+		;;
+	debian-*|ubuntu-*)
+		BASE_DIST=debian
+		;;
+	wheezy|jessie|stretch|buster|sid)
+		BASE_DIST=debian
+		VENDOR=debian
+		;;
+	*)
+		BASE_DIST=debian
+		VENDOR=ubuntu
+		;;
+esac
+
+[ -n "${ARCH}" ] || ARCH=amd64
+
+if [ -z "${NAME}" ] ; then
+	NAME="${DIST}-${ARCH}"
+fi
+
+SCHROOT="schroot -c ${NAME} --"
+
+# -----------------------------------------------------------------------------
+# Verify that we're root
+
+if [ "$(id -u)" -ne 0 ] ; then
+	echo "Error: This script needs to be run as root" >&2
+	exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# Sanity checks
+
+# Check if the chroot is currently in use
+if mount | grep -E -q "/run/schroot/mount/${NAME}-[0-9a-f]{8}-" ; then
+	echo "Error: The chroot is currently mounted and in use" >&2
+	exit 1
+fi
+
+# Check if the chroot directory exists already
+BASEDIR="/var/chroot/${NAME}"
+if [ -d "${BASEDIR}" ] ; then
+	if [ "${FORCE}" -eq 0 ] ; then
+		echo "Error: Chroot directory exists already" >&2
+		echo "       Use -f, --force to recreate it" >&2
+		exit 1
+	else
+		rm -rf "${BASEDIR}"
+	fi
+fi
+
+trap out EXIT INT HUP TERM
+
+# -----------------------------------------------------------------------------
+# Add a config file to /etc/schroot/chroot.d/
+
+cat <<EOF >"/etc/schroot/chroot.d/${NAME}"
+[${NAME}]
+type=directory
+directory=${BASEDIR}
+root-users=${SUDO_USER}
+preserve-environment=true
+
+[${NAME}-overlay]
+type=directory
+directory=${BASEDIR}
+root-users=${SUDO_USER}
+preserve-environment=true
+union-type=overlay
+EOF
+
+# -----------------------------------------------------------------------------
+# Create the chroot
+
+"${BASE_DIST}_create_chroot"
+
+# -----------------------------------------------------------------------------
+# Add a sudo user to the chroot
+
+sudoer="${BASEDIR}/etc/sudoers.d/${SUDO_USER}"
+cat <<EOF >"${sudoer}"
+${SUDO_USER} ALL = NOPASSWD: ALL
+EOF
+chmod 440 "${sudoer}"

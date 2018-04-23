@@ -1,0 +1,86 @@
+#!/bin/bash -eu
+#
+# Configure a user on a VM guest
+#
+
+if [ "$(id -u)" -eq 0 ] ; then
+    echo "Error: You should not run as root" >&2
+    exit 1
+fi
+
+host=${1}
+
+user=${USER}
+uid=$(id -u)
+gid=$(id -g)
+
+# Create the remote script
+script=$(mktemp -p /tmp/)
+#shellcheck disable=SC2064
+trap "rm -f ${script}" EXIT
+
+cat <<EOF >"${script}"
+set -e
+
+# Create the group and user
+if ! getent group ${gid} >/dev/null ; then
+    groupadd --gid ${gid} ${user}
+fi
+if ! getent passwd ${uid} >/dev/null ; then
+    useradd --gid ${gid} --uid ${uid} --base-dir /h --shell /bin/bash ${user}
+fi
+
+# Add a sudoer file
+echo "${user} ALL = NOPASSWD: ALL" > /etc/sudoers.d/${user}
+chmod 440 /etc/sudoers.d/${user}
+
+# Enable 9p mounts
+if grep -q "CONFIG_NET_9P_VIRTIO=" /boot/config-\$(uname -r) ; then
+
+    # Create our special home dir
+    [ -d /h ] || mkdir /h
+
+    # Add the 9p mount to /etc/fstab
+    if ! grep -q "^home " /etc/fstab ; then
+	    . /etc/os-release
+		if [ \${ID} = centos ] || [ \${ID} = fedora ] ; then
+		    nofail=nobootwait
+		fi
+		echo "home  /h  9p  trans=virtio,version=9p2000.L,rw,\${nofail:-nofail}  0  0" >> /etc/fstab
+    fi
+
+    # Load the 9p transport module at boot
+    if [ -d /etc/modules-load.d/ ] && \
+       ! [ -e /etc/modules-load.d/9pnet_virtio.conf ] ; then
+        echo "9pnet_virtio" > /etc/modules-load.d/9pnet_virtio.conf
+    elif ! grep -q "^9pnet_virtio" /etc/modules ; then
+        echo "9pnet_virtio" >> /etc/modules
+    fi
+
+    # Allow access to the 9p mount (for SELinux enabled guests)
+    if which setsebool >/dev/null 2>&1 ; then
+        setsebool -P use_nfs_home_dirs 1
+    fi
+fi
+EOF
+
+# Options for scp and ssh
+ssh_opts=("-o" "StrictHostKeyChecking=no"
+		  "-o" "UserKnownHostsFile=/dev/null")
+
+# Copt the script to the host
+scp "${ssh_opts[@]}" "${script}" "${host}:/tmp/"
+
+# Execute the script
+if [ "${host%@*}" != "root" ] ; then
+    sudo="sudo"
+fi
+# shellcheck disable=SC2029
+ssh "${ssh_opts[@]}" "${host}" "${sudo:-} /bin/bash ${script} ; rm ${script}"
+
+cat <<EOF
+
+Note: Make sure to add user="root" and group="root" to /etc/libvirt/qemu.conf
+      to ensure that 9p passthrough is working properly or you'll get
+      'permission denied' errors when trying to access the mount.
+EOF
