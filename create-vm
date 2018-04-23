@@ -73,7 +73,7 @@ EOF
 	cat <<EOF >"${tmpd}/user-data"
 #cloud-config
 chpasswd: { expire: false }
-hostname: ${NAME}
+hostname: ${NAME}.localdomain
 manage_etc_hosts: localhost
 password: ${VENDOR}
 ssh_authorized_keys: [ ${public_key} ]
