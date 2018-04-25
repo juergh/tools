@@ -32,7 +32,7 @@ EOF
 
 function download_image()
 {
-	local url pattern name
+	local url pattern name suffix
 
 	case "${VENDOR}" in
 		fedora)
@@ -40,7 +40,15 @@ function download_image()
 			pattern="Fedora-Cloud-Base-${RELEASE}-.*.${ARCH}.qcow2"
 			;;
 		ubuntu)
-			url=https://cloud-images.ubuntu.com/${RELEASE}/current/${RELEASE}-server-cloudimg-${ARCH}.img
+			suffix=
+			if [ "${RELEASE}" = "trusty" ] || [ "${RELEASE}" = "xenial" ] ; then
+				suffix="-disk1"
+				if [ "${UEFI}" -eq 1 ] ; then
+					suffix="-uefi1"
+				fi
+			fi
+			name=${RELEASE}-server-cloudimg-${ARCH}${suffix}.img
+			url=https://cloud-images.ubuntu.com/${RELEASE}/current/${name}
 			pattern=
 			;;
 	esac
