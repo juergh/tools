@@ -13,7 +13,7 @@ function print_var()
 
 function usage()
 {
-        cat <<EOF
+	cat <<EOF
 Usage: create-vm [<options>] [dist]
 
 Create a libvirt guest VM.
@@ -242,43 +242,43 @@ UEFI=0
 DIST=
 
 while [ ${#} -gt 0 ] ; do
-    case ${1} in
-        -a|--arch)
-            ARCH="${2}"
-            shift
-            ;;
-        -d|--debug)
-            set -x
-            ;;
-        -f|--force)
-            FORCE=1
-            ;;
+	case ${1} in
+		-a|--arch)
+			ARCH="${2}"
+			shift
+			;;
+		-d|--debug)
+			set -x
+			;;
+		-f|--force)
+			FORCE=1
+			;;
 		-h|--help)
 			usage
 			exit 2
 			;;
-        -u|--uefi)
-            UEFI=1
-            ;;
-        -*)
-            echo "Unexpected option: ${1}" >&2
-            exit 2
-            ;;
-        *)
-            if [ -z "${DIST}" ] ; then
-                DIST="${1}"
-            else
-                echo "Unexpected argument: ${1}" >&2
-                exit 2
-            fi
-            ;;
-    esac
-    shift
+		-u|--uefi)
+			UEFI=1
+			;;
+		-*)
+			echo "Unexpected option: ${1}" >&2
+			exit 2
+			;;
+		*)
+			if [ -z "${DIST}" ] ; then
+				DIST="${1}"
+			else
+				echo "Unexpected argument: ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
 done
 
 if [ -z "${DIST}" ] ; then
-        usage
-        exit 2
+	usage
+	exit 2
 fi
 
 # -----------------------------------------------------------------------------
@@ -295,16 +295,16 @@ fi
 
 # Verify the distro-release combination
 case "${DIST}" in
-    fedora-*|centos-*)
-        if [ -z "${ARCH}" ] ; then
+	fedora-*|centos-*)
+		if [ -z "${ARCH}" ] ; then
 			ARCH=$(dpkg-architecture -q DEB_HOST_GNU_CPU)
 		fi
-        ;;
-    debian-*|ubuntu-*)
-        if [ -z "${ARCH}" ] ; then
+		;;
+	debian-*|ubuntu-*)
+		if [ -z "${ARCH}" ] ; then
 			ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
 		fi
-        ;;
+		;;
 	*)
 		echo "Unsupported distro: ${DIST}" 2>&1
 		exit 1
