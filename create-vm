@@ -25,6 +25,7 @@ Available options:
   -a, --arch ARCH  Architecture of the VM (defaults to the host architecture).
   -d, --debug      Enable debugging (set -x).
   -f, --force      Force the recreation of an existing VM.
+  -h, --help       Show this help text
   -u, --uefi       Configure the VM to boot from UEFI
 EOF
 }
@@ -41,7 +42,8 @@ function download_image()
 			;;
 		ubuntu)
 			suffix=
-			if [ "${RELEASE}" = "trusty" ] || [ "${RELEASE}" = "xenial" ] ; then
+			if [ "${RELEASE}" = "precise" ] ||"${RELEASE}" = "trusty" ] || \
+			   [ "${RELEASE}" = "xenial" ] ; then
 				suffix="-disk1"
 				if [ "${UEFI}" -eq 1 ] ; then
 					suffix="-uefi1"
@@ -80,13 +82,25 @@ EOF
 	# user data
 	cat <<EOF >"${tmpd}/user-data"
 #cloud-config
-chpasswd: { expire: false }
+
 hostname: ${NAME}.localdomain
 manage_etc_hosts: localhost
+
+chpasswd: { expire: false }
 password: ${VENDOR}
 ssh_authorized_keys: [ ${public_key} ]
 ssh_pwauth: true
+
+# Datasource timeout
 max_wait: 15
+
+# Fix grub errors on Ubuntu (Artful and newer)
+runcmd:
+  - [ update-grub ]
+
+# Set the hostname early on first boot
+bootcmd:
+  - [ cloud-init-per, once, hostname, ${NAME} ]
 EOF
 
 	genisoimage -ldots -allow-lowercase -allow-multidot -l -J -r \
@@ -105,7 +119,7 @@ function define_vm()
 	mac_addr="52:54:00:${uuid:0:2}:${uuid:2:2}:${uuid:4:2}"
 
 	uefi=
-	if [ ${UEFI} -eq 1 ] ; then
+	if [ "${UEFI}" -eq 1 ] ; then
 		uefi="
     <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE.fd</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/${NAME}_VARS.fd</nvram>
@@ -239,18 +253,22 @@ while [ ${#} -gt 0 ] ; do
         -f|--force)
             FORCE=1
             ;;
+		-h|--help)
+			usage
+			exit 2
+			;;
         -u|--uefi)
             UEFI=1
             ;;
         -*)
-            echo "Error: Unexpected option: ${1}" >&2
+            echo "Unexpected option: ${1}" >&2
             exit 2
             ;;
         *)
             if [ -z "${DIST}" ] ; then
                 DIST="${1}"
             else
-                echo "Error: Unexpected argument: ${1}" >&2
+                echo "Unexpected argument: ${1}" >&2
                 exit 2
             fi
             ;;
@@ -299,6 +317,12 @@ RELEASE=${DIST#*-}
 IMAGE_DIR=/var/lib/libvirt/images
 IMAGE=${IMAGE_DIR}/${NAME}.qcow2
 CONFIG_DRIVE=${IMAGE_DIR}/${NAME}-config.iso
+
+# Sanity check
+if [ "${RELEASE}" = "precise" ] && [ "${UEFI}" -eq 1 ] ; then
+	echo "Precise does not support boot from UEFI"
+	exit 1
+fi
 
 print_var ARCH FORCE DIST IMAGE_DIR IMAGE CONFIG_DRIVE NAME RELEASE VENDOR
 
