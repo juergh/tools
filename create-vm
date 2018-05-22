@@ -42,7 +42,7 @@ function download_image()
 			;;
 		ubuntu)
 			suffix=
-			if [ "${RELEASE}" = "precise" ] ||"${RELEASE}" = "trusty" ] || \
+			if [ "${RELEASE}" = "precise" ] || [ "${RELEASE}" = "trusty" ] || \
 			   [ "${RELEASE}" = "xenial" ] ; then
 				suffix="-disk1"
 				if [ "${UEFI}" -eq 1 ] ; then
