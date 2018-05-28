@@ -81,6 +81,48 @@ RPM_PACKAGES=(
 
 
 # -----------------------------------------------------------------------------
+# Exit handler
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT HUP TERM
+
+	# Unmount bound directories in case debootstrap failed
+	if mount | grep -q " on ${BASEDIR}/" ; then
+		mount | grep " on ${BASEDIR}/" | awk '{ print $3 }' | xargs umount
+	fi
+
+	# Emit a status message
+	if [ "${rc}" -eq 0 ] ; then
+		echo -e "\e[92mChroot created successfully\e[0m"
+	else
+		# Purge the chroot and config file
+		if [ "${KEEP}" -eq 0 ] ; then
+			rm -rf "${BASEDIR}" "/etc/schroot/chroot.d/${NAME}"
+		fi
+		echo -e "\e[91mError: Failed to create chroot!\e[0m" >&2
+	fi
+
+	exit "${rc}"
+}
+
+
+# -----------------------------------------------------------------------------
+# Print variables
+
+function print_vars()
+{
+	local var
+
+	for var in "${@}" ; do
+		printf "%-8s: %s\n" "${var}" "${!var}"
+	done
+}
+
+
+# -----------------------------------------------------------------------------
 # Create a Debian chroot
 
 function debian_create_chroot()
@@ -106,14 +148,14 @@ function debian_create_chroot()
 		--include="$(IFS=, ; echo "${DEB_INCLUDE[*]}")" \
 		--components="${components}" \
 		--arch="${ARCH}" \
-		"${DIST}" \
+		"${RELEASE}" \
 		"${BASEDIR}"
 
 	# Add -updates
 	sources="${BASEDIR}/etc/apt/sources.list"
 	cp -f "${sources}" "${sources}.tmp"
-	grep "^deb .* ${DIST} .*" "${sources}" | \
-		sed "s, ${DIST} , ${DIST}-updates ," >> "${sources}.tmp"
+	grep "^deb .* ${RELEASE} .*" "${sources}" | \
+		sed "s, ${RELEASE} , ${RELEASE}-updates ," >> "${sources}.tmp"
 	mv "${sources}.tmp" "${sources}"
 
 	# Refresh the chroot
@@ -146,22 +188,19 @@ function debian_create_chroot()
 
 function fedora_create_chroot()
 {
-	local ver url rpms rpm package
+	local url rpms rpm package
 
 	mkdir -p "${BASEDIR}"
 
-	# The release version
-	ver=${DIST#*-}
-
 	case "${VENDOR}" in
 		fedora)
-			url="https://dl.fedoraproject.org/pub/fedora/linux/releases/${ver}/Everything/${ARCH}/os/Packages/"
+			url="https://dl.fedoraproject.org/pub/fedora/linux/releases/${RELEASE}/Everything/${ARCH}/os/Packages/"
 			;;
 		centos)
-			url="http://mirror.centos.org/${DIST}/${ver}/os/${ARCH}/Packages"
+			url="http://mirror.centos.org/${DIST}/${RELEASE}/os/${ARCH}/Packages"
 			;;
 		opensuse)
-			url="http://download.opensuse.org/distribution/leap/${ver}/repo/oss/suse/${ARCH}/"
+			url="http://download.opensuse.org/distribution/leap/${RELEASE}/repo/oss/suse/${ARCH}/"
 			;;
 	esac
 
@@ -179,13 +218,13 @@ function fedora_create_chroot()
 	done
 
 	# Install the base system
-	yum --installroot="${BASEDIR}" --releasever="${ver}" --assumeyes \
+	yum --installroot="${BASEDIR}" --releasever="${RELEASE}" --assumeyes \
 		--nogpgcheck install yum
 
 	# We need to reinstall the base system because the original installation
 	# put the RPM database in ~/.rpmdb
-	${SCHROOT} yum --releasever="${ver}" --assumeyes --nogpgcheck install yum \
-			   "${RPM_INCLUDE[@]}"
+	${SCHROOT} yum --releasever="${RELEASE}" --assumeyes --nogpgcheck install \
+			   yum "${RPM_INCLUDE[@]}"
 
 	# Install the additional packages
 	if [ "${BASE}" -eq 0 ] ; then
@@ -204,56 +243,28 @@ function fedora_create_chroot()
 
 
 # -----------------------------------------------------------------------------
-# Exit handler
-
-function out()
-{
-	local rc=${?}
-
-	trap - EXIT INT HUP TERM
-
-	# Unmount bound directories in case debootstrap failed
-	if mount | grep -q " on ${BASEDIR}/" ; then
-		mount | grep " on ${BASEDIR}/" | awk '{ print $3 }' | xargs umount
-	fi
-
-	# Emit a status message
-	if [ "${rc}" -eq 0 ] ; then
-		echo -e "\e[92mChroot created successfully\e[0m"
-	else
-		# Purge the chroot and config file
-		if [ "${KEEP}" -eq 0 ] ; then
-			rm -rf "${BASEDIR}" "/etc/schroot/chroot.d/${NAME}"
-		fi
-		echo -e "\e[91mError: Failed to create chroot!\e[0m" >&2
-	fi
-
-	exit "${rc}"
-}
-
-
-# -----------------------------------------------------------------------------
 # Usage
 
 function usage()
 {
 	cat <<EOF
 Usage: create-chroot [<options>] <dist> [<name>]
-q
+
 Create a chroot for kernel package builds.
 
-dist   A recognized distribution, like ubuntu-xenial, debian-jessie,
-       fedora-26, centos-7, ...
-name   The name of the chroot, defaults to <dist>-<arch> if not specified.
+dist  A recognized distribution, like ubuntu-xenial, debian-jessie, fedora-26,
+      centos-7, ...
+name  The name of the chroot, defaults to <dist>-<arch> if not specified.
 
 Available options:
-  -a, --arch <arch>    Architecture of the chroot (defaults to the host
-                       architecture).
-  -b, --base           Create a base chroot without additional packages.
-  -d, --debug          Enable debugging (set -x).
-  -f, --force          Force the recreation of an existing chroot.
-  -k, --keep           Keep the chroot and config file after a build failure.
-  -n, --no-check-gpg   Don't check GPG signatures of retrieved Release files.
+  -a, --arch <arch>   Architecture of the chroot (defaults to the host
+                      architecture).
+  -b, --base          Create a base chroot without additional packages.
+  -d, --debug         Enable debugging (set -x).
+  -f, --force         Force the recreation of an existing chroot.
+  -h, --help          Show this help text.
+  -k, --keep          Keep the chroot and config file after a build failure.
+  -n, --no-check-gpg  Don't check GPG signatures of retrieved Release files.
 
 EOF
 }
@@ -285,6 +296,10 @@ while [ ${#} -gt 0 ] ; do
 		-f|--force)
 			FORCE=1
 			;;
+		-h|--help)
+			usage
+			exit
+			;;
 		-k|--keep)
 			KEEP=1
 			;;
@@ -314,34 +329,45 @@ if [ -z "${DIST}" ] ; then
 	exit 2
 fi
 
-# Set the default vendor
-VENDOR=${DIST%%-*}
-
 case "${DIST}" in
 	fedora-*|centos-*|opensuse-*)
+		BASE_NAME=${DIST/-/}
 		BASE_DIST=fedora
-		[ -n "${ARCH}" ] || ARCH=x86_64
+		VENDOR=${DIST%%-*}
+		if [ -z "${ARCH}" ] ; then
+			ARCH=x86_64
+		fi
 		;;
 	debian-*|ubuntu-*)
+		BASE_NAME=${DIST#*-}
 		BASE_DIST=debian
+		VENDOR=${DIST%%-*}
 		;;
 	wheezy|jessie|stretch|buster|sid)
+		BASE_NAME=${DIST}
 		BASE_DIST=debian
 		VENDOR=debian
 		;;
 	*)
+		BASE_NAME=${DIST}
 		BASE_DIST=debian
 		VENDOR=ubuntu
 		;;
 esac
 
-[ -n "${ARCH}" ] || ARCH=amd64
+RELEASE=${DIST#*-}
+
+if [ -z "${ARCH}" ] ; then
+	ARCH=amd64
+fi
 
 if [ -z "${NAME}" ] ; then
-	NAME="${DIST}-${ARCH}"
+	NAME="${BASE_NAME}-${ARCH}"
 fi
 
 SCHROOT="schroot -c ${NAME} --"
+
+print_vars DIST VENDOR RELEASE ARCH NAME
 
 # -----------------------------------------------------------------------------
 # Verify that we're root
@@ -360,8 +386,18 @@ if mount | grep -E -q "/run/schroot/mount/${NAME}-[0-9a-f]{8}-" ; then
 	exit 1
 fi
 
+# Verify the chroot directory
+if ! [ -d /var/chroot ] ; then
+	echo "Error: No such directory: /var/chroot"
+	exit 1
+fi
+BASEDIR="$(readlink -f "/var/chroot/${NAME}")"
+if [ "${BASEDIR}" = "/" ] ; then
+	echo "Error: Invalid chroot directory: ${BASEDIR}" >&2
+	exit 1
+fi
+
 # Check if the chroot directory exists already
-BASEDIR="/var/chroot/${NAME}"
 if [ -d "${BASEDIR}" ] ; then
 	if [ "${FORCE}" -eq 0 ] ; then
 		echo "Error: Chroot directory exists already" >&2
@@ -384,12 +420,12 @@ directory=${BASEDIR}
 root-users=${SUDO_USER}
 preserve-environment=true
 
-[${NAME}-overlay]
-type=directory
-directory=${BASEDIR}
-root-users=${SUDO_USER}
-preserve-environment=true
-union-type=overlay
+#[${NAME}-overlay]
+#type=directory
+#directory=${BASEDIR}
+#root-users=${SUDO_USER}
+#preserve-environment=true
+#union-type=overlay
 EOF
 
 # -----------------------------------------------------------------------------
