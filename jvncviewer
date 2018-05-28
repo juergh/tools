@@ -1,0 +1,67 @@
+#!/bin/bash -eu
+#
+# Wrapper around gvncviewer to retry on failure
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-r] [-d NUM] <host[:display]>
+
+Wrapper around gvncviewer to retry on failure.
+
+Options:
+  -h, --help       Show this help text.
+  -r, --retry      Retry failed connection attempts
+  -d, --delay NUM  Delay between retries in seconds (defaults to 0.5)
+EOF
+}
+
+delay="0.5"
+retry=0
+host=
+while [ $# -ne 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-d|--delay)
+			shift
+			delay=${1}
+			;;
+		-r|--retry)
+			retry=1
+			;;
+		*)
+			if [ -n "${host}" ] ; then
+				usage
+				exit 2
+			fi
+			host=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${host}" ] ; then
+	usage
+	exit 2
+fi
+
+log=/tmp/gvncviewer.log
+
+while true ; do
+	stdbuf -o L gvncviewer "${host}" 2>&1 | tee "${log}"
+
+	if grep -q 'Unable to connect' "${log}" && [ "${retry}" -eq 1 ] ; then
+		sleep "${delay}"
+		continue
+	fi
+
+	if grep -q 'Unable to read from server' "${log}" ; then
+		continue
+	fi
+
+	exit
+done
