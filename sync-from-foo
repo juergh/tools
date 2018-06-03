@@ -27,8 +27,37 @@ ROOT_FILES=(
     /etc/sudoers.d/${USER}
 )
 
-# shellcheck disable=SC2029
-ssh "${HOST}" "tar cpf - ${USER_FILES[*]}" | ( cd / && tar xpvf - )
+USER=0
+ROOT=0
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-u|--user)
+			USER=1
+			;;
+		-r|--root)
+			ROOT=1
+			;;
+		*)
+			echo "Invalid argument: ${1}"
+			exit 2
+			;;
+	esac
+	shift
+done
 
-# shellcheck disable=SC2029
-ssh "${HOST}" "sudo tar cpf - ${ROOT_FILES[*]}" | ( cd / && sudo tar xpvf - )
+if [ ${USER} -eq 0 ] && [ ${ROOT} -eq 0 ] ; then
+	USER=1
+	ROOT=1
+fi
+
+if [ ${USER} -eq 1 ] ; then
+	echo "Syncing user files..."
+	# shellcheck disable=SC2029
+	ssh "${HOST}" "tar cpf - ${USER_FILES[*]}" | ( cd / && tar xpvf - )
+fi
+
+if [ ${ROOT} -eq 1 ] ; then
+	echo "Syncing root files..."
+	# shellcheck disable=SC2029
+	ssh "${HOST}" "sudo tar cpf - ${ROOT_FILES[*]}" | ( cd / && sudo tar xpvf - )
+fi
