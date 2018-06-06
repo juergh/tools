@@ -11,26 +11,6 @@ function print_var()
 }
 
 
-function usage()
-{
-	cat <<EOF
-Usage: create-vm [<options>] [dist]
-
-Create a libvirt guest VM.
-
-dist   The distro and release of the guest VM (ubuntu-artful, fedora-26,
-       debian-jessie, ...).
-
-Available options:
-  -a, --arch ARCH  Architecture of the VM (defaults to the host architecture).
-  -d, --debug      Enable debugging (set -x).
-  -f, --force      Force the recreation of an existing VM.
-  -h, --help       Show this help text
-  -u, --uefi       Configure the VM to boot from UEFI
-EOF
-}
-
-
 function download_image()
 {
 	local url pattern name suffix
@@ -233,6 +213,28 @@ EOF
 }
 
 
+function usage()
+{
+	cat <<EOF
+Usage: create-vm [<options>] <dist> [<name>]
+
+Create a libvirt guest VM.
+
+dist   The distro and release of the guest VM (ubuntu-artful, fedora-26,
+       debian-jessie, ...).
+name   The libvirt domain name. If not specified, defaults to
+       <dist>[-uefi][-<arch>].
+
+Available options:
+  -a, --arch ARCH  Architecture of the VM (defaults to the host architecture).
+  -d, --debug      Enable debugging (set -x).
+  -f, --force      Force the recreation of an existing VM.
+  -h, --help       Show this help text
+  -u, --uefi       Configure the VM to boot from UEFI
+EOF
+}
+
+
 # -----------------------------------------------------------------------------
 # Main entry point
 
@@ -240,6 +242,7 @@ ARCH=
 FORCE=0
 UEFI=0
 DIST=
+NAME=
 
 while [ ${#} -gt 0 ] ; do
 	case ${1} in
@@ -267,6 +270,8 @@ while [ ${#} -gt 0 ] ; do
 		*)
 			if [ -z "${DIST}" ] ; then
 				DIST="${1}"
+			elif [ -z "${NAME}" ] ; then
+				NAME="${1}"
 			else
 				echo "Unexpected argument: ${1}" >&2
 				exit 2
@@ -285,12 +290,14 @@ fi
 # Set global variables
 
 # Set the name of the VM
-NAME=${DIST}
-if [ ${UEFI} -eq 1 ] ; then
-	NAME=${NAME}-uefi
-fi
-if [ -n "${ARCH}" ] ; then
-	NAME=${NAME}-${ARCH}
+if [ -z "${NAME}" ] ; then
+	NAME=${DIST}
+	if [ ${UEFI} -eq 1 ] ; then
+		NAME=${NAME}-uefi
+	fi
+	if [ -n "${ARCH}" ] ; then
+		NAME=${NAME}-${ARCH}
+	fi
 fi
 
 # Verify the distro-release combination
@@ -329,7 +336,11 @@ print_var ARCH FORCE DIST IMAGE_DIR IMAGE CONFIG_DRIVE NAME RELEASE VENDOR
 # -----------------------------------------------------------------------------
 # Purge existing VM
 
-if [ "${FORCE}" -eq 1 ] ; then
+if virsh vcpuinfo "${NAME}" >/dev/null 2>&1 ; then
+	if [ "${FORCE}" -eq 0 ] ; then
+		echo "VM '${NAME}' exists already. Use -f, --force to recreate it."
+		exit 1
+	fi
 	virsh destroy "${NAME}" 2>/dev/null || true
 	virsh undefine  "${NAME}" 2>/dev/null || true
 	rm -f "${IMAGE}" "${CONFIG_DRIVE}"
@@ -352,6 +363,4 @@ fi
 # -----------------------------------------------------------------------------
 # Define the VM
 
-if ! virsh vcpuinfo "${NAME}" >/dev/null 2>&1 ; then
-	define_vm
-fi
+define_vm
