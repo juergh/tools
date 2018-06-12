@@ -10,10 +10,9 @@ function print_var()
 	done
 }
 
-
 function download_image()
 {
-	local url pattern name suffix
+	local url pattern name suffix num
 
 	case "${VENDOR}" in
 		fedora)
@@ -31,6 +30,15 @@ function download_image()
 			fi
 			name=${RELEASE}-server-cloudimg-${ARCH}${suffix}.img
 			url=https://cloud-images.ubuntu.com/${RELEASE}/current/${name}
+			pattern=
+			;;
+		debian)
+			case "${RELEASE}" in
+				jessie)  num=8 ;;
+				stretch) num=9 ;;
+			esac
+			name=debian-${num}-openstack-${ARCH}.qcow2
+			url=https://cdimage.debian.org/cdimage/openstack/current-${num}/${name}
 			pattern=
 			;;
 	esac
