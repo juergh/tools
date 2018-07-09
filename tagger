@@ -1,0 +1,140 @@
+#!/bin/bash -eu
+#
+# Wrapper around mid3v2 for tagging mp3 files
+#
+
+function out()
+{
+	trap - INT TERM EXIT HUP
+
+	echo "*** tagger failed ***" >&2
+}
+
+
+function strip()
+{
+	local var="${*}"
+
+	# Remove leading whitespace characters
+	var="${var#"${var%%[![:space:]]*}"}"
+
+	# Remove trailing whitespace characters
+	var="${var%"${var##*[![:space:]]}"}"
+
+	echo -n "${var}"
+}
+
+
+function retag_file()
+{
+	local count filename artist album track song
+
+	count=${1}
+	filename=${2}
+	artist=$(strip "${3}")
+	album=$(strip "${4}")
+	track=$(strip "${5}")
+	song=$(strip "${6}")
+
+	cat <<EOF
+${count} - ${filename}
+  artist: ${artist}
+  album:  ${album}
+  track:  ${track}
+  song:   ${song}
+EOF
+
+	if [ "${track}" -ne "${track}" ] 2>/dev/null ; then
+		echo "*** track '${track}' is not a valid number ***" >&2
+		exit 1
+	fi
+
+	if [ "${DOIT}" -eq 0 ] ; then
+		echo "*** read-only mode, use -d,--doit to do the tagging ***"
+	fi
+	echo
+
+	if [ "${DOIT}" -eq 1 ] ; then
+		chmod 644 "${filename}"
+		mid3v2 --delete-all "${filename}"
+		mid3v2 --album "${album}" --artist "${artist}" --track "${track}" \
+			   --song "${song}" "${filename}"
+		chmod 444 "${filename}"
+	fi
+}
+
+
+function usage()
+{
+        cat <<EOF
+Usage: tagger [-h] [-d] DIRECTORY
+
+Tag mp3 files by deducing the artist, album, track number and song title from
+the pathname, which has to be in the form of:
+  <some path>/<artist>/<album>/<track number> - <song title>
+
+Options:
+  -d, --doit  Do the tagging.
+  -h, --help  show this help text.
+EOF
+}
+
+
+DOIT=0
+path=
+
+while [ ${#} -gt 0 ] ; do
+    case ${1} in
+		-d|--doit)
+			DOIT=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -z "${path}" ] ; then
+				path=${1}
+			else
+				usage
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${path}" ] ; then
+	usage
+	exit 2
+fi
+
+trap out INT TERM EXIT HUP
+
+count=1
+while IFS= read -r mp3 ; do
+	mp3_abs=$(readlink -e "${mp3}")
+	mp3_base=$(basename "${mp3_abs}" .mp3)
+	mp3_dir=$(dirname "${mp3_abs}")
+
+	# The parent and grandparent directories
+	mp3_pdir=$(readlink -e "${mp3_dir}/..")
+	mp3_gpdir=$(readlink -e "${mp3_dir}/../..")
+
+	# Extract the track number and song title from the basename
+	track=${mp3_base%% - *}
+	track=${track#0}
+	song=${mp3_base#* - }
+
+	# Extract the artist and album from the dirname
+	album=${mp3_dir#${mp3_pdir}/}
+	artist=${mp3_dir#${mp3_gpdir}/}
+	artist=${artist%/${album}}
+
+	retag_file "${count}" "${mp3_abs}" "${artist}" "${album}" "${track}" \
+			   "${song}"
+
+	count=$((count + 1))
+done < <(find "${path}" -type f -name '*.mp3')
+
+trap - INT TERM EXIT HUP
