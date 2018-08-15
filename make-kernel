@@ -3,63 +3,79 @@
 # Build a kernel in a chroot
 #
 
+
+function get_series()
+{
+	local series version patchlevel
+
+	if [ -e debian/debian.env ] ; then
+		# shellcheck disable=SC1091
+		. debian/debian.env
+		series=$(dpkg-parsechangelog -l "${DEBIAN}/changelog" -S Distribution)
+		if [ "${series}" = "UNRELEASED" ] ; then
+			series=$(dpkg-parsechangelog -l "${DEBIAN}/changelog" \
+										 -S Distribution -o 1 -c 1)
+		fi
+
+	else
+		version=$(awk '/^VERSION = / { print $3 ; exit }' Makefile)
+		patchlevel=$(awk '/^PATCHLEVEL = / { print $3 ; exit }' Makefile)
+
+		# The schroot distro, based on the kernel version
+		case "${version}.${patchlevel}" in
+			3.[0-9])
+				# 3.0 to 3.9
+				series=precise
+				;;
+			3.[1-9][0-9])
+				# 3.10 to 3.99
+				series=trusty
+				;;
+			4.[0-9])
+				# 4.0 to 4.9
+				series=xenial
+				;;
+			*)
+				series=bionic
+				;;
+		esac
+	fi
+
+	echo "${series}"
+}
+
+
 function usage()
 {
 	cat << EOF
-Usage: make-kernel [options] [target]
+Usage: make-kernel [-a ARCH] [-c CONFIG] [-d] [-h] [-s SCHROOT] [TARGET]
+                   [-- MAKE_OPTS]
+
+Build a kernel in a chroot.
+
+TARGET     The build target. If not specified, defaults to the kernel build
+           target for the selected architecture (for example 'bzImage' for
+           amd64).
+MAKE_OPTS  Additional options that are passed to the kernel's Makefile.
 
 Available options:
-  -a, --arch ARCH  Build kernel for arch ARCH
-  -h, --help       Show this help text
-  -j NUM           Build in parallel using NUM cpus
+  -a, --arch ARCH         Build kernel for arch ARCH
+  -c, --config CONFIG     Use config file CONFIG instead of .config
+  -d, --dry-run           Only show the command to be executed without doing so
+  -h, --help              Show this help text
+  -h, --schroot SCHROOT   Which schroot to use for the compilation
 EOF
 	exit 2
 }
 
-if ! [ -e Makefile ] ; then
-	echo "Error: No such file 'Makefile'"
-	exit 1
-fi
 
-if ! [ -e .config ] ; then
-	echo "Error: No such file '.config'"
-	exit 1
-fi
+# -----------------------------------------------------------------------------
+# Parse the commandline
 
-version=$(awk '/^VERSION = / { print $3 ; exit }' Makefile)
-patchlevel=$(awk '/^PATCHLEVEL = / { print $3 ; exit }' Makefile)
-
-# Which schroot to use, based on kernel version
-case "${version}.${patchlevel}" in
-	3.[0-9])
-		schroot=wheezy
-		;;
-	3.[1-9][0-9])
-		schroot=trusty
-		;;
-	4.[0-9])
-		schroot=xenial
-		;;
-	*)
-		schroot=artful
-		;;
-esac
-
-# Schroot architecture
-if grep -q 'CONFIG_X86_32=y' .config ; then
-	schroot="${schroot}-i386"
-else
-	schroot="${schroot}-amd64"
-fi	
-
-# FIXME: RHEL special case
-if grep -q 'RH_KABI' .config ; then
-	schroot=centos-7-x86_64
-fi
-
-# Commandline options
-arch=
-j=$(getconf _NPROCESSORS_ONLN)
+arch=$(dpkg-architecture -q DEB_HOST_ARCH)
+config=.config
+dry_run=0
+schroot=
 target=
 
 while [ $# -gt 0 ] ; do
@@ -68,48 +84,120 @@ while [ $# -gt 0 ] ; do
 			shift
 			arch=${1}
 			;;
+		-c|--config)
+			shift
+			config=${1}
+			;;
+		-d|--dry-run)
+			dry_run=1
+			;;
 		-h|--help)
 			usage
 			;;
-		-j)
+		-s|--schroot)
 			shift
-			j=${1}
+			schroot=${1}
+			;;
+		--)
+			shift
+			break
 			;;
 		-*)
 			echo "Error: Unknown option: ${1}"
 			exit 1
 			;;
 		*)
+			if [ -n "${target}" ] ; then
+				echo "Error: Unexpected argument: ${1}"
+				exit 1
+			fi
 			target=${1}
 			;;
 	esac
 	shift
 done
 
-# Are we cross-compiling?
-if [ -n "${arch}" ] ; then
-	case "${arch}" in
-		ppc64el)
-			ARCH=powerpc
-			TARGET=${target:-vmlinux}
-			;;
-		powerpc)
-			ARCH=powerpc
-			TARGET=${target:-zImage}
-			;;
-		*)
-			echo "Error: Unsupported arch '${arch}'"
-			exit 1
-			;;
-	esac
+# The build architecture and target
+case "${arch}" in
+	arm64)
+		ARCH=arm64
+		target=${target:-Image.gz}
+		;;
+	amd64|i386)
+		ARCH=x86
+		target=${target:-bzImage}
+		;;
+	powerpc)
+		ARCH=powerpc
+		target=${target:-zImage}
+		;;
+	ppc64el)
+		ARCH=powerpc
+		target=${target:-vmlinux}
+		;;
+	*)
+		echo "Error: Unsupported arch: ${arch}"
+		exit 1
+		;;
+esac
 
-	CROSS_COMPILE="$(dpkg-architecture -a "${arch}" -q DEB_HOST_GNU_TYPE)-"
-	export ARCH CROSS_COMPILE
+
+# -----------------------------------------------------------------------------
+# Check for the Makefile and the config file
+
+if ! [ -e Makefile ] ; then
+	echo "Error: No such file: Makefile"
+	exit 1
 fi
 
-TARGET=${TARGET:-${target}}
-TARGET=${TARGET:-bzImage}
+if ! [ -e "${config}" ] ; then
+	echo "Error: No such file: ${config}"
+	exit 1
+fi
 
+# Create the build directory and copy the config file
+tarch=$(grep -m1 '# Linux/' "${config}" | sed -e 's,# Linux/,,' -e 's, .*,,')
+buildd="build/${tarch}"
+if ! [ -d "${buildd}" ] ; then
+	mkdir -p "${buildd}"
+fi
+cp "${config}" "${buildd}/.config"
+
+# Determine which schroot to use for the compilation
+if [ -z "${schroot}" ] ; then
+	series=$(get_series)
+
+	# FIXME: RHEL special case
+	if grep -q 'RH_KABI' "${config}" ; then
+		schroot=centos7-x86_64
+	else
+		schroot="${series}-amd64"
+	fi
+fi
+
+
+# -----------------------------------------------------------------------------
+# Assemble the make env and options
+
+# Number of parallel gcc build jobs
+numjobs="-j$(getconf _NPROCESSORS_ONLN)"
+for arg in "${@}" ; do
+	if [ "${arg#-j}" != "${arg}" ] ; then
+		numjobs=
+		break
+	fi
+done
+
+# Are we cross compiling?
+CROSS_COMPILE=
+if [ "${arch}" != "$(dpkg-architecture -q DEB_HOST_ARCH)" ] && \
+   ! ( [ "${arch}" = "i386" ] && \
+	   [ "$(dpkg-architecture -q DEB_HOST_ARCH)" = "amd64" ] ) ; then
+	CROSS_COMPILE=$(dpkg-architecture -a "${arch}" -q DEB_HOST_GNU_TYPE)-
+fi
+export ARCH CROSS_COMPILE
+
+# FIXME: Silence chroot warnings
 export LANG=
 export LC_TIME=POSIX
 export LC_MONETARY=POSIX
@@ -122,6 +210,17 @@ export LC_IDENTIFICATION=POSIX
 export LC_NUMERIC=POSIX
 export LC_PAPER=POSIX
 
-echo "Using schroot ${schroot} for the build"
-echo schroot -c "${schroot}" -- make "-j${j}" "${TARGET}"
-schroot -c "${schroot}" -- make "-j${j}" "${TARGET}"
+echo "ARCH:            ${ARCH}"
+echo "CROSS_COMPILE:   ${CROSS_COMPILE}"
+echo "schroot:         ${schroot}"
+echo "target:          ${target}"
+echo "config:          ${config}"
+echo "build directory: ${buildd}"
+echo
+
+echo "schroot -c ${schroot} -- make ${target} ${numjobs} O=${buildd} ${@}" \
+     "2>&1 | tee ${buildd}/build.log"
+if [ "${dry_run}" -eq 0 ] ; then
+	schroot -c "${schroot}" -- make "${target}" ${numjobs} O="${buildd}"\
+			"${@}" 2>&1 | tee "${buildd}/build.log"
+fi
