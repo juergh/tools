@@ -3,28 +3,30 @@
 HOST=${0#*/sync-from-}
 
 USER_FILES=(
-    ${HOME}/.bash_aliases
-    ${HOME}/.bashrc
-    ${HOME}/.caffrc
-    ${HOME}/.canonistack/
-    ${HOME}/.config/gtk-3.0/gtk.css
-    ${HOME}/.config/hexchat/servlist.conf
-    ${HOME}/.emacs
-    ${HOME}/.emacs.d/
-    ${HOME}/.fritz
-    ${HOME}/.gnupg/
-    ${HOME}/.gitconfig
-    ${HOME}/.keepass/
-    ${HOME}/.sesame/
-    ${HOME}/.ssh/
+	${HOME}/.bash_aliases
+	${HOME}/.bashrc
+	${HOME}/.caffrc
+	${HOME}/.canonistack/
+	${HOME}/.claws-mail/
+	${HOME}/.config/gtk-3.0/gtk.css
+	${HOME}/.config/hexchat/servlist.conf
+	${HOME}/.emacs
+	${HOME}/.emacs.d/
+	${HOME}/.emacs.el/
+	${HOME}/.fritz
+	${HOME}/.gnupg/
+	${HOME}/.gitconfig
+	${HOME}/.keepass/
+	${HOME}/.sesame/
+	${HOME}/.ssh/
 )
 
 ROOT_FILES=(
-    /etc/auto.jabba
-    /etc/auto.fritz
-#    /etc/auto.master
-    /etc/security/limits.d/custom.conf
-    /etc/sudoers.d/${USER}
+	/etc/auto.jabba
+	/etc/auto.fritz
+	# /etc/auto.master
+	/etc/security/limits.d/custom.conf
+	/etc/sudoers.d/${USER}
 )
 
 USER=0
