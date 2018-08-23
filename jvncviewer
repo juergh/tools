@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+
+# GTK VNC Widget
+#
+# Copyright (C) 2018  Juerg Haefliger <juergh@gmail.com>
+# Copyright (C) 2006  Anthony Liguori <anthony@codemonkey.ws>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.0 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+
+import argparse
+import gi
+import os
+import signal
+import sys
+
+gi.require_version('Gtk', '3.0')
+gi.require_version('GtkVnc', '2.0')
+
+from gi.repository import Gtk
+from gi.repository import Gdk
+from gi.repository import GLib
+from gi.repository import GtkVnc
+
+
+class VNCViewer(object):
+    def __init__(self, host, port, password="", reconnect=False):
+        self.host = host
+        self.port = port
+        self.password = password
+        self.reconnect = reconnect
+
+        self.looping = False
+
+        # VNC display
+        self.vncdisplay = Gtk.VBox()   # Empty placeholder
+
+        # Layout
+        self.layout = Gtk.VBox()
+        self.layout.add(self._menubar())
+        self.layout.add(self.vncdisplay)
+
+        # Window
+        self.window = Gtk.Window(title="jvncviewer - %s" % host)
+        self.window.add(self.layout)
+        self.window.connect("destroy", self._quit)
+
+    # -------------------------------------------------------------------------
+    # Private methods
+
+    def _menubar(self):
+        file_quit = Gtk.MenuItem("Quit")
+        file_quit.connect("activate", self._quit)
+
+        menu_file = Gtk.Menu()
+        menu_file.append(file_quit)
+
+        menuitem_file = Gtk.MenuItem("File")
+        menuitem_file.set_submenu(menu_file)
+
+        menubar = Gtk.MenuBar()
+        menubar.append(menuitem_file)
+
+        return menubar
+
+    def _connected(self, src):
+        print("--- Connected to server")
+
+    def _initialized(self, src):
+        print("--- Connection initialized")
+        self.window.show_all()
+
+    def _disconnected(self, src):
+        print("--- Disconnected from server")
+        if self.reconnect:
+            self.connect()
+        else:
+            Gtk.main_quit()
+
+    def _auth_credential(self, src, credList):
+        print("--- Server requires authentication")
+        Gtk.main_quit()
+
+    def _auth_failure(self, src, msg):
+        print("--- Authentication failure (%s)" % msg.strip())
+        Gtk.main_quit()
+
+    def _quit(self, src=None):
+        print("--- Quitting")
+        Gtk.main_quit()
+
+    # -------------------------------------------------------------------------
+    # Public methods
+
+    def connect(self):
+        # Remove the previous VNC display box from the window layout (in case
+        # of a reconnect)
+        self.layout.remove(self.vncdisplay)
+
+        # Create the VNC display and add it to the window layout
+        display = GtkVnc.Display()
+        self.vncdisplay = Gtk.VBox()
+        self.vncdisplay.add(display)
+        self.layout.add(self.vncdisplay)
+
+        if self.password != "":
+            display.set_credential(GtkVnc.DisplayCredential.CLIENTNAME,
+                                   "jvncviewer")
+            display.set_credential(GtkVnc.DisplayCredential.PASSWORD,
+                                   self.password)
+
+        display.realize()
+
+        display.connect("vnc-connected", self._connected)
+        display.connect("vnc-initialized", self._initialized)
+        display.connect("vnc-disconnected", self._disconnected)
+        display.connect("vnc-auth-credential", self._auth_credential)
+        display.connect("vnc-auth-failure", self._auth_failure)
+
+        print("--- Connecting to %s:%s" % (self.host, self.port))
+        display.open_host(host, port)
+
+        if not self.looping:
+            self.looping = True
+            # Allow CTRL-C to quit the GTK main loop
+            GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT,
+                                 self._quit)
+            Gtk.main()
+
+
+if __name__ == "__main__":
+
+    desc = """
+jvncviewer is a simple GTK VNC viewer.
+
+The hostname and password (if necessary) need to be supplied via the
+commandline or, alternatively, with environment variables VNC_HOST and
+VNC_PASSWORD.
+"""
+    parser = argparse.ArgumentParser(description=desc, formatter_class=
+                                     argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("host", metavar="host[:port]", nargs='?',
+                        default=os.getenv("VNC_HOST", ""),
+                        help="VNC host and (optional) port number. If not "
+                        "specified, port defaults to 5900.")
+    parser.add_argument("password", nargs='?',
+                        default=os.getenv("VNC_PASSWORD", ""),
+                        help="VNC password.")
+    args = parser.parse_args()
+
+    if args.host == "":
+        parser.print_help()
+        sys.exit(2)
+
+    comps = args.host.split(':')
+    host = comps[0]
+    if len(comps) > 1:
+        port = comps[1]
+    else:
+        port = "5900"
+
+    vnc = VNCViewer(host, port, args.password, reconnect=True)
+    vnc.connect()
