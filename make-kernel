@@ -218,9 +218,15 @@ echo "config:          ${config}"
 echo "build directory: ${buildd}"
 echo
 
-echo "schroot -c ${schroot} -- make ${target} ${numjobs} O=${buildd} ${@}" \
-     "2>&1 | tee ${buildd}/build.log"
+# Squirrel away .config or make will complain about a tainted source
+if [ -e .config ] ; then
+	mv .config .config.squirrel
+	trap "mv .config.squirrel .config" EXIT INT TERM HUP
+fi
+
+echo "schroot -c ${schroot} -- make olddefconfig ${target} ${numjobs}" \
+	 "O=${buildd} ${@} 2>&1 | tee ${buildd}/build.log"
 if [ "${dry_run}" -eq 0 ] ; then
-	schroot -c "${schroot}" -- make "${target}" ${numjobs} O="${buildd}"\
-			"${@}" 2>&1 | tee "${buildd}/build.log"
+	schroot -c "${schroot}" -- make olddefconfig "${target}" ${numjobs} \
+			O="${buildd}" "${@}" 2>&1 | tee "${buildd}/build.log"
 fi
