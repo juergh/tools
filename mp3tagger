@@ -16,10 +16,10 @@ function strip()
 	local var="${*}"
 
 	# Remove leading whitespace characters
-	var="${var#"${var%%[![:space:]]*}"}"
+	var="${var#"${var%%[![:space:]]*}"}"   # "
 
 	# Remove trailing whitespace characters
-	var="${var%"${var##*[![:space:]]}"}"
+	var="${var%"${var##*[![:space:]]}"}"   # "
 
 	echo -n "${var}"
 }
