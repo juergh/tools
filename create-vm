@@ -224,21 +224,21 @@ EOF
 function usage()
 {
 	cat <<EOF
-Usage: create-vm [<options>] <dist> [<name>]
+Usage: create-vm [OPTIONS] DIST [NAME]
 
 Create a libvirt guest VM.
 
-dist   The distro and release of the guest VM (ubuntu-artful, fedora-26,
-       debian-jessie, ...).
-name   The libvirt domain name. If not specified, defaults to
-       <dist>[-uefi][-<arch>].
+DIST  The distro and release of the guest VM (ubuntu-artful, fedora-26,
+      debian-jessie, ...).
+NAME  The libvirt domain name. If not specified, defaults to
+      <dist>[-uefi][-<arch>].
 
-Available options:
+Options:
   -a, --arch ARCH  Architecture of the VM (defaults to the host architecture).
   -d, --debug      Enable debugging (set -x).
   -f, --force      Force the recreation of an existing VM.
-  -h, --help       Show this help text
-  -u, --uefi       Configure the VM to boot from UEFI
+  -h, --help       Show this help text.
+  -u, --uefi       Configure the VM to boot from UEFI.
 EOF
 }
 
