@@ -142,6 +142,12 @@ function debian_create_chroot()
 		opts="--no-check-gpg"
 	fi
 
+	if [ "${RELEASE}" = "precise" ] ; then
+		# Debootstrap fails for Precise. Don't bail out in this case so we can
+		# fix up the chroot later.
+		set +e
+	fi
+
 	# Create the base chroot
 	qemu-debootstrap \
 		${opts:-} \
@@ -150,6 +156,13 @@ function debian_create_chroot()
 		--arch="${ARCH}" \
 		"${RELEASE}" \
 		"${BASEDIR}"
+
+	if [ "${RELEASE}" = "precise" ] ; then
+		# Fix the Precise chroot
+		${SCHROOT} dpkg-divert --local --rename --add /sbin/initctl
+		${SCHROOT} ln -s /bin/true /sbin/initctl
+		set -e
+	fi
 
 	# Add -updates
 	sources="${BASEDIR}/etc/apt/sources.list"
