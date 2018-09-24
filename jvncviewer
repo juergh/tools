@@ -61,6 +61,9 @@ class VNCViewer(object):
     # Private methods
 
     def _menubar(self):
+        #
+        # 'File' menu
+        #
         file_quit = Gtk.MenuItem("Quit")
         file_quit.connect("activate", self._quit)
 
@@ -70,8 +73,24 @@ class VNCViewer(object):
         menuitem_file = Gtk.MenuItem("File")
         menuitem_file.set_submenu(menu_file)
 
+        #
+        # 'Send Key' menu
+        #
+        sendkey_cad = Gtk.MenuItem("Ctrl-Alt-Delete")
+        sendkey_cad.connect("activate", self._send_cad)
+
+        menu_sendkey = Gtk.Menu()
+        menu_sendkey.append(sendkey_cad)
+
+        menuitem_sendkey = Gtk.MenuItem("Send Key")
+        menuitem_sendkey.set_submenu(menu_sendkey)
+
+        #
+        # Menubar
+        #
         menubar = Gtk.MenuBar()
         menubar.append(menuitem_file)
+        menubar.append(menuitem_sendkey)
 
         return menubar
 
@@ -100,6 +119,12 @@ class VNCViewer(object):
     def _quit(self, src=None):
         print("--- Quitting")
         Gtk.main_quit()
+
+    def _send_cad(self, src=None):
+        print("--- Send Ctrl-Alt-Delete")
+        self.vncdisplay.send_keys([Gdk.KEY_Control_L, Gdk.KEY_Alt_L,
+                                   Gdk.KEY_Delete])
+
 
     # -------------------------------------------------------------------------
     # Public methods
