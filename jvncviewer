@@ -44,7 +44,8 @@ class VNCViewer(object):
         self.looping = False
 
         # VNC display
-        self.vncdisplaybox = Gtk.VBox()   # Empty placeholder
+        self.vncdisplay = GtkVnc.Display()   # Placeholder
+        self.vncdisplaybox = Gtk.VBox()      # Placeholder
 
         # Layout
         self.layout = Gtk.VBox()
@@ -109,27 +110,27 @@ class VNCViewer(object):
         self.layout.remove(self.vncdisplaybox)
 
         # Create the VNC display and add it to the window layout
-        display = GtkVnc.Display()
+        self.vncdisplay = GtkVnc.Display()
         self.vncdisplaybox = Gtk.VBox()
-        self.vncdisplaybox.add(display)
+        self.vncdisplaybox.add(self.vncdisplay)
         self.layout.add(self.vncdisplaybox)
 
         if self.password != "":
-            display.set_credential(GtkVnc.DisplayCredential.CLIENTNAME,
-                                   "jvncviewer")
-            display.set_credential(GtkVnc.DisplayCredential.PASSWORD,
-                                   self.password)
+            self.vncdisplay.set_credential(GtkVnc.DisplayCredential.CLIENTNAME,
+                                           "jvncviewer")
+            self.vncdisplay.set_credential(GtkVnc.DisplayCredential.PASSWORD,
+                                           self.password)
 
-        display.realize()
+        self.vncdisplay.realize()
 
-        display.connect("vnc-connected", self._connected)
-        display.connect("vnc-initialized", self._initialized)
-        display.connect("vnc-disconnected", self._disconnected)
-        display.connect("vnc-auth-credential", self._auth_credential)
-        display.connect("vnc-auth-failure", self._auth_failure)
+        self.vncdisplay.connect("vnc-connected", self._connected)
+        self.vncdisplay.connect("vnc-initialized", self._initialized)
+        self.vncdisplay.connect("vnc-disconnected", self._disconnected)
+        self.vncdisplay.connect("vnc-auth-credential", self._auth_credential)
+        self.vncdisplay.connect("vnc-auth-failure", self._auth_failure)
 
         print("--- Connecting to %s:%s" % (self.host, self.port))
-        display.open_host(host, port)
+        self.vncdisplay.open_host(host, port)
 
         if not self.looping:
             self.looping = True
