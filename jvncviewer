@@ -44,12 +44,12 @@ class VNCViewer(object):
         self.looping = False
 
         # VNC display
-        self.vncdisplay = Gtk.VBox()   # Empty placeholder
+        self.vncdisplaybox = Gtk.VBox()   # Empty placeholder
 
         # Layout
         self.layout = Gtk.VBox()
         self.layout.add(self._menubar())
-        self.layout.add(self.vncdisplay)
+        self.layout.add(self.vncdisplaybox)
 
         # Window
         self.window = Gtk.Window(title="jvncviewer - %s" % host)
@@ -106,13 +106,13 @@ class VNCViewer(object):
     def connect(self):
         # Remove the previous VNC display box from the window layout (in case
         # of a reconnect)
-        self.layout.remove(self.vncdisplay)
+        self.layout.remove(self.vncdisplaybox)
 
         # Create the VNC display and add it to the window layout
         display = GtkVnc.Display()
-        self.vncdisplay = Gtk.VBox()
-        self.vncdisplay.add(display)
-        self.layout.add(self.vncdisplay)
+        self.vncdisplaybox = Gtk.VBox()
+        self.vncdisplaybox.add(display)
+        self.layout.add(self.vncdisplaybox)
 
         if self.password != "":
             display.set_credential(GtkVnc.DisplayCredential.CLIENTNAME,
