@@ -1,0 +1,102 @@
+#!/bin/bash -eu
+#
+# Simple script for importing the source tree provided by a kernel SRPM into
+# a git repository.
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: import-kernel-srpm [-d] SRPM
+
+Import a kernel source provided by <SRPM> into the current git repo.
+
+Options:
+  -d, --dry-run
+EOF
+}
+
+dry_run=0
+srpm=
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-d|--dry-run)
+			dry_run=1
+			;;
+		*)
+			if [ -n "${srpm}" ] ; then
+				echo "Unexpected argument: ${1}"
+				exit 1
+			fi
+			srpm=$(readlink -e "${1}")
+			;;
+	esac
+	shift
+done
+
+if [ -z "${srpm}" ] ; then
+	usage
+fi
+
+if ! [ -d .git ] ; then
+	echo "Not in a git directory"
+	exit 1
+fi
+
+gitd=$(readlink -e .)
+rpmbuildd=$(readlink -e ~/.rpmbuild)
+
+# Parse the SRPM
+name=$(rpm -qp --qf '%{NAME}\n' "${srpm}")
+version=$(rpm -qp --qf '%{VERSION}\n' "${srpm}")
+release=$(rpm -qp --qf '%{RELEASE}\n' "${srpm}")
+tag=${version}-${release}
+
+echo "name:    ${name}"
+echo "version: ${version}"
+echo "release: ${release}"
+echo "tag:     ${tag}"
+
+# Which schroot to use
+num=${release##*el}
+num=${num%%.*}
+schroot=centos${num}-x86_64
+
+# To silence schroot locale warnings
+export LANG=
+export LCALL=POSIX
+
+# Clean the rpmbuild directories
+rm -rf "${rpmbuildd}"/BUILD/* "${rpmbuildd}"/SOURCES/* "${rpmbuildd}"/SPECS/*
+
+# Extract the SRPM
+cd "${rpmbuildd}/SOURCES"
+rpm2cpio "${srpm}" | cpio --extract --make-directories
+mv ./*.spec ../SPECS/
+
+# Apply the patches
+cd "${rpmbuildd}/SPECS"
+schroot -c "${schroot}" -- rpmbuild -bp "${name}.spec"
+
+# The build directory
+buildd=$(cd "${rpmbuildd}/BUILD" && find . -mindepth 2 -maxdepth 2 -type d)
+
+# Clean the source
+cd "${rpmbuildd}/BUILD/${buildd}"
+schroot -c "${schroot}" -- make mrproper
+
+if [ "${dry_run}" -eq 1 ] ; then
+	echo "Dry run only, exiting..."
+	exit
+fi
+
+# Copy the source
+cd "${gitd}"
+cp "${rpmbuildd}/SPECS/${name}.spec" .
+rsync -a "${rpmbuildd}/BUILD/${buildd}/" .
+
+# Commit and tag
+git add .
+git commit -s -m "Import kernel version ${tag}"
+git tag "${tag}"
