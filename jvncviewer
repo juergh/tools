@@ -44,13 +44,12 @@ class VNCViewer(object):
         self.looping = False
 
         # VNC display
-        self.vncdisplay = GtkVnc.Display()   # Placeholder
-        self.vncdisplaybox = Gtk.VBox()      # Placeholder
+        self.vncdisplay = GtkVnc.Display()
 
         # Layout
         self.layout = Gtk.VBox()
-        self.layout.add(self._menubar())
-        self.layout.add(self.vncdisplaybox)
+        self.layout.pack_start(self._menubar(), False, False, 0)
+        self.layout.pack_start(self.vncdisplay, True, True, 0)
 
         # Window
         self.window = Gtk.Window(title="jvncviewer - %s" % host)
@@ -76,7 +75,7 @@ class VNCViewer(object):
         #
         # 'Send Key' menu
         #
-        sendkey_cad = Gtk.MenuItem("Ctrl-Alt-Delete")
+        sendkey_cad = Gtk.MenuItem("Control-Alt-Delete")
         sendkey_cad.connect("activate", self._send_cad)
 
         menu_sendkey = Gtk.Menu()
@@ -121,7 +120,7 @@ class VNCViewer(object):
         Gtk.main_quit()
 
     def _send_cad(self, src=None):
-        print("--- Send Ctrl-Alt-Delete")
+        print("--- Send Control-Alt-Delete")
         self.vncdisplay.send_keys([Gdk.KEY_Control_L, Gdk.KEY_Alt_L,
                                    Gdk.KEY_Delete])
 
@@ -130,15 +129,13 @@ class VNCViewer(object):
     # Public methods
 
     def connect(self):
-        # Remove the previous VNC display box from the window layout (in case
-        # of a reconnect)
-        self.layout.remove(self.vncdisplaybox)
+        # Remove the previous VNC display from the window layout (in case of a
+        # reconnect)
+        self.layout.remove(self.vncdisplay)
 
         # Create the VNC display and add it to the window layout
         self.vncdisplay = GtkVnc.Display()
-        self.vncdisplaybox = Gtk.VBox()
-        self.vncdisplaybox.add(self.vncdisplay)
-        self.layout.add(self.vncdisplaybox)
+        self.layout.pack_start(self.vncdisplay, True, True, 0)
 
         if self.password != "":
             self.vncdisplay.set_credential(GtkVnc.DisplayCredential.CLIENTNAME,
