@@ -224,9 +224,9 @@ if [ -e .config ] ; then
 	trap "mv .config.squirrel .config" EXIT INT TERM HUP
 fi
 
-echo "schroot -c ${schroot} -- make olddefconfig ${target} ${numjobs}" \
+echo "schroot -c ${schroot} -- make oldnoconfig ${target} ${numjobs}" \
 	 "O=${buildd} ${@} 2>&1 | tee ${buildd}/build.log"
 if [ "${dry_run}" -eq 0 ] ; then
-	schroot -c "${schroot}" -- make olddefconfig "${target}" ${numjobs} \
+	schroot -c "${schroot}" -- make oldnoconfig "${target}" ${numjobs} \
 			O="${buildd}" "${@}" 2>&1 | tee "${buildd}/build.log"
 fi
