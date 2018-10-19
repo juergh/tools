@@ -10,50 +10,70 @@ function print_var()
 	done
 }
 
-function download_image()
+function download_fedora_image()
 {
-	local url pattern name suffix num
+	local url pattern name
 
-	case "${VENDOR}" in
-		fedora)
-			url=https://download.fedoraproject.org/pub/fedora/linux/releases/${RELEASE}/CloudImages/${ARCH}/images
-			pattern="Fedora-Cloud-Base-${RELEASE}-.*.${ARCH}.qcow2"
-			;;
-		ubuntu)
-			suffix=
-			if [ "${RELEASE}" = "precise" ] || [ "${RELEASE}" = "trusty" ] || \
-			   [ "${RELEASE}" = "xenial" ] ; then
-				suffix="-disk1"
-				if [ "${UEFI}" -eq 1 ] ; then
-					suffix="-uefi1"
-				fi
-			fi
-			name=${RELEASE}-server-cloudimg-${ARCH}${suffix}.img
-			url=https://cloud-images.ubuntu.com/${RELEASE}/current/${name}
-			pattern=
-			;;
-		debian)
-			case "${RELEASE}" in
-				jessie)  num=8 ;;
-				stretch) num=9 ;;
-			esac
-			name=debian-${num}-openstack-${ARCH}.qcow2
-			url=https://cdimage.debian.org/cdimage/openstack/current-${num}/${name}
-			pattern=
-			;;
-	esac
-
-	if [ -n "${pattern}" ] ; then
-		name=$(wget -q -O - "${url}" | \
-				   sed -n -e 's/.*href="\([^"]*\).*/\1/p' | \
-				   grep "${pattern}")
-		url=${url}/${name}
+	if [ "${RELEASE}" -gt 27 ] ; then
+		url=https://download.fedoraproject.org/pub/fedora/linux/releases/${RELEASE}/Cloud/${ARCH}/images
+	else
+		url=https://download.fedoraproject.org/pub/fedora/linux/releases/${RELEASE}/CloudImages/${ARCH}/images
 	fi
 
-	wget -O "${IMAGE}" "${url}"
-	qemu-img resize "${IMAGE}" 8G
+	pattern="Fedora-Cloud-Base-${RELEASE}-.*.${ARCH}.qcow2"
+	name=$(wget -q -O - "${url}" | \
+			   sed -n -e 's/.*href="\([^"]*\).*/\1/p' | \
+			   grep "${pattern}")
+
+	url=${url}/${name}
+
+	wget -O "${TMP_IMAGE}" "${url}"
 }
 
+function download_debian_image()
+{
+	local num name url release
+
+	case "${RELEASE}" in
+		jessie)  num=8 ;;
+		stretch) num=9 ;;
+	esac
+
+	name=debian-${num}-openstack-${ARCH}.qcow2
+	url=https://cdimage.debian.org/cdimage/openstack/current-${num}/${name}
+
+	if wget -O "${TMP_IMAGE}" "${url}" ; then
+		return
+	fi
+
+	url=https://cdimage.debian.org/cdimage/openstack/archive
+	release=$(wget -q -O - "${url}" | \
+				  sed -n -e "s,.* href=\"\(${num}\.[^/]*\).*,\1,p" | \
+				  sort -V | tail -1)
+	name=debian-${release}-openstack-${ARCH}.qcow2
+	url=${url}/${release}/${name}
+
+	wget -O "${TMP_IMAGE}" "${url}"
+}
+
+function download_ubuntu_image()
+{
+	local suffix name url
+
+	suffix=
+	if [ "${RELEASE}" = "precise" ] || [ "${RELEASE}" = "trusty" ] || \
+		   [ "${RELEASE}" = "xenial" ] ; then
+		suffix="-disk1"
+		if [ "${UEFI}" -eq 1 ] ; then
+			suffix="-uefi1"
+		fi
+	fi
+
+	name=${RELEASE}-server-cloudimg-${ARCH}${suffix}.img
+	url=https://cloud-images.ubuntu.com/${RELEASE}/current/${name}
+
+	wget -O "${TMP_IMAGE}" "${url}"
+}
 
 function create_config_drive()
 {
@@ -80,19 +100,28 @@ ssh_authorized_keys: [ ${public_key} ]
 ssh_pwauth: true
 
 # Datasource timeout
-max_wait: 15
-
-# Fix grub errors on Ubuntu (Artful and newer)
-runcmd:
-  - [ update-grub ]
+max_wait: 10
 
 # Set the hostname early on first boot
 bootcmd:
-  - [ cloud-init-per, once, hostname, ${NAME} ]
+  - [ cloud-init-per, once, hostname, hostname, ${NAME} ]
+
+# Fix grub
+# Note: early cloud-init (in Precise) doesn't understand 'write_files' so we
+#       need to do it this way
+runcmd:
+  - |
+    ! test -d /etc/default/grub.d && mkdir /etc/default/grub.d
+    ! test -e /etc/default/grub.d/99-create-vm.cfg && \
+    cat <<__EOF__ >/etc/default/grub.d/99-create-vm.cfg && update-grub
+    unset GRUB_HIDDEN_TIMEOUT
+    GRUB_TIMEOUT=2
+    GRUB_CMDLINE_LINUX_DEFAULT="console=tty1 console=ttyS0"
+    __EOF__
 EOF
 
 	genisoimage -ldots -allow-lowercase -allow-multidot -l -J -r \
-				-o "${CONFIG_DRIVE}" -V cidata "${tmpd}"
+				-o "${TMP_IMAGE}" -V cidata "${tmpd}"
 
 	rm -rf "${tmpd}"
 }
@@ -224,20 +253,21 @@ EOF
 function usage()
 {
 	cat <<EOF
-Usage: create-vm [OPTIONS] DIST [NAME]
+Usage: create-vm [-a ARCH] [-d] [-f] [-h] [-u] DIST [NAME]
 
 Create a libvirt guest VM.
 
-DIST  The distro and release of the guest VM (ubuntu-artful, fedora-26,
-      debian-jessie, ...).
-NAME  The libvirt domain name. If not specified, defaults to
-      <dist>[-uefi][-<arch>].
+Positional arguments:
+  DIST  A recognized distrbution, like bionic, stretch, fedora-26, ...
+  NAME  The libvirt domain name, defaults to <DIST>[-uefi][-<ARCH>] if not
+        specified.
 
-Options:
+Optional arguments:
   -a, --arch ARCH  Architecture of the VM (defaults to the host architecture).
   -d, --debug      Enable debugging (set -x).
   -f, --force      Force the recreation of an existing VM.
   -h, --help       Show this help text.
+  -s, --size GB    Image size in GB. If not specified, defaults to 8(GB).
   -u, --uefi       Configure the VM to boot from UEFI.
 EOF
 }
@@ -251,11 +281,12 @@ FORCE=0
 UEFI=0
 DIST=
 NAME=
+SIZE=8
 
 while [ ${#} -gt 0 ] ; do
 	case ${1} in
 		-a|--arch)
-			ARCH="${2}"
+			ARCH=${2}
 			shift
 			;;
 		-d|--debug)
@@ -268,6 +299,10 @@ while [ ${#} -gt 0 ] ; do
 			usage
 			exit 2
 			;;
+		-s|--size)
+			SIZE=${2}
+			shift
+			;;
 		-u|--uefi)
 			UEFI=1
 			;;
@@ -277,9 +312,9 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		*)
 			if [ -z "${DIST}" ] ; then
-				DIST="${1}"
+				DIST=${1}
 			elif [ -z "${NAME}" ] ; then
-				NAME="${1}"
+				NAME=${1}
 			else
 				echo "Unexpected argument: ${1}" >&2
 				exit 2
@@ -297,9 +332,25 @@ fi
 # -----------------------------------------------------------------------------
 # Set global variables
 
-# Set the name of the VM
+# The image vendor and release
+case "${DIST}" in
+	*-*)
+		VENDOR=${DIST%-*}
+		RELEASE=${DIST#*-}
+		;;
+    jessie|stretch)
+        VENDOR=debian
+		RELEASE=${DIST}
+        ;;
+    *)
+        VENDOR=ubuntu
+        RELEASE=${DIST}
+        ;;
+esac
+
+# The name of the VM
 if [ -z "${NAME}" ] ; then
-	NAME=${DIST}
+	NAME=${VENDOR}-${RELEASE}
 	if [ ${UEFI} -eq 1 ] ; then
 		NAME=${NAME}-uefi
 	fi
@@ -308,27 +359,21 @@ if [ -z "${NAME}" ] ; then
 	fi
 fi
 
-# Verify the distro-release combination
-case "${DIST}" in
-	fedora-*|centos-*)
+# The vendor specific architecture name
+case "${VENDOR}" in
+	fedora|centos)
 		if [ -z "${ARCH}" ] ; then
 			ARCH=$(dpkg-architecture -q DEB_HOST_GNU_CPU)
 		fi
 		;;
-	debian-*|ubuntu-*)
+	*)
 		if [ -z "${ARCH}" ] ; then
 			ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
 		fi
 		;;
-	*)
-		echo "Unsupported distro: ${DIST}" 2>&1
-		exit 1
-		;;
 esac
 
-VENDOR=${DIST%-*}
-RELEASE=${DIST#*-}
-
+# The image directory and image and config filenames
 IMAGE_DIR=/var/lib/libvirt/images
 IMAGE=${IMAGE_DIR}/${NAME}.qcow2
 CONFIG_DRIVE=${IMAGE_DIR}/${NAME}-config.iso
@@ -340,6 +385,7 @@ if [ "${RELEASE}" = "precise" ] && [ "${UEFI}" -eq 1 ] ; then
 fi
 
 print_var ARCH FORCE DIST IMAGE_DIR IMAGE CONFIG_DRIVE NAME RELEASE VENDOR
+echo
 
 # -----------------------------------------------------------------------------
 # Purge existing VM
@@ -349,24 +395,31 @@ if virsh vcpuinfo "${NAME}" >/dev/null 2>&1 ; then
 		echo "VM '${NAME}' exists already. Use -f, --force to recreate it."
 		exit 1
 	fi
-	virsh destroy "${NAME}" 2>/dev/null || true
-	virsh undefine  "${NAME}" 2>/dev/null || true
-	rm -f "${IMAGE}" "${CONFIG_DRIVE}"
+	virsh destroy "${NAME}" || true
+	virsh vol-delete "${IMAGE}" || true
+	virsh vol-delete "${CONFIG_DRIVE}" || true
+	virsh undefine "${NAME}" || true
 fi
 
 # -----------------------------------------------------------------------------
-# Download the cloud image
+# Create a temporary image file
 
-if ! [ -e "${IMAGE}" ] ; then
-	download_image
-fi
+TMP_IMAGE=$(mktemp)
+# shellcheck disable=SC2064
+trap "rm -f ${TMP_IMAGE}" EXIT INT TERM HUP
+
+# -----------------------------------------------------------------------------
+# Download and resize the cloud image
+
+download_"${VENDOR}"_image
+qemu-img resize "${TMP_IMAGE}" "${SIZE}"G
+sudo mv "${TMP_IMAGE}" "${IMAGE}"
 
 # -----------------------------------------------------------------------------
 # Create the config drive
 
-if ! [ -e "${CONFIG_DRIVE}" ] ; then
-	create_config_drive
-fi
+create_config_drive
+sudo mv "${TMP_IMAGE}" "${CONFIG_DRIVE}"
 
 # -----------------------------------------------------------------------------
 # Define the VM
