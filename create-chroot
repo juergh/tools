@@ -261,16 +261,16 @@ function fedora_create_chroot()
 function usage()
 {
 	cat <<EOF
-Usage: create-chroot [<options>] <dist> [<name>]
+Usage: create-chroot [-a ARCH] [-b] [-d] [-f] [-h] [-k] [-n] DIST [NAME]
 
 Create a chroot for kernel package builds.
 
-dist  A recognized distribution, like ubuntu-xenial, debian-jessie, fedora-26,
-      centos-7, ...
-name  The name of the chroot, defaults to <dist>-<arch> if not specified.
+Positional arguments:
+  DIST  A recognized distribution, like bionic, stretch, fedora-26, ...
+  NAME  The name of the chroot, defaults to <DIST>-<ARCH> if not specified.
 
-Available options:
-  -a, --arch <arch>   Architecture of the chroot (defaults to the host
+Optional arguments:
+  -a, --arch ARCH     Architecture of the chroot (defaults to the host
                       architecture).
   -b, --base          Create a base chroot without additional packages.
   -d, --debug         Enable debugging (set -x).
@@ -432,13 +432,6 @@ type=directory
 directory=${BASEDIR}
 root-users=${SUDO_USER}
 preserve-environment=true
-
-#[${NAME}-overlay]
-#type=directory
-#directory=${BASEDIR}
-#root-users=${SUDO_USER}
-#preserve-environment=true
-#union-type=overlay
 EOF
 
 # -----------------------------------------------------------------------------
