@@ -20,11 +20,11 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
 
 import argparse
-import gi
 import os
 import signal
 import sys
 
+import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('GtkVnc', '2.0')
 
@@ -93,38 +93,38 @@ class VNCViewer(object):
 
         return menubar
 
-    def _connected(self, src):
+    def _connected(self, _src):   # pylint: disable=no-self-use
         print("--- Connected to server")
 
-    def _initialized(self, src):
+    def _initialized(self, _src):
         print("--- Connection initialized")
         self.window.show_all()
 
-    def _disconnected(self, src):
+    def _disconnected(self, _src):
         print("--- Disconnected from server")
         if self.reconnect:
             self.connect()
         else:
             Gtk.main_quit()
 
-    def _auth_credential(self, src, credList):
+    def _auth_credential(self, _src, _credList):   # pylint: disable=no-self-use
         print("--- Server requires authentication")
         Gtk.main_quit()
 
-    def _auth_failure(self, src, msg):
+    def _auth_failure(self, _src, msg):   # pylint: disable=no-self-use
         print("--- Authentication failure (%s)" % msg.strip())
         Gtk.main_quit()
 
-    def _quit(self, src=None):
+    def _quit(self, _src=None):   # pylint: disable=no-self-use
         print("--- Quitting")
         Gtk.main_quit()
 
-    def _send_cad(self, src):
+    def _send_cad(self, _src):
         print("--- Send Control-Alt-Delete")
         self.vncdisplay.send_keys([Gdk.KEY_Control_L, Gdk.KEY_Alt_L,
                                    Gdk.KEY_Delete])
 
-    def _size_allocate(self, src, rect):
+    def _size_allocate(self, _src, _rect):
         print("--- Size allocation")
         # HACK: Shrink the window so that is resizes automatically to the
         # size that the VNC display requests.
@@ -166,6 +166,9 @@ class VNCViewer(object):
             GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT,
                                  self._quit)
             Gtk.main()
+
+    def disconnect(self):
+        pass
 
 
 if __name__ == "__main__":
