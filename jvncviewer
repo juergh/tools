@@ -23,6 +23,7 @@ import argparse
 import os
 import signal
 import sys
+import time
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -33,22 +34,28 @@ from gi.repository import Gdk
 from gi.repository import GLib
 from gi.repository import GtkVnc
 
+from lib.amt.power import AMTPower
+
 
 class VNCViewer(object):
-    def __init__(self, host, port, password="", reconnect=False):
+    def __init__(self, host, port, password="", auto_reconnect=False,
+                 system=None):
         self.host = host
         self.port = port
         self.password = password
-        self.reconnect = reconnect
+        self.auto_reconnect = auto_reconnect
+        self.system = system
 
         self.looping = False
+        self.manual_disconnect = False
+        self.connected = False
 
         # VNC display
         self.vncdisplay = GtkVnc.Display()
 
         # Layout
         self.layout = Gtk.VBox()
-        self.layout.pack_start(self._menubar(), False, False, 0)
+        self.layout.pack_start(self._menubar(system), False, False, 0)
         self.layout.pack_start(self.vncdisplay, True, True, 0)
 
         # Window
@@ -56,10 +63,7 @@ class VNCViewer(object):
         self.window.add(self.layout)
         self.window.connect("destroy", self._quit)
 
-    # -------------------------------------------------------------------------
-    # Private methods
-
-    def _menubar(self):
+    def _menubar(self, system):
         #
         # 'File' menu
         #
@@ -85,27 +89,40 @@ class VNCViewer(object):
         menuitem_sendkey.set_submenu(menu_sendkey)
 
         #
+        # 'System' menu
+        #
+        if system:
+            system_pon = Gtk.MenuItem("Power On")
+            system_pon.connect("activate", self._system_pon)
+            system_poff = Gtk.MenuItem("Power Off")
+            system_poff.connect("activate", self._system_poff)
+            system_pcycle = Gtk.MenuItem("Power Cycle")
+            system_pcycle.connect("activate", self._system_pcycle)
+            system_reset = Gtk.MenuItem("Reset")
+            system_reset.connect("activate", self._system_reset)
+
+            menu_system = Gtk.Menu()
+            menu_system.append(system_pon)
+            menu_system.append(system_poff)
+            menu_system.append(system_pcycle)
+            menu_system.append(system_reset)
+
+            menuitem_system = Gtk.MenuItem("System")
+            menuitem_system.set_submenu(menu_system)
+
+        #
         # Menubar
         #
         menubar = Gtk.MenuBar()
         menubar.append(menuitem_file)
         menubar.append(menuitem_sendkey)
+        if system:
+            menubar.append(menuitem_system)
 
         return menubar
 
-    def _connected(self, _src):   # pylint: disable=no-self-use
-        print("--- Connected to server")
-
-    def _initialized(self, _src):
-        print("--- Connection initialized")
-        self.window.show_all()
-
-    def _disconnected(self, _src):
-        print("--- Disconnected from server")
-        if self.reconnect:
-            self.connect()
-        else:
-            Gtk.main_quit()
+    # -------------------------------------------------------------------------
+    # VNC/GTK signal handlers
 
     def _auth_credential(self, _src, _credList):   # pylint: disable=no-self-use
         print("--- Server requires authentication")
@@ -115,14 +132,27 @@ class VNCViewer(object):
         print("--- Authentication failure (%s)" % msg.strip())
         Gtk.main_quit()
 
-    def _quit(self, _src=None):   # pylint: disable=no-self-use
-        print("--- Quitting")
-        Gtk.main_quit()
+    def _connected(self, _src):
+        print("--- Connected to server")
+        self.connected = True
 
-    def _send_cad(self, _src):
-        print("--- Send Control-Alt-Delete")
-        self.vncdisplay.send_keys([Gdk.KEY_Control_L, Gdk.KEY_Alt_L,
-                                   Gdk.KEY_Delete])
+    def _disconnected(self, _src):
+        print("--- Disconnected from server")
+        self.connected = False
+        if self.manual_disconnect:
+            pass
+        elif self.auto_reconnect:
+            time.sleep(0.5)
+            self.connect()
+        else:
+            Gtk.main_quit()
+
+    def _error(self, _src, msg):   # pylint: disable=no-self-use
+        print("--- Error (%s)" % msg)
+
+    def _initialized(self, _src):
+        print("--- Connection initialized")
+        self.window.show_all()
 
     def _size_allocate(self, _src, _rect):
         print("--- Size allocation")
@@ -130,10 +160,47 @@ class VNCViewer(object):
         # size that the VNC display requests.
         self.window.resize(10, 10)
 
+    def _quit(self, _src=None):   # pylint: disable=no-self-use
+        print("--- Quitting")
+        Gtk.main_quit()
+
+    # -------------------------------------------------------------------------
+    # 'Send Key' menu signal handlers
+
+    def _send_cad(self, _src):
+        print("--- Send Control-Alt-Delete")
+        self.vncdisplay.send_keys([Gdk.KEY_Control_L, Gdk.KEY_Alt_L,
+                                   Gdk.KEY_Delete])
+
+    # -------------------------------------------------------------------------
+    # 'System' menu signal handlers
+
+    def _system_pon(self, _src):
+        print("--- Powering on system")
+        self.system.set_power_state("on")
+
+    def _system_poff(self, _src):
+        print("--- Powering off system")
+        self.disconnect()
+        self.system.set_power_state("off")
+        self.connect()
+
+    def _system_pcycle(self, _src):
+        print("--- Power cycling system")
+        self.disconnect()
+        self.system.set_power_state("cycle")
+        self.connect()
+
+    def _system_reset(self, _src):
+        print("--- Resetting system")
+        self.system.set_power_state("reset")
+
     # -------------------------------------------------------------------------
     # Public methods
 
     def connect(self):
+        self.manual_disconnect = False
+
         # Remove the previous VNC display from the window layout (in case of a
         # reconnect)
         self.layout.remove(self.vncdisplay)
@@ -150,12 +217,13 @@ class VNCViewer(object):
 
         self.vncdisplay.realize()
 
-        self.vncdisplay.connect("vnc-connected", self._connected)
-        self.vncdisplay.connect("vnc-initialized", self._initialized)
-        self.vncdisplay.connect("vnc-disconnected", self._disconnected)
+        self.vncdisplay.connect("size-allocate", self._size_allocate)
         self.vncdisplay.connect("vnc-auth-credential", self._auth_credential)
         self.vncdisplay.connect("vnc-auth-failure", self._auth_failure)
-        self.vncdisplay.connect("size-allocate", self._size_allocate)
+        self.vncdisplay.connect("vnc-connected", self._connected)
+        self.vncdisplay.connect("vnc-disconnected", self._disconnected)
+        self.vncdisplay.connect("vnc-error", self._error)
+        self.vncdisplay.connect("vnc-initialized", self._initialized)
 
         print("--- Connecting to %s:%s" % (self.host, self.port))
         self.vncdisplay.open_host(host, port)
@@ -168,8 +236,18 @@ class VNCViewer(object):
             Gtk.main()
 
     def disconnect(self):
-        pass
+        self.manual_disconnect = True
 
+        self.vncdisplay.close()
+
+        # Wait for the connection to close
+        while self.connected:
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+
+
+# -----------------------------------------------------------------------------
+# Main entry point
 
 if __name__ == "__main__":
 
@@ -202,5 +280,6 @@ VNC_PASSWORD.
     else:
         port = "5900"
 
-    vnc = VNCViewer(host, port, args.password, reconnect=True)
+    amt = AMTPower(host, "admin", args.password)
+    vnc = VNCViewer(host, port, args.password, auto_reconnect=True, system=amt)
     vnc.connect()
