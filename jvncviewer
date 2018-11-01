@@ -46,7 +46,6 @@ class VNCViewer(object):
         self.auto_reconnect = auto_reconnect
         self.system = system
 
-        self.looping = False
         self.manual_disconnect = False
         self.connected = False
 
@@ -60,15 +59,17 @@ class VNCViewer(object):
 
         # Window
         self.window = Gtk.Window(title="jvncviewer - %s" % host)
+        self.window.set_size_request(800, 600)
         self.window.add(self.layout)
-        self.window.connect("destroy", self._quit)
+        self.window.connect("destroy", self.quit)
+        self.window.show_all()
 
     def _menubar(self, system):
         #
         # 'File' menu
         #
         file_quit = Gtk.MenuItem("Quit")
-        file_quit.connect("activate", self._quit)
+        file_quit.connect("activate", self.quit)
 
         menu_file = Gtk.Menu()
         menu_file.append(file_quit)
@@ -150,19 +151,14 @@ class VNCViewer(object):
     def _error(self, _src, msg):   # pylint: disable=no-self-use
         print("--- Error (%s)" % msg)
 
-    def _initialized(self, _src):
+    def _initialized(self, _src):   # pylint: disable=no-self-use
         print("--- Connection initialized")
-        self.window.show_all()
 
     def _size_allocate(self, _src, _rect):
         print("--- Size allocation")
         # HACK: Shrink the window so that is resizes automatically to the
         # size that the VNC display requests.
         self.window.resize(10, 10)
-
-    def _quit(self, _src=None):   # pylint: disable=no-self-use
-        print("--- Quitting")
-        Gtk.main_quit()
 
     # -------------------------------------------------------------------------
     # 'Send Key' menu signal handlers
@@ -199,6 +195,7 @@ class VNCViewer(object):
     # Public methods
 
     def connect(self):
+        print("--- Connecting to %s:%s" % (self.host, self.port))
         self.manual_disconnect = False
 
         # Remove the previous VNC display from the window layout (in case of a
@@ -208,6 +205,7 @@ class VNCViewer(object):
         # Create the VNC display and add it to the window layout
         self.vncdisplay = GtkVnc.Display()
         self.layout.pack_start(self.vncdisplay, True, True, 0)
+        self.vncdisplay.show()
 
         if self.password != "":
             self.vncdisplay.set_credential(GtkVnc.DisplayCredential.CLIENTNAME,
@@ -225,17 +223,10 @@ class VNCViewer(object):
         self.vncdisplay.connect("vnc-error", self._error)
         self.vncdisplay.connect("vnc-initialized", self._initialized)
 
-        print("--- Connecting to %s:%s" % (self.host, self.port))
         self.vncdisplay.open_host(host, port)
 
-        if not self.looping:
-            self.looping = True
-            # Allow CTRL-C to quit the GTK main loop
-            GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT,
-                                 self._quit)
-            Gtk.main()
-
     def disconnect(self):
+        print("--- Disconnecting from %s:%s" % (self.host, self.port))
         self.manual_disconnect = True
 
         self.vncdisplay.close()
@@ -245,6 +236,9 @@ class VNCViewer(object):
             while Gtk.events_pending():
                 Gtk.main_iteration()
 
+    def quit(self, _src=None):   # pylint: disable=no-self-use
+        print("--- Quitting")
+        Gtk.main_quit()
 
 # -----------------------------------------------------------------------------
 # Main entry point
@@ -282,4 +276,9 @@ VNC_PASSWORD.
 
     amt = AMTPower(host, "admin", args.password)
     vnc = VNCViewer(host, port, args.password, auto_reconnect=True, system=amt)
+
     vnc.connect()
+
+    # Allow CTRL-C to quit the GTK main loop
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, vnc.quit)
+    Gtk.main()
