@@ -37,6 +37,20 @@ from gi.repository import GtkVnc
 from lib.amt.power import AMTPower
 
 
+class StatusIcon(Gtk.Image):
+    def __init__(self):
+        super(StatusIcon, self).__init__()
+
+        self.pixbuf = {}
+        for status in ("blue", "green", "red", "yellow"):
+            tmp = Gtk.Image()
+            tmp.set_from_file("icons/" + status + ".png")
+            self.pixbuf[status] = tmp.get_pixbuf().scale_simple(20, 20, 2)
+
+    def set_status(self, status):
+        self.set_from_pixbuf(self.pixbuf[status])
+
+
 class VNCViewer(object):
     def __init__(self, host, port, password="", auto_reconnect=False,
                  system=None):
@@ -49,6 +63,10 @@ class VNCViewer(object):
         self.manual_disconnect = False
         self.connected = False
 
+        # Status icons
+        self.connection_status = StatusIcon()
+        self.connection_status.set_status("blue")
+
         # Menubar
         menubar = self._menubar(system)
 
@@ -58,10 +76,16 @@ class VNCViewer(object):
         self.vncbox.set_size_request(720, 400)
         self.vncbox.add(self.vncdisplay)
 
+        # Status bar
+        statusbar = Gtk.HBox()
+        statusbar.pack_start(Gtk.Label("Connection:"), False, False, 10)
+        statusbar.pack_start(self.connection_status, False, False, 10)
+
         # Layout
         layout = Gtk.VBox()
         layout.pack_start(menubar, False, False, 0)
         layout.pack_start(self.vncbox, True, True, 0)
+        layout.pack_end(statusbar, False, False, 0)
 
         # Window
         self.window = Gtk.Window(title="jvncviewer - %s" % host)
@@ -141,10 +165,13 @@ class VNCViewer(object):
     def _connected(self, _src):
         print("--- Connected to server")
         self.connected = True
+        self.connection_status.set_status("green")
 
     def _disconnected(self, _src):
         print("--- Disconnected from server")
         self.connected = False
+        self.connection_status.set_status("red")
+
         if self.manual_disconnect:
             pass
         elif self.auto_reconnect:
