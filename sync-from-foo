@@ -22,6 +22,8 @@ USER_FILES=(
 )
 
 ROOT_FILES=(
+	/etc/NetworkManager/conf.d/localdns.conf
+	/etc/NetworkManager/dnsmasq.d/libvirt.conf
 	/etc/auto.jabba
 	/etc/auto.fritz
 	# /etc/auto.master
@@ -56,6 +58,9 @@ if [ ${USER} -eq 1 ] ; then
 	echo "Syncing user files..."
 	# shellcheck disable=SC2029
 	ssh "${HOST}" "tar cpf - ${USER_FILES[*]}" | ( cd / && tar xpvf - )
+
+	# Fix host specific files
+	sed -i -e "s,@${HOST}/,@$(hostname)/," ${HOME}/.config/hexchat/servlist.conf
 fi
 
 if [ ${ROOT} -eq 1 ] ; then
