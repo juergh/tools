@@ -37,6 +37,7 @@ done
 
 if [ -z "${srpm}" ] ; then
 	usage
+	exit 2
 fi
 
 if ! [ -d .git ] ; then
