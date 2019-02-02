@@ -17,6 +17,7 @@ USER_FILES=(
 	${HOME}/.gnupg/
 	${HOME}/.gitconfig
 	${HOME}/.keepass/
+	${HOME}/.password-store/
 	${HOME}/.sesame/
 	${HOME}/.ssh/
 )
