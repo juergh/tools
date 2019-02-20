@@ -345,14 +345,14 @@ case "${DIST}" in
 		VENDOR=${DIST%-*}
 		RELEASE=${DIST#*-}
 		;;
-    jessie|stretch)
-        VENDOR=debian
+	jessie|stretch)
+		VENDOR=debian
 		RELEASE=${DIST}
-        ;;
-    *)
-        VENDOR=ubuntu
-        RELEASE=${DIST}
-        ;;
+		;;
+	*)
+		VENDOR=ubuntu
+		RELEASE=${DIST}
+		;;
 esac
 
 # The name of the VM
