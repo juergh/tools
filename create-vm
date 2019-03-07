@@ -3,6 +3,22 @@
 # Create a base libvirt guest VM
 #
 
+function cleanup()
+{
+	local rc=$?
+
+	trap - EXIT INT TERM HUP
+
+	if [ -n "${TMP_FILE:-}" ] ; then
+		rm -f "${TMP_FILE}"
+	fi
+
+	if [ $? -ne 0 ] ; then
+		echo "Script failed" >&2
+	fi
+}
+
+
 function print_var()
 {
 	for var in "${@}" ; do
@@ -27,8 +43,9 @@ function download_fedora_image()
 
 	url=${url}/${name}
 
-	wget -O "${TMP_IMAGE}" "${url}"
+	wget -O "${TMP_FILE}" "${url}"
 }
+
 
 function download_debian_image()
 {
@@ -42,7 +59,7 @@ function download_debian_image()
 	name=debian-${num}-openstack-${ARCH}.qcow2
 	url=https://cdimage.debian.org/cdimage/openstack/current-${num}/${name}
 
-	if wget -O "${TMP_IMAGE}" "${url}" ; then
+	if wget -O "${TMP_FILE}" "${url}" ; then
 		return
 	fi
 
@@ -53,8 +70,9 @@ function download_debian_image()
 	name=debian-${release}-openstack-${ARCH}.qcow2
 	url=${url}/${release}/${name}
 
-	wget -O "${TMP_IMAGE}" "${url}"
+	wget -O "${TMP_FILE}" "${url}"
 }
+
 
 function download_ubuntu_image()
 {
@@ -72,8 +90,9 @@ function download_ubuntu_image()
 	name=${RELEASE}-server-cloudimg-${ARCH}${suffix}.img
 	url=https://cloud-images.ubuntu.com/${RELEASE}/current/${name}
 
-	wget -O "${TMP_IMAGE}" "${url}"
+	wget -O "${TMP_FILE}" "${url}"
 }
+
 
 function create_config_drive()
 {
@@ -128,7 +147,7 @@ runcmd:
 EOF
 
 	genisoimage -ldots -allow-lowercase -allow-multidot -l -J -r \
-				-o "${TMP_IMAGE}" -V cidata "${tmpd}"
+				-o "${TMP_FILE}" -V cidata "${tmpd}"
 
 	rm -rf "${tmpd}"
 }
@@ -183,6 +202,8 @@ EOF
 
 # -----------------------------------------------------------------------------
 # Main entry point
+
+trap cleanup EXIT INT TERM HUP
 
 ARCH=
 FORCE=0
@@ -310,11 +331,9 @@ if virsh vcpuinfo "${NAME}" >/dev/null 2>&1 ; then
 fi
 
 # -----------------------------------------------------------------------------
-# Create a temporary image file
+# Create a temporary file
 
-TMP_IMAGE=$(mktemp)
-# shellcheck disable=SC2064
-trap "rm -f ${TMP_IMAGE}" EXIT INT TERM HUP
+TMP_FILE=$(mktemp)
 
 # -----------------------------------------------------------------------------
 # Download and resize the cloud image
@@ -323,8 +342,8 @@ if [ -e "${IMAGE}" ] ; then
 	echo "Image '${IMAGE##*/}' exists already."
 else
 	download_"${VENDOR}"_image
-	qemu-img resize "${TMP_IMAGE}" "${SIZE}"G
-	sudo mv "${TMP_IMAGE}" "${IMAGE}"
+	qemu-img resize "${TMP_FILE}" "${SIZE}"G
+	sudo mv "${TMP_FILE}" "${IMAGE}"
 fi
 
 # -----------------------------------------------------------------------------
@@ -334,7 +353,7 @@ if [ -e "${CONFIG_DRIVE}" ] ; then
 	echo "Config drive '${CONFIG_DRIVE##*/}' exists already."
 else
 	create_config_drive
-	sudo mv "${TMP_IMAGE}" "${CONFIG_DRIVE}"
+	sudo mv "${TMP_FILE}" "${CONFIG_DRIVE}"
 fi
 
 # -----------------------------------------------------------------------------
