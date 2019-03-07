@@ -1,0 +1,79 @@
+#!/bin/bash -eu
+#
+# Mount a disk image
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: mount-image [-h] [-p] IMAGE [DIR]
+
+IMAGE  The image to mount.
+DIR    The directory where the image is mounted. If not specified, a random
+       directory is created automatically.
+
+Optional arguments:
+  -h, --help      Show this help text.
+  -p, --pseudofs  Bind-mount pseudo filesystems into the image (requires sudo).
+EOF
+}
+
+image=
+mountdir=
+pseudofs=0
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-p|--pseudofs)
+			pseudofs=1
+			;;
+		*)
+			if [ -z "${image}" ] ; then
+				image=${1}
+			elif [ -z "${mountdir}" ] ; then
+				mountdir=${1}
+			else
+				echo "Unexpected argument: ${1}" >&2
+				exit 1
+			fi
+	esac
+	shift
+done
+
+if [ -z "${image}" ] ; then
+	usage
+	exit 1
+fi
+
+if ! [ -e "${image}" ] ; then
+	echo "No such image file: ${image}" >&2
+	exit 1
+fi
+
+if [ -z "${mountdir}" ] ; then
+	mountdir=$(mktemp --directory --tmpdir image-XXXXXX)
+	# shellcheck disable=SC2064
+	trap "rm -rf ${mountdir}" EXIT INT TERM HUP
+fi
+
+if ! [ -d "${mountdir}" ] ; then
+	echo "No such directory: ${mountdir}" >&2
+	exit 1
+fi
+
+# Mount the image
+guestmount --pid-file "${mountdir}.pid" -a "${image}" -m /dev/sda1 --rw \
+		   -o dev -o allow_root "${mountdir}"
+trap - EXIT INT TERM HUP
+
+# Mount the pseudo filesystems
+if [ ${pseudofs} -eq 1 ] ; then
+    for dev in /dev /dev/pts /proc /sys ; do
+        sudo mount -o bind "${dev}" "${mountdir}${dev}" || true
+	done
+fi
+
+echo "Image mounted at ${mountdir}"

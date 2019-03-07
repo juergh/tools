@@ -1,0 +1,77 @@
+#!/bin/bash -eu
+#
+# Unmount a disk image
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: unmount-image [-h] DIR
+
+DIR  The directory where the image is mounted.
+
+Optional arguments:
+  -h, --help      Show this help text.
+EOF
+}
+
+mountdir=
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -z "${mountdir}" ] ; then
+				mountdir=${1}
+			else
+				echo "Unexpected argument: ${1}" >&2
+				exit 1
+			fi
+	esac
+	shift
+done
+
+if [ -z "${mountdir}" ] ; then
+	usage
+	exit 1
+fi
+
+if ! [ -d "${mountdir}" ] ; then
+	echo "No such directory: ${mountdir}" >&2
+	exit 1
+fi
+
+if ! [ -e "${mountdir}.pid" ] ; then
+	echo "No such file: ${mountdir}.pid" >&2
+	exit 1
+fi
+
+# Unmount the pseudo filesystems
+for dev in /dev/pts /dev /proc /sys ; do
+	d=$(readlink -e "${mountdir}${dev}")
+	if mount | grep -q " on ${d} " ; then
+		sudo umount "${d}" || sudo umount -l "${d}" || true
+	fi
+done
+
+# Unmount the image
+guestunmount "${mountdir}"
+
+# Wait for guestunmount to finish
+pid=$(cat "${mountdir}.pid")
+count=20
+while kill -0 "${pid}" 2>/dev/null && [ ${count} -gt 0 ] ; do
+    sleep 1
+    ((count--))
+done
+
+if [ ${count} -eq 0 ] ; then
+    echo "Failed to unmount image (timed out after 20 secs)" >&2
+    exit 1
+fi
+
+rm -rf "${mountdir}" "${mountdir}.pid"
+
+echo "Image unmounted"
