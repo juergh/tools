@@ -54,7 +54,7 @@ function need_cross_compilation()
 	# Need to cross compile if the schroot and the deb architectures differ
 	# unless we're building an i386 kernel in an amd64 schroot
 	[ "${schroot_arch}" != "${DEB_ARCH}" ] && \
-		! ( [ "${schroot_arch}" = "amd64" ] && [ "${DEB_ARCH}" = "i386" ] )
+		! { [ "${schroot_arch}" = "amd64" ] && [ "${DEB_ARCH}" = "i386" ] ; }
 }
 
 
@@ -79,8 +79,12 @@ function get_upstream_schroot()
 			# 4.0 to 4.9
 			series=xenial
 			;;
-		*)
+		4.1[0-7])
+			# 4.10 to 4.17
 			series=bionic
+			;;
+		*)
+			series=cosmic
 			;;
 	esac
 
@@ -101,8 +105,12 @@ function build_upstream_kernel()
 			arch=arm64
 			target=Image.gz
 			;;
-		amd64|i386)
-			arch=x86
+		amd64)
+			arch=x86_64
+			target=bzImage
+			;;
+		i386)
+			arch=i386
 			target=bzImage
 			;;
 		powerpc)
@@ -114,10 +122,13 @@ function build_upstream_kernel()
 			target=vmlinux
 			;;
 		*)
-			echo "+++ Error: Unsupported arch: ${DEB_ARCH}"
+			echo "+++ Error: Unsupported arch: ${DEB_ARCH}" 2>&1
 			exit 1
 			;;
 	esac
+
+	# Export the target arch
+	export ARCH=${arch}
 
 	# Use the default target
 	if [ ${#TARGET[@]} -eq 0 ] ; then
@@ -130,11 +141,10 @@ function build_upstream_kernel()
 		# shellcheck disable=SC2046
 		export $(dpkg-architecture -a "${DEB_ARCH}" 2>/dev/null)
 		export CROSS_COMPILE=${DEB_HOST_GNU_TYPE}-
-		export ARCH=${arch}
 	fi
 
 	# Create the out-of-tree build directory and copy the config file
-	buildd="build/${DEB_ARCH}"
+	buildd="$(readlink -m "build/${DEB_ARCH}")"
 	if ! [ -d "${buildd}" ] ; then
 		mkdir -p "${buildd}"
 	fi
@@ -282,7 +292,7 @@ while [ $# -gt 0 ] ; do
 			break
 			;;
 		-*)
-			echo "Error: Unknown option: ${1}"
+			echo "Error: Unknown option: ${1}" 2>&1
 			exit 1
 			;;
 		*)
@@ -296,7 +306,7 @@ if [ ${UBUNTU} -eq 1 ] ; then
 	build_ubuntu_kernel
 else
 	if ! [ -e "${CONFIG}" ] ; then
-		echo "+++ Error: Config file not found: ${CONFIG}"
+		echo "+++ Error: Config file not found: ${CONFIG}" 2>&1
 		exit 1
 	fi
 	build_upstream_kernel
