@@ -100,24 +100,31 @@ ssh_authorized_keys: [ ${public_key} ]
 ssh_pwauth: true
 
 # Datasource timeout
-max_wait: 10
+max_wait: 2
 
 # Set the hostname early on first boot
 bootcmd:
   - [ cloud-init-per, once, hostname, hostname, ${NAME} ]
 
 # Fix grub
-# Note: early cloud-init (in Precise) doesn't understand 'write_files' so we
-#       need to do it this way
+# Some images are having problems finding the boot device so we reinstall grub
+# which seems to fix that. While at it, enable the boot menu and purge the
+# infamous 40-force-partuuid.cfg config file to prevent booting without an
+# initrd first.
 runcmd:
   - |
-    ! test -d /etc/default/grub.d && mkdir /etc/default/grub.d
-    ! test -e /etc/default/grub.d/99-create-vm.cfg && \
-    cat <<__EOF__ >/etc/default/grub.d/99-create-vm.cfg && update-grub
-    unset GRUB_HIDDEN_TIMEOUT
+    if ! test -e /etc/cloud/create-vm ; then
+    rm -f /etc/default/grub.d/40-force-partuuid.cfg
+    test -d /etc/default/grub.d || mkdir /etc/default/grub.d
+    cat <<__EOF__ > /etc/default/grub.d/99-create-vm.cfg
+    unset GRUB_HIDDEN_TIMEOUT GRUB_TIMEOUT_STYLE
     GRUB_TIMEOUT=2
     GRUB_CMDLINE_LINUX_DEFAULT="console=tty1 console=ttyS0"
     __EOF__
+    grub-install /dev/vda
+    update-grub
+    date -R > /etc/cloud/create-vm
+    fi
 EOF
 
 	genisoimage -ldots -allow-lowercase -allow-multidot -l -J -r \
