@@ -3,18 +3,25 @@
 # Create a base libvirt guest VM
 #
 
+function pr_error()
+{
+	echo -e "\033[31m${*}\033[0m" 1>&2
+}
+
+
 function cleanup()
 {
-	local rc=$?
+	local rc=$? silent=1
 
 	trap - EXIT INT TERM HUP
 
 	if [ -n "${TMP_FILE:-}" ] ; then
+		silent=0
 		rm -f "${TMP_FILE}"
 	fi
 
-	if [ $? -ne 0 ] ; then
-		echo "Script failed" >&2
+	if [ ${rc} -ne 0 ] && [ ${silent} -eq 0 ] ; then
+		pr_error "Script failed"
 	fi
 }
 
@@ -25,6 +32,7 @@ function print_var()
 		printf "%-13s: %s\n" "${var}" "${!var}"
 	done
 }
+
 
 function download_fedora_image()
 {
@@ -226,7 +234,7 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-h|--help)
 			usage
-			exit 2
+			exit
 			;;
 		-s|--size)
 			SIZE=${2}
@@ -236,7 +244,7 @@ while [ ${#} -gt 0 ] ; do
 			UEFI=1
 			;;
 		-*)
-			echo "Unexpected option: ${1}" >&2
+			pr_error "Unexpected option: ${1}"
 			exit 2
 			;;
 		*)
@@ -245,7 +253,7 @@ while [ ${#} -gt 0 ] ; do
 			elif [ -z "${NAME}" ] ; then
 				NAME=${1}
 			else
-				echo "Unexpected argument: ${1}" >&2
+				pr_error "Unexpected argument: ${1}"
 				exit 2
 			fi
 			;;
@@ -309,7 +317,7 @@ CONFIG_DRIVE=${IMAGE_DIR}/${NAME}-config.iso
 
 # Sanity check
 if [ "${RELEASE}" = "precise" ] && [ "${UEFI}" -eq 1 ] ; then
-	echo "Precise does not support boot from UEFI"
+	pr_error "Precise does not support boot from UEFI"
 	exit 1
 fi
 
@@ -321,7 +329,7 @@ echo
 
 if virsh vcpuinfo "${NAME}" >/dev/null 2>&1 ; then
 	if [ "${FORCE}" -eq 0 ] ; then
-		echo "VM '${NAME}' exists already. Use -f, --force to recreate it."
+		pr_error "VM '${NAME}' exists already. Use -f, --force to recreate it."
 		exit 1
 	fi
 	virsh destroy "${NAME}" || true
