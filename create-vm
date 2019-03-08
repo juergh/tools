@@ -9,28 +9,78 @@ function pr_error()
 }
 
 
-function cleanup()
-{
-	local rc=$? silent=1
-
-	trap - EXIT INT TERM HUP
-
-	if [ -n "${TMP_FILE:-}" ] ; then
-		silent=0
-		rm -f "${TMP_FILE}"
-	fi
-
-	if [ ${rc} -ne 0 ] && [ ${silent} -eq 0 ] ; then
-		pr_error "Script failed"
-	fi
-}
-
-
 function print_var()
 {
 	for var in "${@}" ; do
 		printf "%-13s: %s\n" "${var}" "${!var}"
 	done
+}
+
+
+function mount_image()
+{
+	local image=${1} mountp=${2}
+	local kernel
+
+	# HACK: guestmount needs to be able to read the latest kernel
+	kernel=$(find /boot/ -maxdepth 1 -name 'vmlinuz-*' | sort -V | tail -1)
+	test -r "${kernel}" || sudo chmod 644 "${kernel}"
+
+	guestmount --pid-file "${mountp}.pid" -a "${image}" -m /dev/sda1 --rw \
+			   -o dev -o allow_root "${mountp}"
+}
+
+
+function unmount_image()
+{
+	local mountp=${1}
+	local pid count
+
+	pid=$(cat "${mountp}.pid")
+	guestunmount "${mountp}"
+
+	count=10
+	while kill -0 "${pid}" 2>/dev/null && [ ${count} -gt 0 ] ; do
+		sleep 1
+		((count--))
+	done
+
+	if [ ${count} -eq 0 ] ; then
+		pr_error "Failed to unmount image (timeout)"
+		exit 1
+	fi
+
+	rm -f "${mountp}.pid"
+}
+
+
+function download_image()
+{
+	local url=${1}
+	local tmpf tmpd
+
+	tmpf=$(mktemp)
+	# shellcheck disable=SC2064
+	trap "rm -f ${tmpf}" EXIT INT TERM HUP
+
+	wget -O "${tmpf}" "${url}"
+
+	if [ "${ARCH}" = "armhf" ] ; then
+		tmpd=$(mktemp -d)
+		# shellcheck disable=SC2064
+		trap "rm -rf ${tmpf} ${tmpd}" EXIT INT TERM HUP
+
+		mount_image "${tmpf}" "${tmpd}"
+		sudo cp "${tmpd}/boot/vmlinuz" "${KERNEL}"
+		sudo cp "${tmpd}/boot/initrd.img" "${INITRD}"
+		unmount_image "${tmpd}"
+		rmdir "${tmpd}"
+	fi
+
+	qemu-img resize "${tmpf}" "${SIZE}"G
+	sudo mv "${tmpf}" "${IMAGE}"
+
+	trap - EXIT INT TERM HUP
 }
 
 
@@ -51,7 +101,7 @@ function download_fedora_image()
 
 	url=${url}/${name}
 
-	wget -O "${TMP_FILE}" "${url}"
+	download_image "${url}"
 }
 
 
@@ -67,7 +117,7 @@ function download_debian_image()
 	name=debian-${num}-openstack-${ARCH}.qcow2
 	url=https://cdimage.debian.org/cdimage/openstack/current-${num}/${name}
 
-	if wget -O "${TMP_FILE}" "${url}" ; then
+	if download_image "${url}" ; then
 		return
 	fi
 
@@ -78,7 +128,7 @@ function download_debian_image()
 	name=debian-${release}-openstack-${ARCH}.qcow2
 	url=${url}/${release}/${name}
 
-	wget -O "${TMP_FILE}" "${url}"
+	download_image "${url}"
 }
 
 
@@ -98,16 +148,19 @@ function download_ubuntu_image()
 	name=${RELEASE}-server-cloudimg-${ARCH}${suffix}.img
 	url=https://cloud-images.ubuntu.com/${RELEASE}/current/${name}
 
-	wget -O "${TMP_FILE}" "${url}"
+	download_image "${url}"
 }
 
 
 function create_config_drive()
 {
-	local public_key tmpd
+	local public_key tmpd tmpf
 
 	public_key=$(cat ~/.ssh/id_rsa.pub)
 	tmpd=$(mktemp -d)
+	tmpf=$(mktemp)
+	# shellcheck disable=SC2064
+	trap "rm -rf ${tmpf} ${tmpd}" EXIT INT TERM HUP
 
 	# meta data
 	cat <<EOF >"${tmpd}/meta-data"
@@ -155,18 +208,24 @@ runcmd:
 EOF
 
 	genisoimage -ldots -allow-lowercase -allow-multidot -l -J -r \
-				-o "${TMP_FILE}" -V cidata "${tmpd}"
+				-o "${tmpf}" -V cidata "${tmpd}"
 
 	rm -rf "${tmpd}"
+	sudo mv "${tmpf}" "${CONFIG_DRIVE}"
+
+	trap - EXIT INT TERM HUP
 }
 
 
 function define_vm()
 {
 	local tmpf
-	export NAME UUID OS_LOADER IMAGE CONFIG_DRIVE MAC_ADDRESS
+	export NAME UUID OS_LOADER IMAGE CONFIG_DRIVE MAC_ADDRESS KERNEL INITRD \
+		   CMDLINE
 
 	tmpf=$(mktemp)
+	# shellcheck disable=SC2064
+	trap "rm -f ${tmpf}" EXIT INT TERM HUP
 
 	UUID=$(uuidgen)
 	if [ "${UEFI}" -eq 1 ] ; then
@@ -176,12 +235,15 @@ function define_vm()
 "
 	fi
 	MAC_ADDRESS="52:54:00:${UUID:0:2}:${UUID:2:2}:${UUID:4:2}"
+	CMDLINE="root=LABEL=cloudimg-rootfs"
 
 	# Create the domain XML and define the VM
 	envsubst < "$(realpath -e "${0}").d/domain-${ARCH}.xml" > "${tmpf}"
 	virsh define "${tmpf}"
 
 	rm -f "${tmpf}"
+
+	trap - EXIT INT TERM HUP
 }
 
 
@@ -202,7 +264,7 @@ Optional arguments:
   -d, --debug      Enable debugging (set -x).
   -f, --force      Force the recreation of an existing VM.
   -h, --help       Show this help text.
-  -s, --size GB    Image size in GB. If not specified, defaults to 8(GB).
+  -s, --size SIZE  Image size in GB. If not specified, defaults to 8(GB).
   -u, --uefi       Configure the VM to boot from UEFI.
 EOF
 }
@@ -210,8 +272,6 @@ EOF
 
 # -----------------------------------------------------------------------------
 # Main entry point
-
-trap cleanup EXIT INT TERM HUP
 
 ARCH=
 FORCE=0
@@ -227,6 +287,7 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			;;
 		-d|--debug)
+			export LIBGUESTFS_DEBUG=1
 			set -x
 			;;
 		-f|--force)
@@ -310,10 +371,12 @@ case "${VENDOR}" in
 		;;
 esac
 
-# The image directory and image and config filenames
+# The image directory and image, config drive, kernel and initrd filenames
 IMAGE_DIR=/var/lib/libvirt/images
 IMAGE=${IMAGE_DIR}/${NAME}.qcow2
 CONFIG_DRIVE=${IMAGE_DIR}/${NAME}-config.iso
+KERNEL=${IMAGE_DIR}/${NAME}-kernel
+INITRD=${IMAGE_DIR}/${NAME}-initrd
 
 # Sanity check
 if [ "${RELEASE}" = "precise" ] && [ "${UEFI}" -eq 1 ] ; then
@@ -339,19 +402,12 @@ if virsh vcpuinfo "${NAME}" >/dev/null 2>&1 ; then
 fi
 
 # -----------------------------------------------------------------------------
-# Create a temporary file
-
-TMP_FILE=$(mktemp)
-
-# -----------------------------------------------------------------------------
 # Download and resize the cloud image
 
 if [ -e "${IMAGE}" ] ; then
 	echo "Image '${IMAGE##*/}' exists already."
 else
 	download_"${VENDOR}"_image
-	qemu-img resize "${TMP_FILE}" "${SIZE}"G
-	sudo mv "${TMP_FILE}" "${IMAGE}"
 fi
 
 # -----------------------------------------------------------------------------
@@ -361,7 +417,6 @@ if [ -e "${CONFIG_DRIVE}" ] ; then
 	echo "Config drive '${CONFIG_DRIVE##*/}' exists already."
 else
 	create_config_drive
-	sudo mv "${TMP_FILE}" "${CONFIG_DRIVE}"
 fi
 
 # -----------------------------------------------------------------------------
