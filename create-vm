@@ -84,14 +84,39 @@ function download_image()
 	# Download the cloud image
 	wget -O "${tmpf}" "${url}"
 
-	if [ -n "${KERNEL}" ] ; then
+	if has_direct_boot ; then
 		tmpd=$(mktemp -d)
 		# shellcheck disable=SC2064
 		trap "rm -rf ${tmpf} ${tmpf2} ${tmpd}" EXIT INT TERM HUP
 
 		mount_image "${tmpf}" "${tmpd}"
-		sudo cp "${tmpd}/boot/vmlinuz" "${KERNEL}"
-		sudo cp "${tmpd}/boot/initrd.img" "${INITRD}"
+
+		# Create the libvirt volume for the kernel
+		cat <<EOF >"${tmpf2}"
+<volume type='file'>
+  <name>${KERNEL}</name>
+  <capacity unit='bytes'>0</capacity>
+  <target>
+    <format type='raw'/>
+  </target>
+</volume>
+EOF
+		virsh vol-create --pool default "${tmpf2}"
+		virsh vol-upload --pool default "${KERNEL}" "${tmpd}/boot/vmlinuz"
+
+		# Create the libvirt volume for the initrd
+		cat <<EOF >"${tmpf2}"
+<volume type='file'>
+  <name>${INITRD}</name>
+  <capacity unit='bytes'>0</capacity>
+  <target>
+    <format type='raw'/>
+  </target>
+</volume>
+EOF
+		virsh vol-create --pool default "${tmpf2}"
+		virsh vol-upload --pool default "${INITRD}" "${tmpd}/boot/initrd.img"
+
 		unmount_image "${tmpd}"
 		rm -rf "${tmpd}"
 	fi
