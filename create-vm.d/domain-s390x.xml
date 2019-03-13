@@ -1,0 +1,43 @@
+<domain type='qemu'>
+  <name>${NAME}</name>
+  <uuid>${UUID}</uuid>
+  <memory unit='KiB'>524288</memory>
+  <currentMemory unit='KiB'>524288</currentMemory>
+  <vcpu placement='static'>1</vcpu>
+  <os>
+    <type arch='s390x' machine='s390-ccw-virtio'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-s390x</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='${IMAGE_PATH}'/>
+      <target dev='vda' bus='virtio'/>
+      <address type='ccw' cssid='0xfe' ssid='0x0' devno='0x0000'/>
+    </disk>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='raw'/>
+      <source file='${CONFIG_DRIVE_PATH}'/>
+      <target dev='vdb' bus='virtio'/>
+      <address type='ccw' cssid='0xfe' ssid='0x0' devno='0x0001'/>
+    </disk>
+    <interface type='network'>
+      <mac address='${MAC_ADDRESS}'/>
+      <source network='default'/>
+      <model type='virtio'/>
+      <address type='ccw' cssid='0xfe' ssid='0x0' devno='0x0002'/>
+    </interface>
+    <console type='pty'>
+      <target type='sclp' port='0'/>
+    </console>
+    <memballoon model='virtio'>
+      <address type='ccw' cssid='0xfe' ssid='0x0' devno='0x0003'/>
+    </memballoon>
+    <panic model='s390'/>
+  </devices>
+</domain>
