@@ -9,8 +9,8 @@
   </resource>
   <os>
     <type arch='armv7l' machine='virt'>hvm</type>
-    <kernel>${KERNEL}</kernel>
-    <initrd>${INITRD}</initrd>
+    <kernel>${KERNEL_PATH}</kernel>
+    <initrd>${INITRD_PATH}</initrd>
     <cmdline>${CMDLINE}</cmdline>
     <boot dev='hd'/>
   </os>
@@ -25,13 +25,13 @@
     <emulator>/usr/bin/qemu-system-arm</emulator>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
-      <source file='${IMAGE}'/>
+      <source file='${IMAGE_PATH}'/>
       <target dev='sda' bus='scsi'/>
       <address type='drive' controller='0' bus='0' target='0' unit='0'/>
     </disk>
     <disk type='file' device='cdrom'>
       <driver name='qemu' type='raw'/>
-      <source file='${CONFIG_DRIVE}'/>
+      <source file='${CONFIG_DRIVE_PATH}'/>
       <target dev='sdb' bus='scsi'/>
       <readonly/>
       <address type='drive' controller='0' bus='0' target='0' unit='1'/>

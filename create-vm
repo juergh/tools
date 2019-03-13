@@ -57,29 +57,43 @@ function unmount_image()
 function download_image()
 {
 	local url=${1}
-	local tmpf tmpd
+	local tmpf tmpf2 tmpd
 
 	tmpf=$(mktemp)
+	tmpf2=$(mktemp)
 	# shellcheck disable=SC2064
-	trap "rm -f ${tmpf}" EXIT INT TERM HUP
+	trap "rm -f ${tmpf} ${tmpf2}" EXIT INT TERM HUP
 
+	# Download the cloud image
 	wget -O "${tmpf}" "${url}"
 
 	if [ "${ARCH}" = "armhf" ] ; then
 		tmpd=$(mktemp -d)
 		# shellcheck disable=SC2064
-		trap "rm -rf ${tmpf} ${tmpd}" EXIT INT TERM HUP
+		trap "rm -rf ${tmpf} ${tmpf2} ${tmpd}" EXIT INT TERM HUP
 
 		mount_image "${tmpf}" "${tmpd}"
 		sudo cp "${tmpd}/boot/vmlinuz" "${KERNEL}"
 		sudo cp "${tmpd}/boot/initrd.img" "${INITRD}"
 		unmount_image "${tmpd}"
-		rmdir "${tmpd}"
+		rm -rf "${tmpd}"
 	fi
 
-	qemu-img resize "${tmpf}" "${SIZE}"G
-	sudo mv "${tmpf}" "${IMAGE}"
+	# Create the libvirt volume for the OS image
+	cat <<EOF >"${tmpf2}"
+<volume type='file'>
+  <name>${IMAGE}</name>
+  <capacity unit='bytes'>0</capacity>
+  <target>
+    <format type='qcow2'/>
+  </target>
+</volume>
+EOF
+	virsh vol-create --pool default "${tmpf2}"
+	virsh vol-upload --pool default "${IMAGE}" "${tmpf}"
+	virsh vol-resize --pool default "${IMAGE}" "${SIZE}"G
 
+	rm -f "${tmpf}" "${tmpf2}"
 	trap - EXIT INT TERM HUP
 }
 
@@ -154,13 +168,14 @@ function download_ubuntu_image()
 
 function create_config_drive()
 {
-	local public_key tmpd tmpf
+	local public_key tmpf tmpf2 tmpd
 
 	public_key=$(cat ~/.ssh/id_rsa.pub)
-	tmpd=$(mktemp -d)
 	tmpf=$(mktemp)
+	tmpf2=$(mktemp)
+	tmpd=$(mktemp -d)
 	# shellcheck disable=SC2064
-	trap "rm -rf ${tmpf} ${tmpd}" EXIT INT TERM HUP
+	trap "rm -rf ${tmpf} ${tmpf2} ${tmpd}" EXIT INT TERM HUP
 
 	# meta data
 	cat <<EOF >"${tmpd}/meta-data"
@@ -210,9 +225,20 @@ EOF
 	genisoimage -ldots -allow-lowercase -allow-multidot -l -J -r \
 				-o "${tmpf}" -V cidata "${tmpd}"
 
-	rm -rf "${tmpd}"
-	sudo mv "${tmpf}" "${CONFIG_DRIVE}"
+	# Create the libvirt volume for the config drive
+	cat <<EOF >"${tmpf2}"
+<volume type='file'>
+  <name>${CONFIG_DRIVE}</name>
+  <capacity unit='bytes'>0</capacity>
+  <target>
+    <format type='raw'/>
+  </target>
+</volume>
+EOF
+	virsh vol-create --pool default "${tmpf2}"
+	virsh vol-upload --pool default "${CONFIG_DRIVE}" "${tmpf}"
 
+	rm -rf "${tmpf}" "${tmpf2}" "${tmpd}"
 	trap - EXIT INT TERM HUP
 }
 
@@ -220,8 +246,8 @@ EOF
 function define_vm()
 {
 	local tmpf
-	export NAME UUID OS_LOADER IMAGE CONFIG_DRIVE MAC_ADDRESS KERNEL INITRD \
-		   CMDLINE
+	export NAME UUID OS_LOADER KERNEL_PATH INITRD_PATH CMDLINE IMAGE_PATH \
+		   CONFIG_DRIVE_PATH MAC_ADDRESS
 
 	tmpf=$(mktemp)
 	# shellcheck disable=SC2064
@@ -234,15 +260,22 @@ function define_vm()
 <nvram>/var/lib/libvirt/qemu/nvram/${NAME}_VARS.fd</nvram>
 "
 	fi
+
+	if [ "${ARCH}" = "armhf" ] ; then
+		KERNEL_PATH=$(virsh vol-path --pool default "${KERNEL}")
+		INITRD_PATH=$(virsh vol-path --pool default "${INITRD}")
+		CMDLINE="root=LABEL=cloudimg-rootfs"
+	fi
+
+	IMAGE_PATH=$(virsh vol-path --pool default "${IMAGE}")
+	CONFIG_DRIVE_PATH=$(virsh vol-path --pool default "${CONFIG_DRIVE}")
 	MAC_ADDRESS="52:54:00:${UUID:0:2}:${UUID:2:2}:${UUID:4:2}"
-	CMDLINE="root=LABEL=cloudimg-rootfs"
 
 	# Create the domain XML and define the VM
 	envsubst < "$(realpath -e "${0}").d/domain-${ARCH}.xml" > "${tmpf}"
 	virsh define "${tmpf}"
 
 	rm -f "${tmpf}"
-
 	trap - EXIT INT TERM HUP
 }
 
@@ -371,12 +404,11 @@ case "${VENDOR}" in
 		;;
 esac
 
-# The image directory and image, config drive, kernel and initrd filenames
-IMAGE_DIR=/var/lib/libvirt/images
-IMAGE=${IMAGE_DIR}/${NAME}.qcow2
-CONFIG_DRIVE=${IMAGE_DIR}/${NAME}-config.iso
-KERNEL=${IMAGE_DIR}/${NAME}-kernel
-INITRD=${IMAGE_DIR}/${NAME}-initrd
+# The image, config drive, kernel and initrd filenames
+IMAGE=${NAME}.qcow2
+CONFIG_DRIVE=${NAME}-config.iso
+KERNEL=${NAME}-kernel
+INITRD=${NAME}-initrd
 
 # Sanity check
 if [ "${RELEASE}" = "precise" ] && [ "${UEFI}" -eq 1 ] ; then
@@ -384,7 +416,7 @@ if [ "${RELEASE}" = "precise" ] && [ "${UEFI}" -eq 1 ] ; then
 	exit 1
 fi
 
-print_var ARCH FORCE DIST IMAGE_DIR IMAGE CONFIG_DRIVE NAME RELEASE VENDOR
+print_var ARCH FORCE DIST IMAGE CONFIG_DRIVE NAME RELEASE VENDOR
 echo
 
 # -----------------------------------------------------------------------------
@@ -396,15 +428,16 @@ if virsh vcpuinfo "${NAME}" >/dev/null 2>&1 ; then
 		exit 1
 	fi
 	virsh destroy "${NAME}" || true
-	virsh vol-delete "${IMAGE}" || true
-	virsh vol-delete "${CONFIG_DRIVE}" || true
+	for vol in "${IMAGE}" "${CONFIG_DRIVE}" "${KERNEL}" "${INITRD}" ; do
+		virsh vol-delete --pool default "${vol}" 2>/dev/null || true
+	done
 	virsh undefine "${NAME}" || true
 fi
 
 # -----------------------------------------------------------------------------
 # Download and resize the cloud image
 
-if [ -e "${IMAGE}" ] ; then
+if virsh vol-info --pool default "${IMAGE}" >/dev/null 2>&1 ; then
 	echo "Image '${IMAGE##*/}' exists already."
 else
 	download_"${VENDOR}"_image
@@ -413,7 +446,7 @@ fi
 # -----------------------------------------------------------------------------
 # Create the config drive
 
-if [ -e "${CONFIG_DRIVE}" ] ; then
+if virsh vol-info --pool default "${CONFIG_DRIVE}" >/dev/null 2>&1 ; then
 	echo "Config drive '${CONFIG_DRIVE##*/}' exists already."
 else
 	create_config_drive
