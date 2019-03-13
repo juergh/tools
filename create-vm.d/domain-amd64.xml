@@ -2,7 +2,6 @@
   <name>${NAME}</name>
   <uuid>${UUID}</uuid>
   <memory unit='KiB'>524288</memory>
-  <currentMemory unit='KiB'>524288</currentMemory>
   <vcpu placement='static'>1</vcpu>
   <resource>
     <partition>/machine</partition>
@@ -25,7 +24,7 @@
     <emulator>/usr/bin/kvm-spice</emulator>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
-      <source file='${IMAGE_PATH}'/>
+      <source file='${OS_IMAGE_PATH}'/>
       <target dev='vda' bus='virtio'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x04' function='0x0'/>
     </disk>

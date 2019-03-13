@@ -22,6 +22,18 @@ function print_var()
 }
 
 
+function has_grub()
+{
+	[ "${ARCH}" = "amd64" ] || [ "${ARCH}" = "i386" ]
+}
+
+
+function has_direct_boot()
+{
+	[ "${ARCH}" = "armhf" ]
+}
+
+
 function mount_image()
 {
 	local image=${1} mountp=${2}
@@ -87,7 +99,7 @@ function download_image()
 	# Create the libvirt volume for the OS image
 	cat <<EOF >"${tmpf2}"
 <volume type='file'>
-  <name>${IMAGE}</name>
+  <name>${OS_IMAGE}</name>
   <capacity unit='bytes'>0</capacity>
   <target>
     <format type='qcow2'/>
@@ -95,8 +107,8 @@ function download_image()
 </volume>
 EOF
 	virsh vol-create --pool default "${tmpf2}"
-	virsh vol-upload --pool default "${IMAGE}" "${tmpf}"
-	virsh vol-resize --pool default "${IMAGE}" "${SIZE}"G
+	virsh vol-upload --pool default "${OS_IMAGE}" "${tmpf}"
+	virsh vol-resize --pool default "${OS_IMAGE}" "${SIZE}"G
 
 	rm -f "${tmpf}" "${tmpf2}"
 	trap - EXIT INT TERM HUP
@@ -205,6 +217,10 @@ max_wait: 2
 # Set the hostname early on first boot
 bootcmd:
   - [ cloud-init-per, once, hostname, hostname, ${NAME} ]
+EOF
+
+	if has_grub ; then
+		cat <<EOF >>"${tmpd}/user-data"
 
 # Fix grub
 # Some images are having problems finding the boot device so we reinstall grub
@@ -226,6 +242,7 @@ runcmd:
     date -R > /etc/cloud/create-vm
     fi
 EOF
+	fi
 
 	genisoimage -ldots -allow-lowercase -allow-multidot -l -J -r \
 				-o "${tmpf}" -V cidata "${tmpd}"
@@ -251,8 +268,8 @@ EOF
 function define_vm()
 {
 	local tmpf
-	export NAME UUID OS_LOADER KERNEL_PATH INITRD_PATH CMDLINE IMAGE_PATH \
-		   CONFIG_DRIVE_PATH MAC_ADDRESS
+	export NAME UUID OS_LOADER KERNEL_PATH INITRD_PATH KERNEL_CMDLINE \
+		   OS_IMAGE_PATH CONFIG_DRIVE_PATH MAC_ADDRESS
 
 	tmpf=$(mktemp)
 	# shellcheck disable=SC2064
@@ -266,12 +283,12 @@ function define_vm()
 "
 	fi
 
-	if [ -n "${KERNEL}" ] ; then
+	if has_direct_boot ; then
 		KERNEL_PATH=$(virsh vol-path --pool default "${KERNEL}")
 		INITRD_PATH=$(virsh vol-path --pool default "${INITRD}")
 	fi
 
-	IMAGE_PATH=$(virsh vol-path --pool default "${IMAGE}")
+	OS_IMAGE_PATH=$(virsh vol-path --pool default "${OS_IMAGE}")
 	CONFIG_DRIVE_PATH=$(virsh vol-path --pool default "${CONFIG_DRIVE}")
 	MAC_ADDRESS="52:54:00:${UUID:0:2}:${UUID:2:2}:${UUID:4:2}"
 
@@ -408,18 +425,18 @@ case "${VENDOR}" in
 		;;
 esac
 
-# The image and config drive
-IMAGE=${NAME}.qcow2
+# The OS image and config drive
+OS_IMAGE=${NAME}.qcow2
 CONFIG_DRIVE=${NAME}-config.iso
 
 # The kernel, initrd and cmdline (for direct boot architectures)
 KERNEL=
 INITRD=
-CMDLINE=
-if [ "${ARCH}" = "armhf" ] ; then
+KERNEL_CMDLINE=
+if has_direct_boot ; then
 	KERNEL=${NAME}-kernel
 	INITRD=${NAME}-initrd
-	CMDLINE="root=LABEL=cloudimg-rootfs"
+	KERNEL_CMDLINE="root=LABEL=cloudimg-rootfs"
 fi
 
 # Sanity check
@@ -428,8 +445,8 @@ if [ "${RELEASE}" = "precise" ] && [ "${UEFI}" -eq 1 ] ; then
 	exit 1
 fi
 
-print_var ARCH FORCE DIST IMAGE CONFIG_DRIVE KERNEL INITRD CMDLINE NAME\
-		  RELEASE VENDOR
+print_var ARCH FORCE DIST OS_IMAGE CONFIG_DRIVE KERNEL INITRD KERNEL_CMDLINE \
+		  NAME RELEASE VENDOR
 echo
 
 # -----------------------------------------------------------------------------
@@ -441,7 +458,7 @@ if virsh vcpuinfo "${NAME}" >/dev/null 2>&1 ; then
 		exit 1
 	fi
 	virsh destroy "${NAME}" || true
-	for vol in "${IMAGE}" "${CONFIG_DRIVE}" "${KERNEL}" "${INITRD}" ; do
+	for vol in "${OS_IMAGE}" "${CONFIG_DRIVE}" "${KERNEL}" "${INITRD}" ; do
 		virsh vol-delete --pool default "${vol}" 2>/dev/null || true
 	done
 	virsh undefine "${NAME}" || true
@@ -450,8 +467,8 @@ fi
 # -----------------------------------------------------------------------------
 # Download and resize the cloud image
 
-if virsh vol-info --pool default "${IMAGE}" >/dev/null 2>&1 ; then
-	echo "Image '${IMAGE##*/}' exists already."
+if virsh vol-info --pool default "${OS_IMAGE}" >/dev/null 2>&1 ; then
+	echo "Image '${OS_IMAGE}' exists already."
 else
 	download_"${VENDOR}"_image
 fi
@@ -460,7 +477,7 @@ fi
 # Create the config drive
 
 if virsh vol-info --pool default "${CONFIG_DRIVE}" >/dev/null 2>&1 ; then
-	echo "Config drive '${CONFIG_DRIVE##*/}' exists already."
+	echo "Config drive '${CONFIG_DRIVE}' exists already."
 else
 	create_config_drive
 fi
