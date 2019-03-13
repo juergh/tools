@@ -6,13 +6,14 @@
 function usage()
 {
 	cat <<EOF
-Usage: mount-image [-h] [-p] IMAGE [DIR]
+Usage: mount-image [-d] [-h] [-p] IMAGE [DIR]
 
 IMAGE  The image to mount.
 DIR    The directory where the image is mounted. If not specified, a random
        directory is created automatically.
 
 Optional arguments:
+  -d, --debug     Enable debugging output.
   -h, --help      Show this help text.
   -p, --pseudofs  Bind-mount pseudo filesystems into the image (requires sudo).
 EOF
@@ -23,6 +24,10 @@ mountdir=
 pseudofs=0
 while [ $# -gt 0 ] ; do
 	case "${1}" in
+		-d|--debug)
+			export LIBGUESTFS_DEBUG=1
+			set -x
+			;;
 		-h|--help)
 			usage
 			exit
