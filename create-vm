@@ -11,8 +11,13 @@ function pr_error()
 
 function print_var()
 {
+	local var val
+
 	for var in "${@}" ; do
-		printf "%-13s: %s\n" "${var}" "${!var}"
+		val=${!var}
+		if [ -n "${val}" ] ; then
+			printf "%-13s: %s\n" "${var}" "${val}"
+		fi
 	done
 }
 
@@ -67,7 +72,7 @@ function download_image()
 	# Download the cloud image
 	wget -O "${tmpf}" "${url}"
 
-	if [ "${ARCH}" = "armhf" ] ; then
+	if [ -n "${KERNEL}" ] ; then
 		tmpd=$(mktemp -d)
 		# shellcheck disable=SC2064
 		trap "rm -rf ${tmpf} ${tmpf2} ${tmpd}" EXIT INT TERM HUP
@@ -261,10 +266,9 @@ function define_vm()
 "
 	fi
 
-	if [ "${ARCH}" = "armhf" ] ; then
+	if [ -n "${KERNEL}" ] ; then
 		KERNEL_PATH=$(virsh vol-path --pool default "${KERNEL}")
 		INITRD_PATH=$(virsh vol-path --pool default "${INITRD}")
-		CMDLINE="root=LABEL=cloudimg-rootfs"
 	fi
 
 	IMAGE_PATH=$(virsh vol-path --pool default "${IMAGE}")
@@ -404,11 +408,19 @@ case "${VENDOR}" in
 		;;
 esac
 
-# The image, config drive, kernel and initrd filenames
+# The image and config drive
 IMAGE=${NAME}.qcow2
 CONFIG_DRIVE=${NAME}-config.iso
-KERNEL=${NAME}-kernel
-INITRD=${NAME}-initrd
+
+# The kernel, initrd and cmdline (for direct boot architectures)
+KERNEL=
+INITRD=
+CMDLINE=
+if [ "${ARCH}" = "armhf" ] ; then
+	KERNEL=${NAME}-kernel
+	INITRD=${NAME}-initrd
+	CMDLINE="root=LABEL=cloudimg-rootfs"
+fi
 
 # Sanity check
 if [ "${RELEASE}" = "precise" ] && [ "${UEFI}" -eq 1 ] ; then
@@ -416,7 +428,8 @@ if [ "${RELEASE}" = "precise" ] && [ "${UEFI}" -eq 1 ] ; then
 	exit 1
 fi
 
-print_var ARCH FORCE DIST IMAGE CONFIG_DRIVE NAME RELEASE VENDOR
+print_var ARCH FORCE DIST IMAGE CONFIG_DRIVE KERNEL INITRD CMDLINE NAME\
+		  RELEASE VENDOR
 echo
 
 # -----------------------------------------------------------------------------
