@@ -4,15 +4,27 @@
 # a git repository.
 #
 
+function pr_error()
+{
+	echo -e "\e[31m${*}\e[0m" 1>&2
+}
+
+function pr_info()
+{
+	echo -e "\e[33m${*}\e[0m"
+
+}
+
 function usage()
 {
 	cat <<EOF
-Usage: import-kernel-srpm [-d] SRPM
+Usage: import-kernel-srpm [-d] [-h] SRPM
 
 Import a kernel source provided by <SRPM> into the current git repo.
 
 Options:
-  -d, --dry-run
+  -d, --dry-run  Extract the SRPM but don't commit anything to the git repo.
+  -d, --help     Show this help text.
 EOF
 }
 
@@ -24,9 +36,17 @@ while [ $# -gt 0 ] ; do
 		-d|--dry-run)
 			dry_run=1
 			;;
+		-h|--help)
+			usage
+			exit
+			;;
 		*)
 			if [ -n "${srpm}" ] ; then
-				echo "Unexpected argument: ${1}"
+				pr_error "Unexpected argument: ${1}"
+				exit 1
+			fi
+			if ! [ -e "${1}" ] ; then
+				pr_error "No such file: ${1}"
 				exit 1
 			fi
 			srpm=$(readlink -e "${1}")
@@ -41,7 +61,7 @@ if [ -z "${srpm}" ] ; then
 fi
 
 if ! [ -d .git ] ; then
-	echo "Not in a git directory"
+	pr_error "Not in a git directory"
 	exit 1
 fi
 
@@ -54,10 +74,10 @@ version=$(rpm -qp --qf '%{VERSION}\n' "${srpm}")
 release=$(rpm -qp --qf '%{RELEASE}\n' "${srpm}")
 tag=${version}-${release}
 
-echo "name:    ${name}"
-echo "version: ${version}"
-echo "release: ${release}"
-echo "tag:     ${tag}"
+pr_info "name:    ${name}"
+pr_info "version: ${version}"
+pr_info "release: ${release}"
+pr_info "tag:     ${tag}"
 
 # Which schroot to use
 num=${release##*el}
@@ -88,7 +108,7 @@ cd "${rpmbuildd}/BUILD/${buildd}"
 schroot -c "${schroot}" -- make mrproper
 
 if [ "${dry_run}" -eq 1 ] ; then
-	echo "Dry run only, exiting..."
+	pr_info "Dry run only, exiting..."
 	exit
 fi
 
