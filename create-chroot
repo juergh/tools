@@ -399,14 +399,11 @@ if mount | grep -E -q "/run/schroot/mount/${NAME}-[0-9a-f]{8}-" ; then
 	exit 1
 fi
 
+BASEDIR=/var/lib/schroot/chroots/${NAME}
+
 # Verify the chroot directory
-if ! [ -d /var/chroot ] ; then
-	echo "Error: No such directory: /var/chroot"
-	exit 1
-fi
-BASEDIR="$(readlink -f "/var/chroot/${NAME}")"
-if [ "${BASEDIR}" = "/" ] ; then
-	echo "Error: Invalid chroot directory: ${BASEDIR}" >&2
+if ! [ -d "${BASEDIR%/*}" ] ; then
+	echo "Error: No such directory: ${BASEDIR%/*}"
 	exit 1
 fi
 
