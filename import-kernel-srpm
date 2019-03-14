@@ -117,7 +117,6 @@ cd "${gitd}"
 cp "${rpmbuildd}/SPECS/${name}.spec" .
 rsync -a "${rpmbuildd}/BUILD/${buildd}/" .
 
-# Commit and tag
+# Commit
 git add .
 git commit -s -m "Import kernel version ${tag}"
-git tag -f "${tag}"
