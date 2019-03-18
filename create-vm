@@ -24,7 +24,9 @@ function print_var()
 
 function has_grub()
 {
-	[ "${ARCH}" = "amd64" ] || [ "${ARCH}" = "i386" ]
+	[ "${ARCH}" = "amd64" ] || \
+		[ "${ARCH}" = "i386" ] || \
+		[ "${ARCH}" = "x86_64" ]
 }
 
 
@@ -150,10 +152,8 @@ function download_fedora_image()
 		url=https://download.fedoraproject.org/pub/fedora/linux/releases/${RELEASE}/CloudImages/${ARCH}/images
 	fi
 
-	pattern="Fedora-Cloud-Base-${RELEASE}-.*.${ARCH}.qcow2"
-	name=$(wget -q -O - "${url}" | \
-			   sed -n -e 's/.*href="\([^"]*\).*/\1/p' | \
-			   grep "${pattern}")
+	pattern=">Fedora-Cloud-Base-${RELEASE}-.*\.${ARCH}\.qcow2<"
+	name=$(wget -q -O - "${url}" | grep -oP "${pattern}" | tr -d '><')
 
 	url=${url}/${name}
 
@@ -178,9 +178,8 @@ function download_debian_image()
 	fi
 
 	url=https://cdimage.debian.org/cdimage/openstack/archive
-	release=$(wget -q -O - "${url}" | \
-				  sed -n -e "s,.* href=\"\(${num}\.[^/]*\).*,\1,p" | \
-				  sort -V | tail -1)
+	release=$(wget -q -O - "${url}" | grep -oP ">${num}\.[^/]*/<" | \
+				  tr -d '>/<' | sort -V | tail -1)
 	name=debian-${release}-openstack-${ARCH}.qcow2
 	url=${url}/${release}/${name}
 
