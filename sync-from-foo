@@ -32,10 +32,26 @@ ROOT_FILES=(
 	/etc/sudoers.d/${USER}
 )
 
+function usage()
+{
+	cat <<EOF
+Usage: sync-from-foo [-h] [-r] [-u]
+
+Optional arguments:
+  -h, --help  Show this help text.
+  -r, --root  Sync root files.
+  -u, --user  Sync user files.
+EOF
+}
+
 USER=0
 ROOT=0
 while [ $# -gt 0 ] ; do
 	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
 		-u|--user)
 			USER=1
 			;;
@@ -51,8 +67,8 @@ while [ $# -gt 0 ] ; do
 done
 
 if [ ${USER} -eq 0 ] && [ ${ROOT} -eq 0 ] ; then
-	USER=1
-	ROOT=1
+	usage
+	exit 1
 fi
 
 if [ ${USER} -eq 1 ] ; then
