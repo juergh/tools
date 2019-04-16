@@ -1,0 +1,31 @@
+#!/bin/sh
+#
+# List 'Fixes: ' commits
+#
+
+git_dir=${1}
+
+git --git-dir "${git_dir}" log --no-merges \
+	--format="__COMMIT__%h%n__SUBJECT__%s%n%b%n__END__%n" | \
+	grep -P '^__COMMIT__|^__SUBJECT__|^\s*Fixes:.*\b[0-9a-f]{8,}\b|^__END__' | \
+while IFS= read -r line ; do
+	case "${line}" in
+		__COMMIT__*)
+			commit=${line#__COMMIT__}
+			subject=
+			fixes=
+			;;
+		__SUBJECT__*)
+			subject=${line#__SUBJECT__}
+			;;
+		*Fixes:*)
+			fixes_ref=$(echo "${line}" | sed -e 's,^\s*Fixes:\s*,,' -e 's,\s*$,,')
+			fixes="${fixes} __FIXES__ ${fixes_ref}"
+			;;
+		__END__)
+			if [ -n "${fixes}" ] ; then
+				echo "${commit} ${subject} ${fixes# }"
+			fi
+			;;
+	esac
+done
