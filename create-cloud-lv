@@ -133,7 +133,7 @@ function mount_lv_device()
 
 function configure_lv_device()
 {
-	local rootfs seedd
+	local rootfs seedd sudo_group
 
 	# -------------------------------------------------------------------------
 	# Fix /etc/fstab
@@ -211,6 +211,25 @@ EOF
 	if [ "${RECONFIG}" -eq 1 ] ; then
 		pr_info "Clean cloud-init"
 		chroot "${MOUNTP}" cloud-init clean
+	fi
+
+	# -------------------------------------------------------------------------
+	# Add user and group
+	# TODO: let cloud-init take care of this
+
+	if [ -n "${SUDO_USER:-}" ] ; then
+		sudo_group=$(id -g "${SUDO_GID}" -n)
+		pr_info "Add group ${sudo_group}"
+		chroot "${MOUNTP}" addgroup --gid "${SUDO_GID}" "${sudo_group}"
+
+		pr_info "Add user ${SUDO_USER}"
+		chroot "${MOUNTP}" adduser --gid "${SUDO_GID}" --uid "${SUDO_UID}" \
+			   --gecos "" --disabled-password --no-create-home "${SUDO_USER}"
+
+		pr_info "Create etc/sudoers.d/${SUDO_USER}"
+		echo "${SUDO_USER} ALL = NOPASSWD: ALL" > \
+			 "${MOUNTP}"/etc/sudoers.d/"${SUDO_USER}"
+		chmod 440 "${MOUNTP}"/etc/sudoers.d/"${SUDO_USER}"
 	fi
 }
 
