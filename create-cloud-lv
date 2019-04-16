@@ -89,11 +89,11 @@ function create_lv_device()
 			exit 1
 		fi
 		pr_info "Remove ${LV_DEVICE}"
-		lvremove "${LV_DEVICE}"
+		lvremove -f "${LV_DEVICE}"
 	fi
 
 	pr_info "Create ${LV_DEVICE}"
-	lvcreate -n "${RELEASE}${suffix}" -L 100G vg0
+	lvcreate -f -n "${RELEASE}${suffix}" -L 100G vg0
 }
 
 function copy_rootfs()
