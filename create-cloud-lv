@@ -1,0 +1,289 @@
+#!/bin/bash -eu
+
+function out()
+{
+	local rc=$?
+
+	trap - EXIT INT TERM HUP
+	set +e
+
+	if [ -n "${MOUNTP}" ] ; then
+		pr_info "Unmount ${LV_DEVICE}"
+		for dev in /dev /proc /sys ; do
+			umount "${MOUNTP}${dev}" || umount -l "${MOUNTP}${dev}"
+		done
+		umount "${MOUNTP}" || umount -l "${MOUNTP}"
+		rmdir "${MOUNTP}"
+	fi
+
+	if [ "${rc}" -ne 0 ] ; then
+		pr_error "Error: Script failed"
+	fi
+
+	exit "${rc}"
+}
+
+function pr_error()
+{
+	echo -e "\e[31m${*}\e[0m" 1>&2
+
+}
+
+function pr_info()
+{
+	echo -e "\e[33m${*}\e[0m"
+}
+
+function download_image()
+{
+	local image url suffix
+
+	suffix=
+	case "${RELEASE}" in
+		precise|trusty|xenial)
+			suffix=-disk1
+			;;
+	esac
+
+	image=${RELEASE}-server-cloudimg-${ARCH}${suffix}.img
+	url=https://cloud-images.ubuntu.com/${RELEASE}/current/${image}
+
+	IMAGE=${image}.raw
+
+	if [ "${RECONFIG}" -eq 1 ] ; then
+		return
+	fi
+
+	if [ -e "${IMAGE}" ] && [ "${DOWNLOAD}" -eq 0 ] ; then
+		return
+	fi
+
+	pr_info "Download cloud image"
+	wget -O "${image}" "${url}"
+	qemu-img convert -O raw "${image}" "${IMAGE}"
+	rm -f "${image}"
+}
+
+function create_lv_device()
+{
+	local suffix
+
+	suffix=
+	if [ "${ARCH}" != "$(dpkg --print-architecture)" ] ; then
+		suffix=_${ARCH}
+	fi
+	LV_DEVICE=/dev/mapper/vg0-${RELEASE}${suffix}
+
+	if [ "${RECONFIG}" -eq 1 ] ; then
+		if ! [ -e "${LV_DEVICE}" ] ; then
+			pr_error "Error: LV ${LV_DEVICE} does not exist."
+			exit 1
+		fi
+		return
+	fi
+
+	if [ -e "${LV_DEVICE}" ] ; then
+		if [ "${FORCE}" -eq 0 ] ; then
+			pr_error "Error: LV ${LV_DEVICE} exist already."
+			pr_error "       Use -f, --force to recreate it."
+			exit 1
+		fi
+		pr_info "Remove ${LV_DEVICE}"
+		lvremove "${LV_DEVICE}"
+	fi
+
+	pr_info "Create ${LV_DEVICE}"
+	lvcreate -n "${RELEASE}${suffix}" -L 100G vg0
+}
+
+function copy_rootfs()
+{
+	local start_count start count
+
+	if [ "${RECONFIG}" -eq 1 ] ; then
+		return
+	fi
+
+	# Get the start sector and sector count of the root partition
+	start_count=$(sfdisk -l -o Start,Sectors,Type "${IMAGE}" | \
+					  awk '/ Linux/ { print $1 " " $2 }') 
+	start=${start_count% *}
+	count=${start_count#* }
+
+	pr_info "Copy root filesystem to ${LV_DEVICE}"
+	dd ibs=512 skip="${start}" count="${count}" if="${IMAGE}" of="${LV_DEVICE}"
+
+	pr_info "Set label on ${LV_DEVICE}"
+	e2label "${LV_DEVICE}" "${RELEASE}-${ARCH}"
+}
+
+function mount_lv_device()
+{
+	local mountp dev
+
+	pr_info "Mount ${LV_DEVICE}"
+	mountp=$(mktemp -d)
+	mount "${LV_DEVICE}" "${mountp}"
+	MOUNTP=${mountp}
+
+	for dev in /dev /proc /sys ; do
+		mount -o bind "${dev}" "${MOUNTP}${dev}"
+	done
+}
+
+function configure_lv_device()
+{
+	local rootfs seedd
+
+	# -------------------------------------------------------------------------
+	# Fix /etc/fstab
+
+	if grep -q 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab ; then
+		pr_info "Recreate etc/fstab"
+		rootfs=$(grep 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab | \
+					 sed "s,.*LABEL=cloudimg-rootfs,${LV_DEVICE},")
+		cat <<EOF > "${MOUNTP}"/etc/fstab
+${rootfs}
+/dev/mapper/vg0-home   /home   ext4   defaults   0   2
+/dev/mapper/vg0-swap   none    swap   sw         0   0
+EOF
+	fi
+
+	# -------------------------------------------------------------------------
+	# Configure grub
+
+	pr_info "Create usr/local/sbin/update-grub"
+	cat <<EOF > "${MOUNTP}"/usr/local/sbin/update-grub
+#!/bin/bash
+/usr/sbin/update-grub "\${@}"
+echo "Copy grub.cfg to /dev/mapper/vg0-boot"
+test -d /mnt/boot || mkdir /mnt/boot
+mount /dev/mapper/vg0-boot /mnt/boot
+cp /boot/grub/grub.cfg /mnt/boot/grub/grub-${RELEASE}-${ARCH}.cfg
+umount /mnt/boot
+EOF
+	chmod 755 "${MOUNTP}"/usr/local/sbin/update-grub
+
+	pr_info "Create etc/default/grub.d/99-create-bm.cfg" 
+	test -d "${MOUNTP}"/etc/default/grub.d || \
+		mkdir "${MOUNTP}"/etc/default/grub.d
+
+	cat <<EOF > "${MOUNTP}"/etc/default/grub.d/99-create-bm.cfg
+unset GRUB_HIDDEN_TIMEOUT GRUB_TIMEOUT_STYLE
+GRUB_TIMEOUT=10
+GRUB_CMDLINE_LINUX_DEFAULT="earlyprintk=ttyS0,115200 console=ttyS0,115200 console=tty0 loglevel=7"
+GRUB_TERMINAL="console serial"
+GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"
+GRUB_DISTRIBUTOR="Ubuntu ${RELEASE^} ${ARCH}"
+GRUB_DISABLE_OS_PROBER=true
+EOF
+
+	pr_info "Update grub"
+	chroot "${MOUNTP}" update-grub
+
+	# -------------------------------------------------------------------------
+	# Configure cloud-init
+
+	seedd="${MOUNTP}"/var/lib/cloud/seed/nocloud
+	test -d "${seedd}" || mkdir -p  "${seedd}"
+
+	pr_info "Create var/${seedd#*/var/}/meta-data"
+	cat <<EOF > "${seedd}"/meta-data
+instance-id: ubuntu-${RELEASE}-${ARCH}
+local-hostname: $(hostname | tr -d '\n')
+EOF
+
+	pr_info "Create var/${seedd#*/var/}/user-data"
+	cat <<EOF > "${seedd}"/user-data
+#cloud-config
+locale: ${LANG:-en_US.UTF-8}
+timezone: $(cat /etc/timezone | tr -d '\n')
+password: ubuntu
+chpasswd: { expire: False }
+ssh_pwauth: True
+manage_etc_hosts: True
+EOF
+
+	pr_info "Configure cloud-init datasource"
+	rm -f "${MOUNTP}"/etc/cloud/cloud.cfg.d/*dpkg.cfg
+	chroot "${MOUNTP}" bash -c "echo 'cloud-init cloud-init/datasources multiselect NoCloud' | debconf-set-selections ; dpkg-reconfigure -f noninteractive cloud-init"
+
+	if [ "${RECONFIG}" -eq 1 ] ; then
+		pr_info "Clean cloud-init"
+		chroot "${MOUNTP}" cloud-init clean
+	fi
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-a ARCH] [-f] [-h] [-r] RELEASE
+
+Create a logical volume from a cloud image.
+
+Positional arguments:
+  RELEASE  The release name of an Ubuntu cloud image (xenial, bionic, ...).
+
+Optional arguments:
+  -a, --arch ARCH  The architecture of the cloud image to use.
+  -d, --download   Download a new cloud image.
+  -f, --force      Recreate an already existing logical volume.
+  -h, --help       Show this help text and exit.
+  -r, --reconfig   Reconfigure an existing logical volume.
+EOF
+}
+
+ARCH=$(dpkg --print-architecture)
+DOWNLOAD=0
+FORCE=0
+RECONFIG=0
+RELEASE=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-a|--arch)
+			shift
+			ARCH=${1}
+			;;
+		-d|--download)
+			DOWNLOAD=1
+			;;
+		-f|--force)
+			FORCE=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-r|--reconfig)
+			RECONFIG=1
+			;;
+		-*)
+			pr_error "Error: Unexpected argument: ${1}" >&2
+			exit 2
+			;;
+		*)
+			if [ -z "${RELEASE}" ] ; then
+				RELEASE=${1}
+			else
+				pr_error "Error: Unexpected argument: ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${RELEASE}" ] ; then
+	usage
+	exit 2
+fi
+
+MOUNTP=
+trap out EXIT INT TERM HUP
+
+download_image
+create_lv_device
+copy_rootfs
+mount_lv_device
+configure_lv_device
