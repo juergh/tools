@@ -93,7 +93,7 @@ function create_lv_device()
 	fi
 
 	pr_info "Create ${LV_DEVICE}"
-	lvcreate -f -n "${RELEASE}${suffix}" -L 100G vg0
+	lvcreate -n "${RELEASE}${suffix}" -L 10G vg0
 }
 
 function copy_rootfs()
