@@ -1,10 +1,24 @@
-#!/bin/sh
+#!/bin/sh -eu
 #
 # List 'Fixes: ' commits
 #
 
 git_dir=${1}
+fixes_file=${2}
 
+# Read the 'stop commit' from the fixes file
+stop_commit=FOO
+if [ -e "${fixes_file}" ] ; then
+	stop_commit=$(head -1 "${fixes_file}")
+	stop_commit=${stop_commit%% *}
+fi
+
+# Create an empty temp file
+tmp_file=${fixes_file}.tmp
+rm -f "${tmp_file}"
+touch "${tmp_file}"
+
+# Parse the commits
 git --git-dir "${git_dir}" log --no-merges \
 	--format="__COMMIT__%h%n__SUBJECT__%s%n%b%n__END__%n" | \
 	grep -P '^__COMMIT__|^__SUBJECT__|^\s*Fixes:.*\b[0-9a-f]{8,}\b|^__END__' | \
@@ -12,6 +26,9 @@ while IFS= read -r line ; do
 	case "${line}" in
 		__COMMIT__*)
 			commit=${line#__COMMIT__}
+			if [ "${commit}" = "${stop_commit}" ] ; then
+				break
+			fi
 			subject=
 			fixes=
 			;;
@@ -24,8 +41,14 @@ while IFS= read -r line ; do
 			;;
 		__END__)
 			if [ -n "${fixes}" ] ; then
-				echo "${commit} ${subject} ${fixes# }"
+				echo "${commit} ${subject} ${fixes# }" >> "${tmp_file}"
 			fi
 			;;
 	esac
 done
+
+# Append the existing fixes file to the temp file and move it
+if [ -e "${fixes_file}" ] ; then
+	cat "${fixes_file}" >> "${tmp_file}"
+fi
+mv "${tmp_file}" "${fixes_file}"
