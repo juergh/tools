@@ -1,0 +1,85 @@
+#!/bin/bash -eu
+#
+# Import GPG keys listed in LP user accounts
+#
+
+LP_URL="https://api.launchpad.net/devel"
+
+function lp_get_user()
+{
+	local text=${1}
+
+	curl -s -S --get \
+		 --data-urlencode "ws.op=findPerson" \
+		 --data-urlencode "text=${text}" \
+		 "${LP_URL}/people" | \
+		python -c 'import json,sys ; \
+				   obj = json.load(sys.stdin) ; \
+				   print obj["entries"][0]["name"]'
+}
+
+function lp_get_gpg_keyids()
+{
+	local user=${1}
+
+	curl -s -S --get "${LP_URL}/~${user}/gpg_keys" | \
+		python -c 'import json,sys ; \
+				   obj = json.load(sys.stdin) ; \
+				   print "\n".join([o["keyid"] for o in obj["entries"]])'
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: lp_import-gpg-key [-d] [-h] USER...
+
+Import GPG keys listed in launchpad user accounts.
+
+USER   An LP user identification like email or LP user name.
+
+Optional arguments:
+  -d, --dry-run  List key IDs but don't import the keys.
+  -h, --help     Show this help text.
+EOF
+}
+
+dry_run=0
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-d|--dry-run)
+			dry_run=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-*)
+			echo "Unexpected argument: ${1}" >&2
+			exit 2
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
+
+if [ ${#} -eq 0 ] ; then
+	usage
+	exit 2
+fi
+
+for text in "${@}" ; do
+	user=$(lp_get_user "${text}")
+	for keyid in $(lp_get_gpg_keyids "${user}") ; do
+		if [ ${dry_run} -eq 1 ] ; then
+			echo
+			echo "${user}: ${keyid}"
+			gpg --no-tty --search-keys "${keyid}" 2>/dev/null || true
+		else
+			gpg --recv-key "${keyid}" || true
+		fi
+	done
+done
+			   
