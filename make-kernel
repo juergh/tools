@@ -4,6 +4,22 @@
 #
 
 
+function out()
+{
+	local rc=$?
+
+	trap - INT TERM EXIT HUP
+
+	if [ ${rc} -eq 0 ] ; then
+		echo -e "\e[32mCompilation succeeded\e[0m"
+	else
+		echo -e "\e[31mCompilation failed\e[0m" 1>&2
+	fi
+
+	exit "${rc}"
+}
+
+
 function run_in_schroot()
 {
 	# FIXME: Silence chroot warnings
@@ -301,6 +317,8 @@ while [ $# -gt 0 ] ; do
 	esac
 	shift
 done
+
+trap out INT TERM EXIT HUP
 
 if [ ${UBUNTU} -eq 1 ] ; then
 	build_ubuntu_kernel
