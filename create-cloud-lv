@@ -8,12 +8,7 @@ function out()
 	set +e
 
 	if [ -n "${MOUNTP}" ] ; then
-		pr_info "Unmount ${LV_DEVICE}"
-		for dev in /dev /proc /sys ; do
-			umount "${MOUNTP}${dev}" || umount -l "${MOUNTP}${dev}"
-		done
-		umount "${MOUNTP}" || umount -l "${MOUNTP}"
-		rmdir "${MOUNTP}"
+		unmount_lv_device
 	fi
 
 	if [ "${rc}" -ne 0 ] ; then
@@ -129,11 +124,35 @@ function mount_lv_device()
 	for dev in /dev /proc /sys ; do
 		mount -o bind "${dev}" "${MOUNTP}${dev}"
 	done
+
+	# Temporary fix for resolv.conf
+	mv "${MOUNTP}"/etc/resolv.conf "${MOUNTP}"/etc/resolv.conf.orig
+	cat << EOF > "${MOUNTP}"/etc/resolv.conf
+search fritz.box
+nameserver 192.168.1.1
+EOF
+}
+
+function unmount_lv_device()
+{
+	local dev
+
+	pr_info "Unmount ${LV_DEVICE}"
+
+	# Restore resolv.conf
+	mv "${MOUNTP}"/etc/resolv.conf.orig "${MOUNTP}"/etc/resolv.conf
+
+	for dev in /dev /proc /sys ; do
+		umount "${MOUNTP}${dev}" || umount -l "${MOUNTP}${dev}"
+	done
+
+	umount "${MOUNTP}" || umount -l "${MOUNTP}"
+	rmdir "${MOUNTP}"
 }
 
 function configure_lv_device()
 {
-	local rootfs seedd sudo_group
+	local rootfs seedd timezone sudo_group virtual kernel
 
 	# -------------------------------------------------------------------------
 	# Fix /etc/fstab
@@ -194,10 +213,12 @@ local-hostname: $(hostname | tr -d '\n')
 EOF
 
 	pr_info "Create var/${seedd#*/var/}/user-data"
+	# shellcheck disable=SC2002
+	timezone=$(cat /etc/timezone | tr -d '\n')
 	cat <<EOF > "${seedd}"/user-data
 #cloud-config
 locale: ${LANG:-en_US.UTF-8}
-timezone: $(cat /etc/timezone | tr -d '\n')
+timezone: ${timezone}
 password: ubuntu
 chpasswd: { expire: False }
 ssh_pwauth: True
@@ -210,14 +231,19 @@ EOF
 
 	if [ "${RECONFIG}" -eq 1 ] ; then
 		pr_info "Clean cloud-init"
-		chroot "${MOUNTP}" cloud-init clean
+		if [ "${RELEASE}" = "precise" ] || [ "${RELEASE}" = "trusty" ] ; then
+			rm -rf /var/lib/cloud
+		else
+			chroot "${MOUNTP}" cloud-init clean
+		fi
 	fi
 
 	# -------------------------------------------------------------------------
 	# Add user and group
 	# TODO: let cloud-init take care of this
 
-	if [ -n "${SUDO_USER:-}" ] ; then
+	if [ -n "${SUDO_USER:-}" ] && \
+	   ! grep -qP "^${SUDO_USER:-}:" "${MOUNTP}"/etc/passwd ; then
 		sudo_group=$(id -g "${SUDO_GID}" -n)
 		pr_info "Add group ${sudo_group}"
 		chroot "${MOUNTP}" addgroup --gid "${SUDO_GID}" "${sudo_group}"
@@ -230,6 +256,30 @@ EOF
 		echo "${SUDO_USER} ALL = NOPASSWD: ALL" > \
 			 "${MOUNTP}"/etc/sudoers.d/"${SUDO_USER}"
 		chmod 440 "${MOUNTP}"/etc/sudoers.d/"${SUDO_USER}"
+	fi
+
+	# -------------------------------------------------------------------------
+	# Install additional packages for lvm2 and the NIC driver
+
+	if [ "${RELEASE}" = "precise" ] ; then
+		# For Precise we need to replace linux-virtual with linux-generic
+		readarray -t virtual < <(chroot "${MOUNTP}" dpkg -l |
+								 grep '\blinux-[^ ]*virtual\b' | \
+								 awk '{ print $2 }')
+
+		chroot "${MOUNTP}" apt-get update
+		chroot "${MOUNTP}" apt-get install -y lvm2 linux-generic
+		chroot "${MOUNTP}" apt-get purge -y "${virtual[@]}"
+
+	elif [ "${RELEASE}" = "trusty" ] ; then
+		# For Trusty we need to additionally install linux-modules-extra
+		# shellcheck disable=SC2012
+		kernel=$(ls -1 "${MOUNTP}"/boot/initrd.img-* | sort -V | tail -1 | \
+					 sed 's,.*/initrd.img-,,')
+
+		chroot "${MOUNTP}" apt update
+		chroot "${MOUNTP}" apt install -y lvm2 \
+			   "linux-modules-extra-${kernel}"
 	fi
 }
 
@@ -246,7 +296,7 @@ Positional arguments:
 Optional arguments:
   -a, --arch ARCH  The architecture of the cloud image to use.
   -d, --download   Download a new cloud image.
-  -f, --force      Recreate an already existing logical volume.
+  -f, --force      Recreate an existing logical volume.
   -h, --help       Show this help text and exit.
   -r, --reconfig   Reconfigure an existing logical volume.
 EOF
