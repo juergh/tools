@@ -155,6 +155,12 @@ function configure_lv_device()
 	local rootfs seedd timezone sudo_group virtual kernel
 
 	# -------------------------------------------------------------------------
+	# Blacklist the e1000 driver
+	cat <<EOF > "${MOUNTP}"/etc/modprobe.d/blacklist-e1000.conf
+blacklist e1000
+EOF
+
+	# -------------------------------------------------------------------------
 	# Fix /etc/fstab
 
 	if grep -q 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab ; then
