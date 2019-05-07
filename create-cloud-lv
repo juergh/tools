@@ -159,12 +159,14 @@ function configure_lv_device()
 
 	if grep -q 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab ; then
 		pr_info "Recreate etc/fstab"
+		mkdir -p "${MOUNTP}"/mnt/boot
 		rootfs=$(grep 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab | \
 					 sed "s,.*LABEL=cloudimg-rootfs,${LV_DEVICE},")
 		cat <<EOF > "${MOUNTP}"/etc/fstab
 ${rootfs}
-/dev/mapper/vg0-home   /home   ext4   defaults   0   2
-/dev/mapper/vg0-swap   none    swap   sw         0   0
+/dev/mapper/vg0-home   /home       ext4   defaults   0   2
+/dev/mapper/vg0-boot   /mnt/boot   ext3   defaults   0   2
+/dev/mapper/vg0-swap   none        swap   sw         0   0
 EOF
 	fi
 
@@ -176,10 +178,7 @@ EOF
 #!/bin/bash
 /usr/sbin/update-grub "\${@}"
 echo "Copy grub.cfg to /dev/mapper/vg0-boot"
-test -d /mnt/boot || mkdir /mnt/boot
-mount /dev/mapper/vg0-boot /mnt/boot
 cp /boot/grub/grub.cfg /mnt/boot/grub/grub-${RELEASE}-${ARCH}.cfg
-umount /mnt/boot
 EOF
 	chmod 755 "${MOUNTP}"/usr/local/sbin/update-grub
 
