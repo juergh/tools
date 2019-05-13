@@ -88,7 +88,7 @@ function create_lv_device()
 	fi
 
 	pr_info "Create ${LV_DEVICE}"
-	lvcreate -W y -n "${RELEASE}${suffix}" -L 10G vg0
+	lvcreate --yes --name "${RELEASE}${suffix}" --size 10G vg0
 }
 
 function copy_rootfs()
@@ -152,7 +152,7 @@ function unmount_lv_device()
 
 function configure_lv_device()
 {
-	local rootfs seedd timezone sudo_group virtual kernel
+	local rootfs seedd timezone sudo_group keyid virtual kernel
 
 	# -------------------------------------------------------------------------
 	# Blacklist the e1000 driver
@@ -165,13 +165,11 @@ EOF
 
 	if grep -q 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab ; then
 		pr_info "Recreate etc/fstab"
-		mkdir -p "${MOUNTP}"/mnt/boot
 		rootfs=$(grep 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab | \
 					 sed "s,.*LABEL=cloudimg-rootfs,${LV_DEVICE},")
 		cat <<EOF > "${MOUNTP}"/etc/fstab
 ${rootfs}
 /dev/mapper/vg0-home   /home       ext4   defaults   0   2
-/dev/mapper/vg0-boot   /mnt/boot   ext3   defaults   0   2
 /dev/mapper/vg0-swap   none        swap   sw         0   0
 EOF
 	fi
@@ -184,9 +182,12 @@ EOF
 #!/bin/bash
 /usr/sbin/update-grub "\${@}"
 echo "Copy grub.cfg to /dev/mapper/vg0-boot"
+mount /dev/mapper/vg0-boot /mnt/boot/
 cp /boot/grub/grub.cfg /mnt/boot/grub/grub-${RELEASE}-${ARCH}.cfg
+umount /mnt/boot/ || umount -l /mnt/boot
 EOF
 	chmod 755 "${MOUNTP}"/usr/local/sbin/update-grub
+	test -d "${MOUNTP}"/mnt/boot || mkdir -p "${MOUNTP}"/mnt/boot
 
 	pr_info "Create etc/default/grub.d/99-create-bm.cfg" 
 	test -d "${MOUNTP}"/etc/default/grub.d || \
@@ -264,27 +265,48 @@ EOF
 	fi
 
 	# -------------------------------------------------------------------------
+	# Add the ESM apt repo
+
+	if [ "${RELEASE}" = "precise" ] ; then
+		pr_info "Add ESM PPA apt repo"
+		cp precise/precise-esm.list "${MOUNTP}"/etc/apt/sources.list.d/
+		# Download the PPA public key
+		keyid=$(awk '/PPA public key/ { print $NF }' precise/precise-esm.list)
+		chroot "${MOUNTP}" apt-key adv --keyserver keyserver.ubuntu.com \
+			   --recv-key "${keyid}"
+	fi
+
+	# -------------------------------------------------------------------------
 	# Install additional packages for lvm2 and the NIC driver
 
 	if [ "${RELEASE}" = "precise" ] ; then
-		# For Precise we need to replace linux-virtual with linux-generic
-		readarray -t virtual < <(chroot "${MOUNTP}" dpkg -l |
-								 grep '\blinux-[^ ]*virtual\b' | \
-								 awk '{ print $2 }')
+		pr_info "Install additional packages for Precise"
 
+		readarray -t virtual < <(chroot "${MOUNTP}" dpkg -l | \
+									 awk '$2 ~ /^linux-.*virtual$/ { print $2 }')
+
+		# For Precise we need to install lvm2 and dkms and replace
+		# linux-virtual with linux-generic
 		chroot "${MOUNTP}" apt-get update
-		chroot "${MOUNTP}" apt-get install -y lvm2 linux-generic
+		chroot "${MOUNTP}" apt-get install -y lvm2 linux-generic dkms
 		chroot "${MOUNTP}" apt-get purge -y "${virtual[@]}"
+		chroot "${MOUNTP}" apt-get autoremove -y --purge
+
+		# Install the igb DKMS package
+		rm -rf "${MOUNTP}"/var/tmp/*.deb
+		cp precise/*.deb "${MOUNTP}"/var/tmp/
+		chroot "${MOUNTP}" bash -c 'dpkg -i /var/tmp/*.deb'
 
 	elif [ "${RELEASE}" = "trusty" ] ; then
-		# For Trusty we need to additionally install linux-modules-extra
+		pr_info "Install additional packages for Trusty"
+
+		# For Trusty we need to install linux-modules-extra
 		# shellcheck disable=SC2012
 		kernel=$(ls -1 "${MOUNTP}"/boot/initrd.img-* | sort -V | tail -1 | \
 					 sed 's,.*/initrd.img-,,')
 
 		chroot "${MOUNTP}" apt update
-		chroot "${MOUNTP}" apt install -y lvm2 \
-			   "linux-modules-extra-${kernel}"
+		chroot "${MOUNTP}" apt install -y lvm2 "linux-modules-extra-${kernel}"
 	fi
 }
 
