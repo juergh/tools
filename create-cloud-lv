@@ -156,8 +156,8 @@ function configure_lv_device()
 
 	# -------------------------------------------------------------------------
 	# Blacklist the e1000 driver
-	cat <<EOF > "${MOUNTP}"/etc/modprobe.d/blacklist-e1000.conf
-blacklist e1000
+	cat <<EOF > "${MOUNTP}"/etc/modprobe.d/blacklist-e1000e.conf
+blacklist e1000e
 EOF
 
 	# -------------------------------------------------------------------------
