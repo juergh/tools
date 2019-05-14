@@ -3,6 +3,16 @@
 # Create a base libvirt guest VM
 #
 
+# Mapping between distro and VM architecture names
+declare -A ARCH_MAP=(
+	# Debian
+	[i386]=i686
+	[amd64]=x86_64
+	# RHEL
+	[i686]=i686
+	[x86_64]=x86_64
+)
+
 function pr_error()
 {
 	echo -e "\033[31m${*}\033[0m" 1>&2
@@ -293,7 +303,7 @@ function define_vm()
 {
 	local tmpf
 	export NAME UUID OS_LOADER KERNEL_PATH INITRD_PATH KERNEL_CMDLINE \
-		   OS_IMAGE_PATH CONFIG_DRIVE_PATH MAC_ADDRESS
+		   OS_IMAGE_PATH CONFIG_DRIVE_PATH MAC_ADDRESS VM_ARCH
 
 	tmpf=$(mktemp)
 	# shellcheck disable=SC2064
@@ -315,9 +325,10 @@ function define_vm()
 	OS_IMAGE_PATH=$(virsh vol-path --pool default "${OS_IMAGE}")
 	CONFIG_DRIVE_PATH=$(virsh vol-path --pool default "${CONFIG_DRIVE}")
 	MAC_ADDRESS="52:54:00:${UUID:0:2}:${UUID:2:2}:${UUID:4:2}"
+	VM_ARCH=${ARCH_MAP["${ARCH}"]}
 
 	# Create the domain XML and define the VM
-	envsubst < "$(realpath -e "${0}").d/domain-${ARCH}.xml" > "${tmpf}"
+	envsubst < "$(realpath -e "${0}").d/domain-${VM_ARCH}.xml" > "${tmpf}"
 	virsh define "${tmpf}"
 
 	rm -f "${tmpf}"

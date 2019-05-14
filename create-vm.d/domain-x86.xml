@@ -7,7 +7,7 @@
     <partition>/machine</partition>
   </resource>
   <os>
-    <type arch='x86_64' machine='pc'>hvm</type>
+    <type arch='${VM_ARCH}' machine='pc'>hvm</type>
     ${OS_LOADER}
     <boot dev='hd'/>
   </os>
