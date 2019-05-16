@@ -51,10 +51,6 @@ function download_image()
 
 	IMAGE=${image}.raw
 
-	if [ "${RECONFIG}" -eq 1 ] ; then
-		return
-	fi
-
 	if [ -e "${IMAGE}" ] && [ "${DOWNLOAD}" -eq 0 ] ; then
 		return
 	fi
@@ -67,22 +63,6 @@ function download_image()
 
 function create_lv_device()
 {
-	local suffix
-
-	suffix=
-	if [ "${ARCH}" != "$(dpkg --print-architecture)" ] ; then
-		suffix=_${ARCH}
-	fi
-	LV_DEVICE=/dev/mapper/vg0-${RELEASE}${suffix}
-
-	if [ "${RECONFIG}" -eq 1 ] ; then
-		if ! [ -e "${LV_DEVICE}" ] ; then
-			pr_error "Error: LV ${LV_DEVICE} does not exist."
-			exit 1
-		fi
-		return
-	fi
-
 	if [ -e "${LV_DEVICE}" ] ; then
 		if [ "${FORCE}" -eq 0 ] ; then
 			pr_error "Error: LV ${LV_DEVICE} exists already."
@@ -94,16 +74,12 @@ function create_lv_device()
 	fi
 
 	pr_info "Create ${LV_DEVICE}"
-	lvcreate --yes --name "${RELEASE}${suffix}" --size 10G vg0
+	lvcreate --yes --name "${LV_NAME}" --size 10G "${VG_NAME}"
 }
 
 function copy_rootfs()
 {
 	local start_count start count
-
-	if [ "${RECONFIG}" -eq 1 ] ; then
-		return
-	fi
 
 	# Get the start sector and sector count of the root partition
 	start_count=$(sfdisk -l -o Start,Sectors,Type "${IMAGE}" | \
@@ -115,7 +91,6 @@ function copy_rootfs()
 	dd ibs=512 skip="${start}" count="${count}" if="${IMAGE}" of="${LV_DEVICE}"
 
 	pr_info "Set label on ${LV_DEVICE}"
-	e2label "${LV_DEVICE}" "${LV_LABEL}"
 }
 
 function mount_lv_device()
@@ -166,23 +141,26 @@ function blacklist_modules()
 
 	pr_info "Blacklist modules"
 	cp "${files[@]}" "${MOUNTP}"/etc/modprobe.d/
+
+	pr_info "Update the initramfs"
+	chroot "${MOUNTP}" update-initramfs -k all -u
 }
 
 function create_fstab()
 {
 	local rootfs
 
-	if grep -q "LABEL=${LV_LABEL}" "${MOUNTP}"/etc/fstab ; then
+	rootfs=$(grep 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab)
+	if [ -z "${rootfs}" ] ; then
 		return
 	fi
 
 	pr_info "Recreate etc/fstab"
-	rootfs=$(grep 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab | \
-				 sed "s,.*LABEL=cloudimg-rootfs,${LV_LABEL},")
+	rootfs=${LV_DEVICE}${rootfs#*LABEL=cloudimg-rootfs}
 	cat <<EOF > "${MOUNTP}"/etc/fstab
 ${rootfs}
-/dev/mapper/vg0-home   /home       ext4   defaults   0   2
-/dev/mapper/vg0-swap   none        swap   sw         0   0
+/dev/mapper/vg0-home   /home   ext4   defaults   0   2
+/dev/mapper/vg0-swap   none    swap   sw         0   0
 EOF
 }
 
@@ -200,11 +178,11 @@ EOF
 	chmod 755 "${MOUNTP}"/usr/local/sbin/update-grub
 	test -d "${MOUNTP}"/mnt/boot || mkdir -p "${MOUNTP}"/mnt/boot
 
-	pr_info "Create etc/default/grub.d/99-create-bm.cfg" 
+	pr_info "Create etc/default/grub.d/99-create-cloud-lv.cfg" 
 	test -d "${MOUNTP}"/etc/default/grub.d || \
 		mkdir "${MOUNTP}"/etc/default/grub.d
 
-	cat <<EOF > "${MOUNTP}"/etc/default/grub.d/99-create-bm.cfg
+	cat <<EOF > "${MOUNTP}"/etc/default/grub.d/99-create-cloud-lv.cfg
 unset GRUB_HIDDEN_TIMEOUT GRUB_TIMEOUT_STYLE
 GRUB_TIMEOUT=10
 GRUB_CMDLINE_LINUX_DEFAULT="earlyprintk=ttyS0,115200 console=ttyS0,115200 console=tty0 loglevel=7"
@@ -248,13 +226,11 @@ EOF
 	rm -f "${MOUNTP}"/etc/cloud/cloud.cfg.d/*dpkg.cfg
 	chroot "${MOUNTP}" bash -c "echo 'cloud-init cloud-init/datasources multiselect NoCloud' | debconf-set-selections ; dpkg-reconfigure -f noninteractive cloud-init"
 
-	if [ "${RECONFIG}" -eq 1 ] ; then
-		pr_info "Clean cloud-init"
-		if [ "${RELEASE}" = "precise" ] || [ "${RELEASE}" = "trusty" ] ; then
-			rm -rf "${MOUNTP}"/var/lib/cloud
-		else
-			chroot "${MOUNTP}" cloud-init clean
-		fi
+	pr_info "Clean cloud-init"
+	if [ "${RELEASE}" = "precise" ] || [ "${RELEASE}" = "trusty" ] ; then
+		rm -rf "${MOUNTP}"/var/lib/cloud
+	else
+		chroot "${MOUNTP}" cloud-init clean
 	fi
 }
 
@@ -409,24 +385,33 @@ fi
 # Globals
 IMAGE=
 MOUNTP=
-LV_DEVICE=
-LV_LABEL=${RELEASE}-${ARCH}
-CONFIGD=create-cloud-lv.d/$(hostname)
+VG_NAME=vg0
+LV_NAME=${RELEASE}
+if [ "${ARCH}" != "$(dpkg --print-architecture)" ] ; then
+	LV_NAME=${LV_NAME}_${ARCH}
+fi
+LV_DEVICE=/dev/mapper/${VG_NAME}-${LV_NAME}
+CONFIGD=create-cloud-lv.d/$(hostname)/${RELEASE}
 
 trap out EXIT INT TERM HUP
 
-# Download the cloud image
-download_image
+if [ "${RECONFIG}" -eq 0 ] ; then
+	# Download the cloud image
+	download_image
 
-# Create the LV, copy the root filesystem and mount it
-create_lv_device
-copy_rootfs
+	# Create the LV and copy the root filesystem
+	create_lv_device
+	copy_rootfs
+fi
+
+# Mount the LV
 mount_lv_device
 
 # Configure the LV
 fix_resolv_conf
 blacklist_modules
 create_fstab
+configure_grub
 configure_cloud_init
 add_user_group
 add_apt_repos
