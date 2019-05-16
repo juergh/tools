@@ -1,0 +1,23 @@
+#!/bin/bash
+#
+# Setup ZNC
+#
+
+apt install znc
+
+adduser znc --disabled-password
+
+cat <<EOF | sudo tee /etc/systemd/system/znc.service
+[Unit]
+Description=ZNC, an advanced IRC bouncer
+After=network-online.target
+     
+[Service]
+ExecStart=/usr/bin/znc -f
+User=znc
+     
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# extract znc.tgz into /home/znc
