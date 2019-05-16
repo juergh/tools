@@ -1,0 +1,254 @@
+#!/bin/bash -eu
+#
+# Run the Ubuntu autotest release tests
+#
+
+# shellcheck disable=SC2034
+precise=(
+	aio_dio_bugs
+	aiostress
+	ebizzy
+	fs_mark
+	fsx
+	hwclock
+	iosched_bugs
+	iperf
+	ipv6connect
+	monotonic_time
+	rmaptest
+	rtc
+	signaltest
+	synctest
+	ubuntu_32_on_64
+	ubuntu_blktrace_smoke_test
+	ubuntu_ecryptfs
+	ubuntu_leap_seconds
+	ubuntu_qrt_apparmor
+	ubuntu_qrt_kernel_aslr_collisions
+	ubuntu_qrt_kernel_hardening
+	ubuntu_qrt_kernel_panic
+	ubuntu_qrt_kernel_security
+	ubuntu_quota_smoke_test
+	ubuntu_squashfs_smoke_test
+	ubuntu_zram_smoke_test
+)
+
+# shellcheck disable=SC2034
+trusty=(
+	aio_dio_bugs
+	aiostress
+	ebizzy
+	fs_mark
+	fsx
+	hwclock
+	iosched_bugs
+	iperf
+	ipv6connect
+	libhugetlbfs
+	monotonic_time
+	rmaptest
+	rtc
+	signaltest
+	synctest
+	ubuntu_32_on_64
+	ubuntu_aufs_smoke_test    # 3.13 only
+	ubuntu_blktrace_smoke_test
+	ubuntu_boot
+	ubuntu_cts_kernel
+	ubuntu_docker_smoke_test
+	ubuntu_ecryptfs
+	ubuntu_leap_seconds
+	ubuntu_lxc
+	ubuntu_qrt_apparmor
+	ubuntu_qrt_kernel_aslr_collisions
+	ubuntu_qrt_kernel_hardening
+	ubuntu_qrt_kernel_panic
+	ubuntu_qrt_kernel_security
+	ubuntu_quota_smoke_test
+	ubuntu_seccomp
+	ubuntu_squashfs_smoke_test
+	ubuntu_zram_smoke_test
+	wb_kupdate
+)
+
+# shellcheck disable=SC2034
+xenial=(
+	aio_dio_bugs
+	aiostress
+	ebizzy
+	fs_mark
+	fsx
+	hwclock
+	iosched_bugs
+	iperf
+	ipv6connect
+	libhugetlbfs
+	monotonic_time
+	rmaptest
+	rtc
+	signaltest
+	synctest
+	ubuntu_32_on_64
+	ubuntu_aufs_smoke_test
+	ubuntu_blkdev_directio
+	ubuntu_blktrace_smoke_test
+	ubuntu_bpf_jit
+	ubuntu_cts_kernel
+	ubuntu_cve_kernel
+	ubuntu_docker_smoke_test
+	ubuntu_ecryptfs
+	ubuntu_fan_smoke_test
+	ubuntu_kernel_selftests
+	ubuntu_kvm_smoke_test
+	# ubuntu_kvm_unit_tests   # commented out because of test failures
+	ubuntu_leap_seconds
+	ubuntu_loop_smoke_test
+	# ubuntu_ltp_syscalls   # commented out because of test failures
+	ubuntu_lxc
+	# ubuntu_nbd_smoke_test   # commented out because of test failures
+	ubuntu_qrt_apparmor
+	ubuntu_qrt_kernel_aslr_collisions
+	ubuntu_qrt_kernel_hardening
+	ubuntu_qrt_kernel_panic
+	ubuntu_qrt_kernel_security
+	ubuntu_lttng_smoke_test   # needs to run after ubuntu_qrt_kernel_security
+	ubuntu_quota_smoke_test
+	ubuntu_squashfs_smoke_test
+	ubuntu_stress_smoke_test
+	ubuntu_unionmount_overlayfs_suite
+	ubuntu_vfat_stress
+	ubuntu_zfs_fstest
+	ubuntu_zfs_smoke_test
+	# ubuntu_zfs_xfs_generic   # commented out because of test failures
+	ubuntu_zram_smoke_test
+	wb_kupdate
+)
+
+# shellcheck disable=SC2034
+bionic=(
+	aio_dio_bugs
+	aiostress
+	ebizzy
+	fs_mark
+	fsx
+	hwclock
+	iosched_bugs
+	iperf
+	ipv6connect
+	monotonic_time
+	rmaptest
+	rtc
+	signaltest
+	synctest
+	# ubuntu_32_on_64
+	ubuntu_aufs_smoke_test
+	ubuntu_blkdev_directio
+	ubuntu_blktrace_smoke_test
+	ubuntu_boot
+	ubuntu_bpf
+	ubuntu_bpf_jit
+	# ubuntu_btrfs_kernel_fixes
+	ubuntu_cts_kernel
+	# ubuntu_cve_kernel
+	ubuntu_docker_smoke_test
+	ubuntu_fan_smoke_test
+	ubuntu_kernel_selftests
+	ubuntu_kvm_smoke_test
+	ubuntu_kvm_unit_tests
+	ubuntu_leap_seconds
+	ubuntu_loop_smoke_test
+	# ubuntu_ltp
+	ubuntu_ltp_syscalls
+	ubuntu_lttng_smoke_test
+	ubuntu_lxc
+	ubuntu_nbd_smoke_test
+	ubuntu_qrt_apparmor
+	ubuntu_qrt_kernel_aslr_collisions
+	ubuntu_qrt_kernel_hardening
+	ubuntu_qrt_kernel_panic
+	ubuntu_qrt_kernel_security
+	ubuntu_quota_smoke_test
+	# ubuntu_ramfs_stress
+	ubuntu_squashfs_smoke_test
+	ubuntu_stress_smoke_test
+	ubuntu_sysdig_smoke_test
+	ubuntu_unionmount_overlayfs_suite
+	ubuntu_vfat_stress
+	# ubuntu_zfs_fstest
+	# ubuntu_zfs_smoke_test
+	u# buntu_zfs_xfs_generic
+	ubuntu_zram_smoke_test
+	wb_kupdate
+	xfstests
+)
+
+function usage()
+{
+	cat <<EOF
+Usage: run-autotest-ubuntu [-c] [-f] [-h] precise|trusty|xenial|bionic
+
+Run the autotest release tests locally for the specified Ubuntu series.
+
+Optional arguments:
+  -c, --clean  Clean before run (delete and clone the client tests).
+  -f, --force  Run a test even if it is blacklisted.
+  -h, --help   Show this help text.
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+series=
+tests=()
+args=()
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		precise|trusty|xenial|bionic)
+			series=${1}
+			arr="${series}[@]"
+			tests=("${!arr}")
+			;;
+		*)
+			args+=("${1}")
+			;;
+	esac
+	shift
+done
+
+if [ "${#tests[@]}" -eq 0 ] ; then
+	usage
+	exit 2
+fi
+
+# Check if the 'ubuntu' user exists
+if ! getent passwd ubuntu >/dev/null ; then
+	echo "Error: No 'ubuntu' user found in /etc/passwd"
+	exit 1
+fi
+
+# Check for source URIs
+if ! grep -q "^deb-src " /etc/apt/sources.list ; then
+	echo "Error: No source URIs found in /etc/apt/sources.list"
+	exit 1
+fi
+
+logfile=$(readlink -f "autotest-${series}.log")
+
+PATH=./:${PATH}
+time run-autotest-tests ${args[@]+"${args[@]}"} "${tests[@]}" 2>&1 | \
+	tee "${logfile}"
+
+# Show the test failures
+echo
+if grep -qP "\\tEND ERROR\\t" "${logfile}" ; then
+	echo "Test failures:"
+	grep -P "\\tEND ERROR\\t" "${logfile}"
+else
+	echo "No test failures"
+fi

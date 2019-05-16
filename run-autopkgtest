@@ -1,0 +1,115 @@
+#!/bin/bash -eu
+
+function build_source_package()
+{
+	local chroot=${1}
+
+	if [ "$(git ls-files --others | wc -l)" -ne 0 ] ; then
+		echo "Error: Repo is not clean" >&2
+		exit 1
+	fi
+
+	echo "Building the source package"
+	schroot -c "${chroot}" -- fakeroot debian/rules clean
+	schroot -c "${chroot}" -- dpkg-buildpackage -S -i -I -uc -us -d
+}
+
+function set_args_for_dsc()
+{
+	local dsc=${1}
+	local dsc_path pkg_version tb_debs deb tb_deb
+
+	ARGS=()
+	
+	dsc=$(readlink -e "${dsc}")
+	dsc_path=$(realpath -e "${dsc}")
+
+	# The package version
+	pkg_version=${dsc%.dsc}
+	pkg_version=${pkg_version##*_}
+
+	tb_debs=()
+	for deb in "${dsc_path}"/linux-*-generic_"${pkg_version}"_amd64.deb ; do
+		tb_deb=/${deb##*/}
+
+		ARGS+=("--copy" "${deb}:${tb_deb}")
+		tb_debs+=("${tb_deb}")
+	done
+	ARGS+=("--setup-commands" "dpkg -i ${tb_debs[*]}")
+	ARGS+=("${dsc}")
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: run-autopkgtest [-h] DISTRO [DSC]
+
+Run autopkgtest.
+
+Optional arguments:
+  -h, --help  Show this help text.
+EOF
+}
+
+distro=
+dsc=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -z "${distro}" ] ; then
+				distro=${1}
+			else
+				dsc=${1}
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${distro}" ] ; then
+	usage
+	exit 2
+fi
+
+args=()
+
+if [ -n "${dsc}" ] ; then
+	if ! [ -e "${dsc}" ] ; then
+		echo "Error: No such dsc file: ${dsc}"
+		exit 1
+	fi
+
+	set_args_for_dsc "${dsc}"
+
+else
+	# shellcheck disable=SC1091
+	. debian/debian.env
+	changelog="${DEBIAN}"/changelog
+	name=$(dpkg-parsechangelog -l "${changelog}" -S Source)
+	version=$(dpkg-parsechangelog -l "${changelog}" -S Version)
+	kernel_distro=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
+
+	dsc=../${name}_${version}.dsc
+	if ! [ -e "${dsc}" ] ; then
+		build_source_package "${kernel_distro}-amd64"
+	fi
+
+	set_args_for_dsc "${dsc}"
+fi
+
+
+logfile=../autopkgtest-${distro}-amd64.log
+image=/srv/autopkgtest/autopkgtest-${distro}-amd64.img
+
+autopkgtest \
+	--no-built-binaries \
+	--test-name ubuntu-regression-suite \
+	--log-file "${logfile}" \
+	"${args[@]}" \
+	-- \
+	qemu --cpus=2 --ram-size=2048 "${image}"

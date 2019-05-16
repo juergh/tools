@@ -1,0 +1,134 @@
+#!/bin/bash -eu
+#
+# Run autotest tests
+#
+
+function run_single()
+{
+	local test_dir suffix found ctrl_name ctrl_file
+
+	# The test directory
+	test_dir=autotest/client/tests/"${TEST}"
+
+	# Check if the test exists
+	if ! [ -d "${test_dir}" ] ; then
+		echo "--- Skipping [${TEST}] --- Test does not exist"
+		return
+	fi
+
+	# Check if the test is blacklisted
+	if [ "${FORCE}" -eq 0 ] ; then
+		for suffix in "${SERIES}" "${ARCH}" "${KERNEL}" ; do
+			if [ -e "${test_dir}"/blacklist."${suffix}" ] ; then
+				echo "--- Skipping [${TEST}] --- Test is blacklisted" \
+					 "(blacklist.${suffix})"
+				return
+			fi
+		done
+	fi
+
+	# Find the control file
+	found=0
+	for ctrl_name in control.ubuntu."${SERIES}" control.ubuntu control ; do
+		ctrl_file="${test_dir}"/"${ctrl_name}"
+		if [ -e "${ctrl_file}" ] ; then
+			found=1
+			break
+		fi
+	done
+	if [ ${found} -eq 0 ] ; then
+		echo "--- Skipping [${TEST}] --- Control file not found"
+		return
+	fi
+
+	# Finally run the test
+	echo "--- Running [${TEST}]"
+	AUTOTEST_PATH=${PWD}/autotest sudo -E autotest/client/autotest-local \
+		--verbose "${ctrl_file}"
+}
+
+
+function usage()
+{
+	cat <<EOF
+Usage: run-autotest-tests [-c] [-f] [-h] TEST [TEST ...]
+
+Run the specified autotest tests.
+
+Postional arguments:
+  TEST  The name of an autotest (client) test.
+
+Optional arguments:
+  -c, --clean  Clean before run (delete and clone the client tests).
+  -f, --force  Run a test even if it is blacklisted.
+  -h, --help   Show this help text.
+EOF
+}
+
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+CLEAN=0
+FORCE=0
+TESTS=()
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-c|--clean)
+			CLEAN=1
+			;;
+		-f|--force)
+			FORCE=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-*)
+			usage
+			exit 2
+			;;
+		*)
+			TESTS=("${@}")
+			break
+			;;
+	esac
+	shift
+done
+
+if [ "${#TESTS[@]}" -eq 0 ] ; then
+	usage
+	exit 2
+fi
+
+# Cleanup the client tests
+if [ -d autotest/client/tests/.git ] ; then
+	sudo chown -R "$(id -u):$(id -g)" autotest/client/tests/
+	if [ ${CLEAN} -eq 1 ] ; then
+		sudo rm -rf autotest/client/tmp/*
+	fi
+fi
+
+# Clone (or update) the necessary repos
+for repo in autotest autotest-client-tests ; do
+	repo_dir=${repo//-//}
+	if [ -d "${repo_dir}/.git" ] ; then
+		# juergh: git --git-dir=... doesn't seem to be working correctly on
+		# Precise, so cd to the git directory instead
+		( cd "${repo_dir}" && git fetch origin master )
+		( cd "${repo_dir}" && git reset --hard FETCH_HEAD )
+	else
+		git clone git://kernel.ubuntu.com/ubuntu/"${repo}" "${repo_dir}"
+	fi
+done
+
+# Set some globals
+SERIES=$(lsb_release -c -s)
+ARCH=$(dpkg --print-architecture)
+KERNEL=$(uname -r | sed 's,-.*,,')
+
+# Run the tests
+for TEST in "${TESTS[@]}" ; do
+	run_single
+done
