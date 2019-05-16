@@ -1,0 +1,131 @@
+#!/bin/bash -eu
+#
+# Get an access token from launchpad and save it locally
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: lp-get-access-token [-h] CONSUMER_KEY
+
+Get an access token from launchpad and save it locally. For details see:
+https://help.launchpad.net/API/SigningRequests
+
+CONSUMER_KEY  The consumer key identifies your application and it should be
+              hard-coded somewhere in your code. Everyone who uses your
+              application will send the same consumer key.
+
+Options:
+  -h, --help  Show this help text.
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+consumer_key=
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${consumer_key}" ] ; then
+				echo "Unexpected argument: ${1}"
+				exit 1
+			fi
+			consumer_key=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${consumer_key}" ] ; then
+	usage
+	exit 2
+fi
+
+# -----------------------------------------------------------------------------
+# Get a request token from LP
+
+url=https://launchpad.net/+request-token
+data=(
+	"oauth_consumer_key=${consumer_key}"
+	"oauth_signature_method=PLAINTEXT"
+	"oauth_signature=%26"
+)
+_data=$(printf "%s&" "${data[@]}")
+_data=${_data%&}
+
+declare -A request_token
+# shellcheck disable=SC1003
+while IFS='=' read -r key val ; do
+	request_token[${key}]=${val}
+done < <(curl --silent --show-error --data "${_data}" "${url}" | \
+			 sed -e '$a\' | tr '&' '\n')
+
+if [ -z "${request_token[oauth_token]:-}" ] ; then
+	echo "Failed to get a request token"
+	echo -n "Response: "
+	for key in "${!request_token[@]}" ; do
+		echo -n "${key} ${request_token[${key}]}"
+	done
+	echo
+	exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# Prompt the user to authorize the token in LP
+
+cat <<EOF
+Open the following website in your browser to authorize the token:
+
+https://launchpad.net/+authorize-token?oauth_token=${request_token[oauth_token]}
+
+EOF
+echo -n "Press ENTER when done"
+read -r
+
+# -----------------------------------------------------------------------------
+# Get an access token from LP
+
+url=https://launchpad.net/+access-token
+data=(
+	"oauth_token=${request_token[oauth_token]}"
+	"oauth_consumer_key=${consumer_key}"
+	"oauth_signature_method=PLAINTEXT"
+	"oauth_signature=%26${request_token[oauth_token_secret]}"
+)
+_data=$(printf "%s&" "${data[@]}")
+_data=${_data%&}
+
+declare -A access_token
+# shellcheck disable=SC1003
+while IFS='=' read -r key val ; do
+	access_token[${key}]=${val}
+done < <(curl --silent --show-error --data "${_data}" "${url}" | \
+			 sed -e '$a\' | tr '&' '\n')
+
+if [ -z "${access_token[oauth_token]:-}" ] ; then
+	echo "Failed to get an access token"
+	echo -n "Response: "
+	for key in "${!access_token[@]}" ; do
+		echo -n "${key} ${access_token[${key}]}"
+	done
+	echo
+	exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# Save the token
+
+dot_lp=~/.lp-token.${consumer_key}
+(
+	for i in "${!access_token[@]}" ; do
+		echo "${i}=${access_token[${i}]}"
+	done
+) >"${dot_lp}"
+chmod 600 "${dot_lp}"
+
+echo "Access token saved to '${dot_lp}'"
