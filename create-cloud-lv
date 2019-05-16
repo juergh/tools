@@ -1,4 +1,7 @@
 #!/bin/bash -eu
+#
+# Create an LV containing the root fs of a cloud image for multi-boot
+#
 
 function out()
 {
@@ -8,6 +11,9 @@ function out()
 	set +e
 
 	if [ -n "${MOUNTP}" ] ; then
+		if [ -e "${MOUNTP}"/etc/resolv.conf.orig ] ; then
+			mv "${MOUNTP}"/etc/resolv.conf.orig "${MOUNTP}"/etc/resolv.conf
+		fi
 		unmount_lv_device
 	fi
 
@@ -109,7 +115,7 @@ function copy_rootfs()
 	dd ibs=512 skip="${start}" count="${count}" if="${IMAGE}" of="${LV_DEVICE}"
 
 	pr_info "Set label on ${LV_DEVICE}"
-	e2label "${LV_DEVICE}" "${RELEASE}-${ARCH}"
+	e2label "${LV_DEVICE}" "${LV_LABEL}"
 }
 
 function mount_lv_device()
@@ -124,13 +130,6 @@ function mount_lv_device()
 	for dev in /dev /proc /sys ; do
 		mount -o bind "${dev}" "${MOUNTP}${dev}"
 	done
-
-	# Temporary fix for resolv.conf
-	mv "${MOUNTP}"/etc/resolv.conf "${MOUNTP}"/etc/resolv.conf.orig
-	cat << EOF > "${MOUNTP}"/etc/resolv.conf
-search fritz.box
-nameserver 192.168.1.1
-EOF
 }
 
 function unmount_lv_device()
@@ -138,9 +137,6 @@ function unmount_lv_device()
 	local dev
 
 	pr_info "Unmount ${LV_DEVICE}"
-
-	# Restore resolv.conf
-	mv "${MOUNTP}"/etc/resolv.conf.orig "${MOUNTP}"/etc/resolv.conf
 
 	for dev in /dev /proc /sys ; do
 		umount "${MOUNTP}${dev}" || umount -l "${MOUNTP}${dev}"
@@ -150,33 +146,48 @@ function unmount_lv_device()
 	rmdir "${MOUNTP}"
 }
 
-function configure_lv_device()
+function fix_resolv_conf()
 {
-	local rootfs seedd timezone sudo_group keyid virtual kernel
+	if [ -e "${CONFIGD}"/resolv.conf ] ; then
+		echo "Fix resolv.conf temporarily"
+		mv "${MOUNTP}"/etc/resolv.conf "${MOUNTP}"/etc/resolv.conf.orig
+		cp "${CONFIGD}"/etc/resolv.conf "${MOUNTP}"/etc/
+	fi
+}
 
-	# -------------------------------------------------------------------------
-	# Blacklist the e1000 driver
-	cat <<EOF > "${MOUNTP}"/etc/modprobe.d/blacklist-e1000e.conf
-blacklist e1000e
-EOF
+function blacklist_modules()
+{
+	local files
 
-	# -------------------------------------------------------------------------
-	# Fix /etc/fstab
+	readarray -t files < <(find "${CONFIGD}"/ -type f -name 'blacklist-*.conf')
+	if [ "${#files[@]}" -eq 0 ] ; then
+		return
+	fi
 
-	if grep -q 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab ; then
-		pr_info "Recreate etc/fstab"
-		rootfs=$(grep 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab | \
-					 sed "s,.*LABEL=cloudimg-rootfs,${LV_DEVICE},")
-		cat <<EOF > "${MOUNTP}"/etc/fstab
+	pr_info "Blacklist modules"
+	cp "${files[@]}" "${MOUNTP}"/etc/modprobe.d/
+}
+
+function create_fstab()
+{
+	local rootfs
+
+	if grep -q "LABEL=${LV_LABEL}" "${MOUNTP}"/etc/fstab ; then
+		return
+	fi
+
+	pr_info "Recreate etc/fstab"
+	rootfs=$(grep 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab | \
+				 sed "s,.*LABEL=cloudimg-rootfs,${LV_LABEL},")
+	cat <<EOF > "${MOUNTP}"/etc/fstab
 ${rootfs}
 /dev/mapper/vg0-home   /home       ext4   defaults   0   2
 /dev/mapper/vg0-swap   none        swap   sw         0   0
 EOF
-	fi
+}
 
-	# -------------------------------------------------------------------------
-	# Configure grub
-
+function configure_grub()
+{
 	pr_info "Create usr/local/sbin/update-grub"
 	cat <<EOF > "${MOUNTP}"/usr/local/sbin/update-grub
 #!/bin/bash
@@ -205,9 +216,11 @@ EOF
 
 	pr_info "Update grub"
 	chroot "${MOUNTP}" update-grub
+}
 
-	# -------------------------------------------------------------------------
-	# Configure cloud-init
+function configure_cloud_init()
+{
+	local seedd timezone
 
 	seedd="${MOUNTP}"/var/lib/cloud/seed/nocloud
 	test -d "${seedd}" || mkdir -p  "${seedd}"
@@ -238,46 +251,60 @@ EOF
 	if [ "${RECONFIG}" -eq 1 ] ; then
 		pr_info "Clean cloud-init"
 		if [ "${RELEASE}" = "precise" ] || [ "${RELEASE}" = "trusty" ] ; then
-			rm -rf /var/lib/cloud
+			rm -rf "${MOUNTP}"/var/lib/cloud
 		else
 			chroot "${MOUNTP}" cloud-init clean
 		fi
 	fi
+}
 
-	# -------------------------------------------------------------------------
-	# Add user and group
-	# TODO: let cloud-init take care of this
+function add_user_group()
+{
+	local sudo_group
 
-	if [ -n "${SUDO_USER:-}" ] && \
-	   ! grep -qP "^${SUDO_USER:-}:" "${MOUNTP}"/etc/passwd ; then
-		sudo_group=$(id -g "${SUDO_GID}" -n)
-		pr_info "Add group ${sudo_group}"
-		chroot "${MOUNTP}" addgroup --gid "${SUDO_GID}" "${sudo_group}"
-
-		pr_info "Add user ${SUDO_USER}"
-		chroot "${MOUNTP}" adduser --gid "${SUDO_GID}" --uid "${SUDO_UID}" \
-			   --gecos "" --disabled-password --no-create-home "${SUDO_USER}"
-
-		pr_info "Create etc/sudoers.d/${SUDO_USER}"
-		echo "${SUDO_USER} ALL = NOPASSWD: ALL" > \
-			 "${MOUNTP}"/etc/sudoers.d/"${SUDO_USER}"
-		chmod 440 "${MOUNTP}"/etc/sudoers.d/"${SUDO_USER}"
+	if [ -z "${SUDO_USER:-}" ] || grep -qP "^${SUDO_USER:-}:" \
+									   "${MOUNTP}"/etc/passwd ; then
+		return
 	fi
 
-	# -------------------------------------------------------------------------
-	# Add the ESM apt repo
+	sudo_group=$(id -g "${SUDO_GID}" -n)
+	pr_info "Add group ${sudo_group}"
+	chroot "${MOUNTP}" addgroup --gid "${SUDO_GID}" "${sudo_group}"
 
-	if [ "${RELEASE}" = "precise" ] ; then
-		pr_info "Add ESM PPA apt repo"
-		cp precise/precise-esm.list "${MOUNTP}"/etc/apt/sources.list.d/
-		# Download the PPA public key
-		keyid=$(awk '/PPA public key/ { print $NF }' precise/precise-esm.list)
+	pr_info "Add user ${SUDO_USER}"
+	chroot "${MOUNTP}" adduser --gid "${SUDO_GID}" --uid "${SUDO_UID}" \
+		   --gecos "" --disabled-password --no-create-home "${SUDO_USER}"
+
+	pr_info "Create etc/sudoers.d/${SUDO_USER}"
+	echo "${SUDO_USER} ALL = NOPASSWD: ALL" > \
+		 "${MOUNTP}"/etc/sudoers.d/"${SUDO_USER}"
+	chmod 440 "${MOUNTP}"/etc/sudoers.d/"${SUDO_USER}"
+}
+
+function add_apt_repos()
+{
+	local files keyids keyid
+
+	readarray -t files < <(find "${CONFIGD}"/ -type f -name '*.list')
+	if [ "${#files[@]}" -eq 0 ] ; then
+		return
+	fi
+
+	pr_info "Add APT repos"
+	cp "${files[@]}" "${MOUNTP}"/etc/apt/sources.list.d/
+
+	# Download the PPA public keys
+	readarray -t keyids < <(awk '/PPA public key/ { print $NF }' \
+								"${MOUNTP}"/etc/apt/sources.list.d/*.list)
+	for keyid in "${keyids[@]}" ; do
 		chroot "${MOUNTP}" apt-key adv --keyserver keyserver.ubuntu.com \
 			   --recv-key "${keyid}"
-	fi
+	done
+}
 
-	# -------------------------------------------------------------------------
-	# Install additional packages for lvm2 and the NIC driver
+function install_packages()
+{
+	local virtual kernel debs
 
 	if [ "${RELEASE}" = "precise" ] ; then
 		pr_info "Install additional packages for Precise"
@@ -292,11 +319,6 @@ EOF
 		chroot "${MOUNTP}" apt-get purge -y "${virtual[@]}"
 		chroot "${MOUNTP}" apt-get autoremove -y --purge
 
-		# Install the igb DKMS package
-		rm -rf "${MOUNTP}"/var/tmp/*.deb
-		cp precise/*.deb "${MOUNTP}"/var/tmp/
-		chroot "${MOUNTP}" bash -c 'dpkg -i /var/tmp/*.deb'
-
 	elif [ "${RELEASE}" = "trusty" ] ; then
 		pr_info "Install additional packages for Trusty"
 
@@ -307,6 +329,15 @@ EOF
 
 		chroot "${MOUNTP}" apt update
 		chroot "${MOUNTP}" apt install -y lvm2 "linux-modules-extra-${kernel}"
+	fi
+
+	# Install local packages
+	readarray -t debs < <(find "${CONFIGD}"/ -type f -name '*.deb')
+	if [ "${#debs[@]}" -gt 0 ] ; then
+		pr_info "Install local packages"
+		rm -rf "${MOUNTP}"/var/tmp/*.deb
+		cp "${debs[@]}" "${MOUNTP}"/var/tmp/
+		chroot "${MOUNTP}" bash -c 'dpkg -i /var/tmp/*.deb'
 	fi
 }
 
@@ -375,11 +406,28 @@ if [ -z "${RELEASE}" ] ; then
 	exit 2
 fi
 
+# Globals
+IMAGE=
 MOUNTP=
+LV_DEVICE=
+LV_LABEL=${RELEASE}-${ARCH}
+CONFIGD=create-cloud-lv.d/$(hostname)
+
 trap out EXIT INT TERM HUP
 
+# Download the cloud image
 download_image
+
+# Create the LV, copy the root filesystem and mount it
 create_lv_device
 copy_rootfs
 mount_lv_device
-configure_lv_device
+
+# Configure the LV
+fix_resolv_conf
+blacklist_modules
+create_fstab
+configure_cloud_init
+add_user_group
+add_apt_repos
+install_packages
