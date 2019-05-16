@@ -2,4 +2,3 @@
 *.pyc
 __pycache__
 create-cloud-lv.d/*-esm.list
-create-cloud-lv.d/*.deb
