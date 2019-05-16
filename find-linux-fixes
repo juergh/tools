@@ -1,0 +1,55 @@
+#!/bin/bash -eu
+#
+# Search the linux 'Fixes:' file for commits that fix the given commit(s).
+#
+
+LINUX_FIXES=/srv/git/linux.fixes
+
+function find_fixes()
+{
+	local commit=${1}
+	local fixes fix
+
+	readarray -t fixes < <(grep -P "__FIXES__\s+${commit::12}" "${LINUX_FIXES}")
+
+	for fix in "${fixes[@]}" ; do
+		echo "${fix%% __FIXES__*}"
+		find_fixes "${fix%% *}"
+	done
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: find-linux-fixes [-d] COMMIT [COMMIT ...]
+
+Find 'Fixes:' commits in the main Linux repo for the specified COMMIT.
+
+Optional arguments:
+  -h, --help  Show this help text.
+EOF
+}
+
+commits=()
+
+while [ $# -gt 0 ] ; do
+    case "${1}" in
+        -h|--help)
+            usage
+            exit
+            ;;
+        -*)
+            echo "Unexpected argument: ${1}" 1>&2
+            exit 1
+            ;;
+        *)
+			commits=("${@}")
+			break
+            ;;
+    esac
+    shift
+done
+
+for commit in "${commits[@]}" ; do
+	find_fixes "${commit}"
+done
