@@ -1,6 +1,8 @@
 #!/bin/sh -eu
 #
-# List 'Fixes: ' commits
+# Search the given git repo for commits with 'Fixes:' tags and add them
+# to the given file. This creates a fast searchable 'database' for commits
+# that fix other commits.
 #
 
 git_dir=${1}
