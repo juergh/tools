@@ -1,0 +1,132 @@
+#!/bin/bash -eu
+#
+# Helper script for managing Debian/Ubuntu package git repos
+#
+
+function out()
+{
+        local rc=$?
+
+        trap - INT TERM EXIT HUP
+
+        if [ ${rc} -ne 0 ] ; then
+			pr_error "Script failed"
+        fi
+
+        exit "${rc}"
+}
+
+function pr_error()
+{
+        echo -e "\033[31m${*}\033[0m" 1>&2
+}
+
+function set_globals()
+{
+	local remote
+
+	remote=$(git remote get-url origin)
+	repo=${remote##*/}
+
+	case "${repo}" in
+		kteam-tools)
+			SUBJECT_PREFIX="kteam-tools][PATCH"
+			;;
+	esac
+}
+
+function do_format_patch()
+{
+    local opts
+
+    # Additional options
+	opts=()
+    if [ "${COVER_LETTER}" -eq 1 ] ; then
+        opts+=("--cover-letter")
+    fi
+	if [ -n "${SUBJECT_PREFIX}" ] ; then
+        opts+=("--subject-prefix=${SUBJECT_PREFIX}")
+	fi
+
+    rm -rf .outgoing/
+    git format-patch -o .outgoing/ "${opts[@]}" "${@}"
+}
+
+function do_send_email()
+{
+	local opts
+
+    # Additional options
+	opts=()
+	if [ "${DRY_RUN}" -eq 1 ] ; then
+		opts+=("--dry-run")
+	fi
+
+    # Just in case
+    rm -f .outgoing/*~
+
+    git send-email .outgoing/ --suppress-cc=all "${opts[@]}"
+}
+
+
+function do_send_single()
+{
+    COVER_LETTER=0
+    do_format_patch -1
+
+	do_send_email
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: git-deb [-h] [-d] COMMAND
+
+Helper script for managing Ubuntu package git repos.
+
+Supported commands:
+  send-single  Send a single patch as an email.
+
+Optional arguments:
+  -d, --dry-run
+  -h, --help     Show this help text.
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+DRY_RUN=0
+COVER_LETTER=
+SUBJECT_PREFIX=
+
+cmd=
+
+while [ ${#} -gt 0 ] ; do
+    case ${1} in
+		-d|--dry-run)
+			DRY_RUN=1
+			;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+		send-single)
+			cmd=${1//-/_}
+			break
+			;;
+        *)
+			pr_error "Unexpected argument"
+			exit 1
+            ;;
+    esac
+    shift
+done
+
+if [ -z "${cmd}" ] ; then
+	usage
+    exit 2
+fi
+
+set_globals
+do_"${cmd}" "${@}"
