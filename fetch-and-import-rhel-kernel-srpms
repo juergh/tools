@@ -1,0 +1,104 @@
+#!/bin/bash -eu
+#
+# Fetch and import RHEL kernel SRPMS
+#
+
+function import_kernel_srpms()
+{
+	local release=${1}
+	local pocket url el srpms srpm version
+
+	[ -d SRPMS ] || mkdir SRPMS
+
+	for pocket in "os" "updates" ; do
+		url=http://vault.centos.org/"${release}"/"${pocket}"/Source/SPackages/
+		el=el${release%%.*}
+
+		# Get the list of available kernel SRPMS for this release and pocket
+		readarray -t srpms < <(curl -s "${url}" | \
+							   grep -oP ">kernel-[0-9]+.*.${el}.src.rpm<" | \
+							   tr -d '><' | \
+							   sort -V)
+
+		for srpm in "${srpms[@]}" ; do
+			# Check if the SRPM has already been imported
+			version=${srpm%.src.rpm}
+			version=${version#kernel-}
+			if git log --format=%s | grep -q "^Import kernel version ${version}$" ; then
+				echo "Skipping ${srpm} (already imported)"
+				continue
+			fi
+
+			echo $release
+			echo "Importing ${srpm}"
+
+			# Skip the download and import if it's a dry run
+			if [ "${DRY_RUN}" -eq 1 ] ; then
+				continue
+			fi
+
+			# wnload the SRPM
+			if ! [ -e SRPMS/"${srpm}" ] ; then
+				wget -O  SRPMS/"${srpm}" "${url}${srpm}"
+			fi
+
+			# Import the SRPM
+			import-kernel-srpm SRPMS/"${srpm}"
+
+			# Tag the release
+			if ! git rev-parse --verify "${release}" >/dev/null 2>&1 ; then
+				git tag "${release}"
+			fi
+		done
+	done
+}
+
+function usage()
+{
+	cat <<EOF
+usage: fetch-and-import-rhel-kernel-srpms [-h] [-d] RELEASE [RELEASE ...]
+
+Optional arguments:
+  -d, --dry-run  Do a dry run (don't download and import).
+  -h, --help     Show this help text.
+EOF
+}
+
+releases=()
+DRY_RUN=0
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-d|--dry-run)
+			DRY_RUN=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+		*)
+			releases+=("${1}")
+			;;
+	esac
+	shift
+done
+
+if [ "${#releases[@]}" -eq 0 ] ; then
+	releases=(
+		7.0.1406
+		7.1.1503
+		7.2.1511
+		7.3.1611
+		7.4.1708
+		7.5.1804
+		7.6.1810
+	)
+fi
+
+for release in "${releases[@]}" ; do
+	import_kernel_srpms "${release}"
+done
