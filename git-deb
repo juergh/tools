@@ -28,11 +28,13 @@ function set_globals()
 	remote=$(git remote get-url origin)
 	repo=${remote##*/}
 
-	case "${repo}" in
-		kteam-tools)
-			SUBJECT_PREFIX="kteam-tools][PATCH"
-			;;
-	esac
+	if [ "${repo}" = kteam-tools ] ; then
+		SUBJECT_PREFIX="kteam-tools][PATCH"
+	else
+		. debian/debian.env
+		distro=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
+		SUBJECT_PREFIX="SRU][${distro^}][PATCH"
+	fi
 }
 
 function do_format_patch()
@@ -50,6 +52,15 @@ function do_format_patch()
 
     rm -rf .outgoing/
     git format-patch -o .outgoing/ "${opts[@]}" "${@}"
+
+	if [ "${DRY_RUN}" -eq 1 ] ; then
+		for p in .outgoing/*.patch ; do
+			echo
+			echo -e "\e[33m*** ${p#*/} ***\e[0m"
+			echo
+			cat "${p}" | colordiff
+		done
+	fi
 }
 
 function do_send_email()
@@ -62,10 +73,7 @@ function do_send_email()
 		opts+=("--dry-run")
 	fi
 
-    # Just in case
-    rm -f .outgoing/*~
-
-    git send-email .outgoing/ --suppress-cc=all "${opts[@]}"
+    git send-email .outgoing/*.patch --suppress-cc=all "${opts[@]}"
 }
 
 
