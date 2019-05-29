@@ -269,7 +269,7 @@ EOF
 
 function define_vm()
 {
-	local tmpf
+	local tmpf here
 	export NAME UUID OS_LOADER KERNEL_PATH INITRD_PATH KERNEL_CMDLINE \
 		   OS_IMAGE_PATH CONFIG_DRIVE_PATH MAC_ADDRESS VM_ARCH
 
@@ -296,7 +296,8 @@ function define_vm()
 	VM_ARCH=${ARCH_MAP["${ARCH}"]}
 
 	# Create the domain XML and define the VM
-	envsubst < "$(realpath -e "${0}").d/domain-${VM_ARCH}.xml" > "${tmpf}"
+	here=$(dirname "$(realpath -e "${0}")")
+	envsubst < "${here}/config/create-vm/domain-${VM_ARCH}.xml" > "${tmpf}"
 	virsh define "${tmpf}"
 
 	rm -f "${tmpf}"
