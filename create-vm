@@ -18,6 +18,11 @@ function pr_error()
 	echo -e "\033[31m${*}\033[0m" 1>&2
 }
 
+function pr_info()
+{
+	echo -e "\033[33m${*}\033[0m"
+}
+
 function print_var()
 {
 	local var val
@@ -25,7 +30,7 @@ function print_var()
 	for var in "${@}" ; do
 		val=${!var}
 		if [ -n "${val}" ] ; then
-			printf "%-13s: %s\n" "${var}" "${val}"
+			pr_info "$(printf "%-13s: %s\n" "${var}" "${val}")"
 		fi
 	done
 }
@@ -470,7 +475,7 @@ fi
 # Download and resize the cloud image
 
 if virsh vol-info --pool default "${OS_IMAGE}" >/dev/null 2>&1 ; then
-	echo "Image '${OS_IMAGE}' exists already."
+	pr_info "Image '${OS_IMAGE}' exists already."
 else
 	download_"${VENDOR}"_image
 fi
@@ -479,7 +484,7 @@ fi
 # Create the config drive
 
 if virsh vol-info --pool default "${CONFIG_DRIVE}" >/dev/null 2>&1 ; then
-	echo "Config drive '${CONFIG_DRIVE}' exists already."
+	pr_info "Config drive '${CONFIG_DRIVE}' exists already."
 else
 	create_config_drive
 fi
