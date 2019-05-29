@@ -18,7 +18,6 @@ function pr_error()
 	echo -e "\033[31m${*}\033[0m" 1>&2
 }
 
-
 function print_var()
 {
 	local var val
@@ -31,20 +30,10 @@ function print_var()
 	done
 }
 
-
-function has_grub()
-{
-	[ "${ARCH}" = "amd64" ] || \
-		[ "${ARCH}" = "i386" ] || \
-		[ "${ARCH}" = "x86_64" ]
-}
-
-
 function has_direct_boot()
 {
 	[ "${ARCH}" = "armhf" ]
 }
-
 
 function mount_image()
 {
@@ -58,7 +47,6 @@ function mount_image()
 	guestmount --pid-file "${mountp}.pid" -a "${image}" -m /dev/sda1 --rw \
 			   -o dev -o allow_root "${mountp}"
 }
-
 
 function unmount_image()
 {
@@ -82,7 +70,6 @@ function unmount_image()
 	rm -f "${mountp}.pid"
 }
 
-
 function download_image()
 {
 	local url=${1}
@@ -96,6 +83,7 @@ function download_image()
 	# Download the cloud image
 	wget -O "${tmpf}" "${url}"
 
+	# Extract the kernel and initrd from the image for direct boot
 	if has_direct_boot ; then
 		tmpd=$(mktemp -d)
 		# shellcheck disable=SC2064
@@ -151,7 +139,6 @@ EOF
 	trap - EXIT INT TERM HUP
 }
 
-
 function download_fedora_image()
 {
 	local url pattern name
@@ -169,7 +156,6 @@ function download_fedora_image()
 
 	download_image "${url}"
 }
-
 
 function download_debian_image()
 {
@@ -196,7 +182,6 @@ function download_debian_image()
 	download_image "${url}"
 }
 
-
 function download_ubuntu_image()
 {
 	local suffix name url
@@ -215,7 +200,6 @@ function download_ubuntu_image()
 
 	download_image "${url}"
 }
-
 
 function create_config_drive()
 {
@@ -251,33 +235,18 @@ max_wait: 2
 # Set the hostname early on first boot
 bootcmd:
   - [ cloud-init-per, once, hostname, hostname, ${NAME} ]
-EOF
 
-	if has_grub ; then
-		cat <<EOF >>"${tmpd}/user-data"
-
-# Fix grub
-# Some images are having problems finding the boot device so we reinstall grub
-# which seems to fix that. While at it, enable the boot menu and purge the
-# infamous 40-force-partuuid.cfg config file to prevent booting without an
-# initrd first.
+# Run the create-vm init script
 runcmd:
-  - |
-    if ! test -e /etc/cloud/create-vm ; then
-    rm -f /etc/default/grub.d/40-force-partuuid.cfg
-    test -d /etc/default/grub.d || mkdir /etc/default/grub.d
-    cat <<__EOF__ > /etc/default/grub.d/99-create-vm.cfg
-    unset GRUB_HIDDEN_TIMEOUT GRUB_TIMEOUT_STYLE
-    GRUB_TIMEOUT=2
-    GRUB_CMDLINE_LINUX_DEFAULT="console=tty1 console=ttyS0"
-    __EOF__
-    grub-install /dev/vda
-    update-grub
-    date -R > /etc/cloud/create-vm
-    fi
+  - dev=\$(findfs LABEL=cidata)
+    mnt=\$(grep '^\${dev} ' /proc/mounts | cut -f 2 -d ' ')
+    \${mnt}/create-vm
 EOF
-	fi
 
+	# copy the create-vm init script
+	cp config/create-vm/create-vm "${tmpd}"
+
+	# Create the config drive ISO image
 	genisoimage -ldots -allow-lowercase -allow-multidot -l -J -r \
 				-o "${tmpf}" -V cidata "${tmpd}"
 
@@ -297,7 +266,6 @@ EOF
 	rm -rf "${tmpf}" "${tmpf2}" "${tmpd}"
 	trap - EXIT INT TERM HUP
 }
-
 
 function define_vm()
 {
@@ -335,7 +303,6 @@ function define_vm()
 	trap - EXIT INT TERM HUP
 }
 
-
 function usage()
 {
 	cat <<EOF
@@ -357,7 +324,6 @@ Optional arguments:
   -u, --uefi       Configure the VM to boot from UEFI.
 EOF
 }
-
 
 # -----------------------------------------------------------------------------
 # Main entry point
