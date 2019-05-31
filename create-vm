@@ -86,7 +86,11 @@ function download_image()
 	trap "rm -f ${tmpf} ${tmpf2}" EXIT INT TERM HUP
 
 	# Download the cloud image
-	wget -O "${tmpf}" "${url}"
+	if [ -n "${USE_IMAGE}" ] ; then
+		cp "${USE_IMAGE}" "${tmpf}"
+	else
+		wget -O "${tmpf}" "${url}"
+	fi
 
 	# Extract the kernel and initrd from the image for direct boot
 	if has_direct_boot ; then
@@ -243,9 +247,15 @@ bootcmd:
 
 # Run the create-vm init script
 runcmd:
-  - dev=\$(findfs LABEL=cidata)
-    mnt=\$(grep '^\${dev} ' /proc/mounts | cut -f 2 -d ' ')
-    \${mnt}/create-vm
+  - |
+    if ! [ -e /etc/cloud/create-vm ] ; then
+    test -d /mnt/cidata || mkdir /mnt/cidata
+    dev=\$(findfs LABEL=cidata)
+    mount \${dev} /mnt/cidata
+    cp /mnt/cidata/create-vm /etc/cloud/create-vm
+    umount /mnt/cidata
+    /etc/cloud/create-vm
+    fi
 EOF
 
 	# copy the create-vm init script
@@ -312,22 +322,25 @@ function define_vm()
 function usage()
 {
 	cat <<EOF
-Usage: create-vm [-a ARCH] [-d] [-f] [-h] [-u] DIST [NAME]
+Usage: create-vm [-a ARCH] [-d] [-f] [-h] [-i IMAGE] [-s SIZE] [-u] DIST [NAME]
 
 Create a libvirt guest VM.
 
 Positional arguments:
   DIST  A recognized distrbution, like bionic, stretch, fedora-26, ...
-  NAME  The libvirt domain name, defaults to <DIST>[-uefi][-<ARCH>] if not
-        specified.
+  NAME  The libvirt domain name. If not specified, defaults to
+        <DIST>[-uefi][-<ARCH>].
 
 Optional arguments:
-  -a, --arch ARCH  Architecture of the VM (defaults to the host architecture).
-  -d, --debug      Enable debugging (set -x).
-  -f, --force      Force the recreation of an existing VM.
-  -h, --help       Show this help text.
-  -s, --size SIZE  Image size in GB. If not specified, defaults to 8(GB).
-  -u, --uefi       Configure the VM to boot from UEFI.
+  -a, --arch ARCH    Architecture of the VM. If not specified, defaults to the
+                     host architecture.
+  -d, --debug        Enable debugging (set -x).
+  -f, --force        Force the recreation of an existing VM.
+  -h, --help         Show this help text and exit.
+  -i, --image IMAGE  Use image <IMAGE> as the guest VM image. If not specified,
+                     download and use a cloud image.
+  -s, --size SIZE    Image size in GB. If not specified, defaults to 8(GB).
+  -u, --uefi         Configure the VM to boot from UEFI.
 EOF
 }
 
@@ -340,6 +353,7 @@ UEFI=0
 DIST=
 NAME=
 SIZE=8
+USE_IMAGE=
 
 while [ ${#} -gt 0 ] ; do
 	case ${1} in
@@ -357,6 +371,10 @@ while [ ${#} -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-i|--image)
+			shift
+			USE_IMAGE=${1}
 			;;
 		-s|--size)
 			SIZE=${2}

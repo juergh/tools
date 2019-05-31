@@ -3,11 +3,6 @@
 # Init script for create-vm which is run on first boot
 #
 
-# Bail if we ran already
-if [ -e /etc/cloud/create-vm ] ; then
-	exit
-fi
-
 # Fix grub
 if -e [ /etc/default/grub ] ; then
 	# Purge the infamous 40-force-partuuid.cfg config file to prevent booting
@@ -28,4 +23,4 @@ __EOF__
 fi
 
 # All done
-date -R > /etc/cloud/create-vm
+date -R > /etc/cloud/create-vm.done
