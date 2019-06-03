@@ -1,0 +1,123 @@
+#!/bin/bash -eu
+#
+# Run the Ubuntu kernel dep8 tests.
+# This is what the ubuntu-regression-suite autopkgtest test runs.
+#
+
+function out()
+{
+	local swap
+
+	trap - EXIT INT TERM HUP
+
+	# Turn off stress-ng's swapfile in case of sudden death
+	while IFS= read -r swap ; do
+		sudo swapoff "${swap}"
+	done < <(grep "/dep8-tests/" /proc/swaps | cut -f 1 -d " ")
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: run-dep8-tests [-d] [-h] [-v] [TEST [TEST...]]
+
+Run the kernel dep8 testsuite.
+
+Positional argument:
+  TEST  Only run the specified test <TEST> instead of the whole suite.
+
+Optional arguments:
+  -d, --dry-run  Don't clone and don't run the actual test(s).
+  -v, --verbose  Enable verbose output.
+  -h, --help     Show this help text and exit.
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+dry_run=0
+verbose=0
+dep8_tests=()
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-d|--dry-run)
+			dry_run=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-v|--verbose)
+			verbose=1
+			;;
+		*)
+			dep8_tests+=("${1}")
+			;;
+	esac
+	shift
+done
+
+# Check for a Python interpreter
+# shellcheck disable=SC2230
+if [ -z "$(which python)" ] ; then
+	echo "No Python interpreter found. Run 'apt install python'." >&2
+	exit 1
+fi
+
+# Check for APT 'source' URIs
+if ! grep -q '^deb-src ' /etc/apt/sources.list ; then
+	echo "No APT 'source' URIs found in /etc/apt/sources.list." >&2
+	exit 1
+fi
+
+# The logfile
+logfile="${PWD}"/dep8_"$(uname -r)".log
+
+# Cleanup
+sudo rm -rf dep8-tests
+mkdir dep8-tests
+cd dep8-tests
+
+# Register an exit handler
+trap out EXIT INT TERM HUP
+
+{
+	if [ "${dry_run}" -eq 0 ] ; then
+		# Clone the tests
+		git clone git://kernel.ubuntu.com/ubuntu/kernel-testing
+
+		# Patch run-dep8-tests to accept commandline options
+		sed -i -e 's,\(kernel-testing/dep8-runner\),\1 "${@}",' \
+			kernel-testing/run-dep8-tests
+	fi
+
+	# Assemble the dep8 commandline arguments
+	dep8_args=()
+	if [ "${verbose}" -eq 1 ] ; then
+		dep8_args+=("--debug")
+	fi
+	if [ "${#dep8_tests[@]}" -gt 0 ] ; then
+		dep8_args+=("--tests" "${dep8_tests[*]}")
+	fi
+
+	# Show the command and bail if it's a dry run
+	echo "kernel-testing/run-dep8-tests ${dep8_args[*]+${dep8_args[*]}}"
+	if [ "${dry_run}" -eq 1 ] ; then
+		echo "Dry-run, exiting..."
+		exit
+	fi
+
+	# Run the tests
+	time kernel-testing/run-dep8-tests ${dep8_args[@]+"${dep8_args[@]}"}
+
+	# Show the test failures
+	echo
+	if grep -qP "\\tEND ERROR\\t" "${logfile}" ; then
+        echo -e "\e[31mTest failures:\e[0m"
+        grep -P "\\tEND ERROR\\t" "${logfile}"
+	else
+        echo -e "\e[32mNo test failures\e[0m"
+	fi
+} 2>&1 | tee "${logfile}"
