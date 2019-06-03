@@ -4,7 +4,7 @@
 #
 
 # Fix grub
-if -e [ /etc/default/grub ] ; then
+if [ -e /etc/default/grub ] ; then
 	# Purge the infamous 40-force-partuuid.cfg config file to prevent booting
 	# without an initrd first
 	rm -f /etc/default/grub.d/40-force-partuuid.cfg
@@ -24,3 +24,4 @@ fi
 
 # All done
 date -R > /etc/cloud/create-vm.done
+#reboot
