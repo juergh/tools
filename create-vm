@@ -86,8 +86,8 @@ function download_image()
 	trap "rm -f ${tmpf} ${tmpf2}" EXIT INT TERM HUP
 
 	# Download the cloud image
-	if [ -n "${USE_IMAGE}" ] ; then
-		cp "${USE_IMAGE}" "${tmpf}"
+	if [ -n "${IMAGE}" ] ; then
+		cp "${IMAGE}" "${tmpf}"
 	else
 		wget -O "${tmpf}" "${url}"
 	fi
@@ -352,7 +352,7 @@ EOF
 
 ARCH=
 FORCE=0
-USE_IMAGE=
+IMAGE=
 SIZE=8
 TYPE=
 UEFI=0
@@ -378,7 +378,7 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-i|--image)
 			shift
-			USE_IMAGE=${1}
+			IMAGE=${1}
 			;;
 		-s|--size)
 			SIZE=${2}
