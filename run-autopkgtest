@@ -1,4 +1,7 @@
 #!/bin/bash -eu
+#
+# Run the kernel ubuntu-regression-suite autopkgtest.
+#
 
 function build_source_package()
 {
@@ -14,102 +17,128 @@ function build_source_package()
 	schroot -c "${chroot}" -- dpkg-buildpackage -S -i -I -uc -us -d
 }
 
-function set_args_for_dsc()
-{
-	local dsc=${1}
-	local dsc_path pkg_version tb_debs deb tb_deb
-
-	ARGS=()
-	
-	dsc=$(readlink -e "${dsc}")
-	dsc_path=$(realpath -e "${dsc}")
-
-	# The package version
-	pkg_version=${dsc%.dsc}
-	pkg_version=${pkg_version##*_}
-
-	tb_debs=()
-	for deb in "${dsc_path}"/linux-*-generic_"${pkg_version}"_amd64.deb ; do
-		tb_deb=/${deb##*/}
-
-		ARGS+=("--copy" "${deb}:${tb_deb}")
-		tb_debs+=("${tb_deb}")
-	done
-	ARGS+=("--setup-commands" "dpkg -i ${tb_debs[*]}")
-	ARGS+=("${dsc}")
-}
-
 function usage()
 {
 	cat <<EOF
-Usage: run-autopkgtest [-h] DISTRO [DSC]
+Usage: run-autopkgtest [-c NUM] [-d] [-h] [-m NUM] [DSC] [DISTRO]
 
-Run autopkgtest.
+Run the ubuntu-regression-suite autopkgtest test.
+
+Positional arguments:
+  DSC      The kernel .dsc file to use for the test.
+  DISTRO   The distro to use for the test (xenial, bionic, ...).
 
 Optional arguments:
-  -h, --help  Show this help text.
+  -c, --cpus NUM    Number of CPUs (defaults to 2).
+  -d, --dry-run     Show the autopkgtest command but don't run it.
+  -h, --help        Show this help text.
+  -m, --memory NUM  Amount of memory in MB (defaults to 2048).
 EOF
 }
 
+dry_run=
 distro=
 dsc=
+cpus=2
+memory=2048
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-c|--cpus)
+			shift
+			cpus=${1}
+			;;
+		-d|--dry-run)
+			dry_run="echo"
+			;;
 		-h|--help)
 			usage
 			exit
 			;;
+		-m|--memory)
+			shift
+			memory=${1}
+			;;
 		*)
-			if [ -z "${distro}" ] ; then
+			if [ -z "${dsc}" ] ; then
+				dsc=${1}
+			elif [ -z "${distro}" ] ; then
 				distro=${1}
 			else
-				dsc=${1}
+				echo "Error: Unexpected argument: ${1}" >&2
+				exit 2
 			fi
 			;;
 	esac
 	shift
 done
 
-if [ -z "${distro}" ] ; then
+if [ -n "${dsc}" ] && [ -z "${distro}" ] ; then
 	usage
 	exit 2
 fi
 
-args=()
-
-if [ -n "${dsc}" ] ; then
-	if ! [ -e "${dsc}" ] ; then
-		echo "Error: No such dsc file: ${dsc}"
+if [ -z "${dsc}" ] ; then
+	if ! [ -e debian/debian.env ] ; then
+		echo "Error: Not a valid Ubuntu kernel repo" >&2
 		exit 1
 	fi
 
-	set_args_for_dsc "${dsc}"
-
-else
 	# shellcheck disable=SC1091
 	. debian/debian.env
 	changelog="${DEBIAN}"/changelog
 	name=$(dpkg-parsechangelog -l "${changelog}" -S Source)
 	version=$(dpkg-parsechangelog -l "${changelog}" -S Version)
-	kernel_distro=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
+	distro=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
 
 	dsc=../${name}_${version}.dsc
 	if ! [ -e "${dsc}" ] ; then
-		build_source_package "${kernel_distro}-amd64"
+		build_source_package "${distro}-amd64"
 	fi
-
-	set_args_for_dsc "${dsc}"
 fi
 
+if ! [ -e "${dsc}" ] ; then
+	echo "Error: No such dsc file: ${dsc}" >&2
+	exit 1
+fi
 
-logfile=../autopkgtest-${distro}-amd64.log
 image=/srv/autopkgtest/autopkgtest-${distro}-amd64.img
 
-autopkgtest \
+if ! [ -e "${image}" ] ; then
+	echo "Error: No such image file: ${image}" >&2
+	echo "You can build one by running:" >&2
+	echo "  $ autopkgtest-buildvm-ubuntu-cloud ${distro}" >&2
+	exit 1
+fi
+
+dsc=$(realpath -e "${dsc}")
+dsc_path=$(dirname "${dsc}")
+
+pkg_version=${dsc%.dsc}
+pkg_version=${pkg_version##*_}
+
+opts=()
+tb_debs=()
+while IFS= read -r deb ; do
+	tb_deb=/${deb##*/}
+	opts+=("--copy" "${deb}:${tb_deb}")
+	tb_debs+=("${tb_deb}")
+done< <(ls -1 "${dsc_path}"/linux-{image,modules}-*-generic_"${pkg_version}"_amd64.deb)
+
+opts+=("--setup-commands" "dpkg -i ${tb_debs[*]}")
+
+if [ "${#tb_debs[@]}" -eq 0 ] ; then
+	echo "Error: No kernel package found to copy into the testbed" >&2
+	exit 1
+fi
+
+logfile=autopkgtest-${distro}-amd64.log
+
+${dry_run} autopkgtest \
 	--no-built-binaries \
 	--test-name ubuntu-regression-suite \
 	--log-file "${logfile}" \
-	"${args[@]}" \
+	"${opts[@]}" \
+	"${dsc}" \
 	-- \
-	qemu --cpus=2 --ram-size=2048 "${image}"
+	qemu --cpus="${cpus}" --ram-size="${memory}" "${image}"
