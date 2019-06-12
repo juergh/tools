@@ -78,18 +78,24 @@ function unmount_image()
 function download_image()
 {
 	local url=${1}
-	local tmpf tmpf2 tmpd
+	local tmpf tmpf2 image tmpd
 
 	tmpf=$(mktemp)
 	tmpf2=$(mktemp)
 	# shellcheck disable=SC2064
 	trap "rm -f ${tmpf} ${tmpf2}" EXIT INT TERM HUP
 
-	# Download the cloud image
+	# Select the image to use
 	if [ -n "${IMAGE}" ] ; then
+		# Use the provided image
 		cp "${IMAGE}" "${tmpf}"
 	else
-		wget -O "${tmpf}" "${url}"
+		# Download a cloud image if necessary/requested
+		image=${IMAGES_DIR}/${url##*/}
+		if [ "${DOWNLOAD}" -eq 1 ] || ! [ -e "${image}" ] ; then
+			sudo wget -O "${image}" "${url}"
+		fi
+		cp "${image}" "${tmpf}"
 	fi
 
 	# Extract the kernel and initrd from the image for direct boot
@@ -292,6 +298,7 @@ function define_vm()
 
 	UUID=$(uuidgen)
 	if [ "${UEFI}" -eq 1 ] ; then
+		# shellcheck disable=SC2089
 		OS_LOADER="
 <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE.fd</loader>
 <nvram>/var/lib/libvirt/qemu/nvram/${NAME}_VARS.fd</nvram>
@@ -309,6 +316,7 @@ function define_vm()
 	VM_ARCH=${ARCH_MAP["${ARCH}"]}
 
 	# Create the domain XML and define the VM
+	# shellcheck disable=SC2090
 	export NAME UUID OS_LOADER KERNEL_PATH INITRD_PATH KERNEL_CMDLINE \
 		   OS_IMAGE_PATH CONFIG_DRIVE_PATH MAC_ADDRESS VM_ARCH MEMORY CPUS
 	envsubst < "${SCRIPT_DIR}/config/create-vm/domain-${VM_ARCH}.xml" > \
@@ -338,8 +346,9 @@ Optional arguments:
   -d, --debug        Enable debugging (set -x).
   -f, --force        Force the recreation of an existing VM.
   -h, --help         Show this help text and exit.
-  -i, --image IMAGE  Use image <IMAGE> as the guest VM image. If not specified,
-                     download and use a cloud image.
+  -i, --image IMAGE  Use image <IMAGE> as the guest VM image.
+  -o, --download     Download and use a new cloud image rather than using an
+                     already cached image.
   -s, --size SIZE    Image size in GB. If not specified, defaults to 8(GB).
   -t, --type TYPE    Create a VM of type <TYPE>. Valid types are:
                        dep8:  For dep8 kernel testing.
@@ -353,6 +362,7 @@ EOF
 ARCH=
 FORCE=0
 IMAGE=
+DOWNLOAD=0
 SIZE=8
 TYPE=
 UEFI=0
@@ -379,6 +389,9 @@ while [ ${#} -gt 0 ] ; do
 		-i|--image)
 			shift
 			IMAGE=${1}
+			;;
+		-o|--download)
+			DOWNLOAD=1
 			;;
 		-s|--size)
 			SIZE=${2}
@@ -418,6 +431,7 @@ fi
 # Set global variables
 
 # Defaults
+IMAGES_DIR=/srv/cloud-images
 SCRIPT_DIR=$(dirname "$(realpath -e "${0}")")
 CPUS=1
 MEMORY=768
