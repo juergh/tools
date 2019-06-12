@@ -236,6 +236,9 @@ function build_ubuntu_kernel()
 	print_vars SCHROOT DEB_ARCH TARGET CROSS_COMPILE
 
 	# Finally kick off the build
+	if ! [ -e debian/control ] ; then
+		run_in_schroot debian/rules debian/control
+	fi
 	run_in_schroot fakeroot debian/rules "${TARGET[@]}"
 }
 
