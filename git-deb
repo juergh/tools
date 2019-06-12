@@ -5,20 +5,20 @@
 
 function out()
 {
-        local rc=$?
+	local rc=$?
 
-        trap - INT TERM EXIT HUP
+	trap - INT TERM EXIT HUP
 
-        if [ ${rc} -ne 0 ] ; then
-			pr_error "Script failed"
-        fi
+	if [ ${rc} -ne 0 ] ; then
+		pr_error "Script failed"
+	fi
 
-        exit "${rc}"
+	exit "${rc}"
 }
 
 function pr_error()
 {
-        echo -e "\033[31m${*}\033[0m" 1>&2
+	echo -e "\033[31m${*}\033[0m" 1>&2
 }
 
 function set_globals()
@@ -31,110 +31,134 @@ function set_globals()
 	if [ "${repo}" = kteam-tools ] ; then
 		SUBJECT_PREFIX="kteam-tools][PATCH"
 	else
-		. debian/debian.env
-		distro=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
-		SUBJECT_PREFIX="SRU][${distro^}][PATCH"
+		if [ -z "${RELEASE}" ] ; then
+			# shellcheck disable=SC1091
+			. debian/debian.env
+			RELEASE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
+										  -S Distribution)
+		fi
+		SUBJECT_PREFIX="SRU][${RELEASE^}][PATCH"
 	fi
 }
 
-function do_format_patch()
+function send_patch()
 {
-    local opts
+	local opts=()
 
-    # Additional options
-	opts=()
-    if [ "${COVER_LETTER}" -eq 1 ] ; then
-        opts+=("--cover-letter")
-    fi
-	if [ -n "${SUBJECT_PREFIX}" ] ; then
-        opts+=("--subject-prefix=${SUBJECT_PREFIX}")
-	fi
-
-    rm -rf .outgoing/
-    git format-patch -o .outgoing/ "${opts[@]}" "${@}"
-
-	if [ "${DRY_RUN}" -eq 1 ] ; then
-		for p in .outgoing/*.patch ; do
-			echo
-			echo -e "\e[33m*** ${p#*/} ***\e[0m"
-			echo
-			cat "${p}" | colordiff
-		done
-	fi
-}
-
-function do_send_email()
-{
-	local opts
-
-    # Additional options
-	opts=()
+	# Additional options
 	if [ "${DRY_RUN}" -eq 1 ] ; then
 		opts+=("--dry-run")
 	fi
 
-    git send-email .outgoing/*.patch --suppress-cc=all "${opts[@]}"
+	git send-email .outgoing/*.patch --suppress-cc=all "${opts[@]}"
 }
 
-
-function do_send_single()
+function do_format_patch()
 {
-    COVER_LETTER=0
-    do_format_patch -1
+	local opts=()
 
-	do_send_email
+	# Additional options
+	if [ "${COVER_LETTER}" -eq 1 ] ; then
+		opts+=("--cover-letter")
+	fi
+	if [ -n "${SUBJECT_PREFIX}" ] ; then
+		opts+=("--subject-prefix=${SUBJECT_PREFIX}")
+	fi
+	if [ -n "${IN_REPLY_TO}" ] ; then
+		opts+=("--in-reply-to=${IN_REPLY_TO}")
+	fi
+
+	rm -rf .outgoing/
+	git format-patch -o .outgoing/ "${opts[@]}" "${@}"
+
+	if [ "${DRY_RUN}" -eq 1 ] ; then
+		echo "git format-patch -o .outgoing/ ${opts[*]} ${*}"
+		for p in .outgoing/*.patch ; do
+			echo
+			echo -e "\e[33m*** ${p#*/} ***\e[0m"
+			echo
+			colordiff < "${p}"
+		done
+	fi
+}
+
+function do_send_patch()
+{
+	do_format_patch -1
+	send_patch
 }
 
 function usage()
 {
 	cat <<EOF
-Usage: git-deb [-h] [-d] COMMAND
+Usage: git-deb [-d] [-h] COMMAND [ARGS]
 
 Helper script for managing Ubuntu package git repos.
 
 Supported commands:
-  send-single  Send a single patch as an email.
+  format-patch  Create patch (series).
+  send-patch    Send a single commit as a patch email.
 
 Optional arguments:
-  -d, --dry-run
-  -h, --help     Show this help text.
+  -c, --cover-letter        Add a cover letter.
+  -d, --dry-run             Don't send the email.
+  -h, --help                Show this help text.
+  -i, --in-reply-to MSG_ID  Reply to the given MSG_ID.
+  -r, --release RELEASE     The release to include in the subject prefix.
 EOF
 }
 
 # -----------------------------------------------------------------------------
 # Main entry point
 
+COVER_LETTER=0
 DRY_RUN=0
-COVER_LETTER=
+IN_REPLY_TO=
+RELEASE=
 SUBJECT_PREFIX=
 
 cmd=
+args=()
 
 while [ ${#} -gt 0 ] ; do
-    case ${1} in
+	case ${1} in
+		-c|--cover-letter)
+			COVER_LETTER=1
+			;;
 		-d|--dry-run)
 			DRY_RUN=1
 			;;
-        -h|--help)
-            usage
-            exit 0
-            ;;
-		send-single)
+		-h|--help)
+			usage
+			exit
+			;;
+		-i|--in-reply-to)
+			shift
+			IN_REPLY_TO=${1}
+			;;
+		-r|--release)
+			shift
+			RELEASE=${1}
+			;;
+		format-patch|send-patch)
 			cmd=${1//-/_}
+			;;
+		*)
+			if [ -z "${cmd}" ] ; then
+				pr_error "Unexpected argument: ${1}" >&2
+				exit 1
+			fi
+			args=("${@}")
 			break
 			;;
-        *)
-			pr_error "Unexpected argument"
-			exit 1
-            ;;
-    esac
-    shift
+	esac
+	shift
 done
 
 if [ -z "${cmd}" ] ; then
 	usage
-    exit 2
+	exit 2
 fi
 
 set_globals
-do_"${cmd}" "${@}"
+do_"${cmd}" "${args[@]}"
