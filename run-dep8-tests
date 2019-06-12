@@ -110,6 +110,7 @@ trap out EXIT INT TERM HUP
 	fi
 
 	# Run the tests
+	sudo apt-get --yes update
 	time kernel-testing/run-dep8-tests ${dep8_args[@]+"${dep8_args[@]}"}
 
 	# Show the test failures
