@@ -3,25 +3,29 @@
 # Init script for create-vm which is run on first boot
 #
 
-# Fix grub
-if [ -e /etc/default/grub ] ; then
-	# Purge the infamous 40-force-partuuid.cfg config file to prevent booting
-	# without an initrd first
-	rm -f /etc/default/grub.d/40-force-partuuid.cfg
+{
+	# Start timestamp
+	date -R
 
-	# Configure grub
-	test -d /etc/default/grub.d || mkdir /etc/default/grub.d
-	cat <<__EOF__ > /etc/default/grub.d/99-create-vm.cfg
+	# Fix grub
+	if [ -e /etc/default/grub ] ; then
+		# Purge the infamous 40-force-partuuid.cfg config file to prevent
+		# booting without an initrd first
+		rm -f /etc/default/grub.d/40-force-partuuid.cfg
+
+		# Configure grub
+		test -d /etc/default/grub.d || mkdir /etc/default/grub.d
+		cat <<__EOF__ > /etc/default/grub.d/99-create-vm.cfg
 unset GRUB_HIDDEN_TIMEOUT GRUB_TIMEOUT_STYLE
 GRUB_TIMEOUT=2
 GRUB_CMDLINE_LINUX_DEFAULT="console=tty1 console=ttyS0"
 __EOF__
 
-	# Reinstall and update grub
-	grub-install /dev/vda
-	update-grub
-fi
+		# Reinstall and update grub
+		grub-install /dev/vda
+		update-grub
+	fi
 
-# All done
-date -R > /etc/cloud/create-vm.done
-#reboot
+	# Done timestamp
+	date -R
+} 2>&1 | tee /etc/cloud/create-vm.log
