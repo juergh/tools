@@ -3,29 +3,54 @@
 # Init script for create-vm which is run on first boot
 #
 
+function fix_grub()
 {
-	# Start timestamp
-	date -R
+	if ! [ -e /etc/default/grub ] ; then
+		return
+	fi
 
-	# Fix grub
-	if [ -e /etc/default/grub ] ; then
-		# Purge the infamous 40-force-partuuid.cfg config file to prevent
-		# booting without an initrd first
-		rm -f /etc/default/grub.d/40-force-partuuid.cfg
+	# Purge the infamous 40-force-partuuid.cfg config file to prevent
+	# booting without an initrd first
+	rm -f /etc/default/grub.d/40-force-partuuid.cfg
 
-		# Configure grub
-		test -d /etc/default/grub.d || mkdir /etc/default/grub.d
-		cat <<__EOF__ > /etc/default/grub.d/99-create-vm.cfg
+	# Configure grub
+	test -d /etc/default/grub.d || mkdir /etc/default/grub.d
+	cat <<__EOF__ > /etc/default/grub.d/99-create-vm.cfg
 unset GRUB_HIDDEN_TIMEOUT GRUB_TIMEOUT_STYLE
 GRUB_TIMEOUT=2
 GRUB_CMDLINE_LINUX_DEFAULT="console=tty1 console=ttyS0"
 __EOF__
 
-		# Reinstall and update grub
-		grub-install /dev/vda
-		update-grub
+	# Reinstall and update grub
+	grub-install /dev/vda
+	update-grub
+}
+
+function setup_esm_repo()
+{
+	if ! [ -e /etc/cloud/cidata/esm-ppa.list ] ; then
+		return
 	fi
 
-	# Done timestamp
+	# Copy the ESM PPA list file
+	cp /etc/cloud/cidata/esm-ppa.list /etc/apt/sources.list.d/
+
+	# Download the PPA public keys
+	while IFS= read -r keyid ; do
+		apt-key adv --keyserver keyserver.ubuntu.com --recv-key "${keyid}"
+	done < <(awk '/PPA public key/ { print $NF }' \
+				 /etc/apt/sources.list.d/*.list)
+
+	# Update the package index files
+	apt-get --yes update
+}
+
+# Main entry point
+{
+	date -R
+	fix_grub
+	setup_esm_repo
 	date -R
 } 2>&1 | tee /etc/cloud/create-vm.log
+
+date -R > /etc/cloud/create-vm.done

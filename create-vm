@@ -251,21 +251,26 @@ max_wait: 2
 bootcmd:
   - [ cloud-init-per, once, hostname, hostname, ${NAME} ]
 
-# Run the create-vm init script
+# Copy the content of the config drive and run the create-vm init script
 runcmd:
   - |
-    if ! [ -e /etc/cloud/create-vm ] ; then
+    if ! [ -d /etc/cloud/cidata ] ; then
     test -d /mnt/cidata || mkdir /mnt/cidata
     dev=\$(findfs LABEL=cidata)
     mount \${dev} /mnt/cidata
-    cp /mnt/cidata/create-vm /etc/cloud/create-vm
+    cp -aR /mnt/cidata/ /etc/cloud/
     umount /mnt/cidata
-    /etc/cloud/create-vm
+    /etc/cloud/cidata/create-vm
     fi
 EOF
 
-	# copy the create-vm init script
-	cp "${SCRIPT_DIR}"/config/create-vm/create-vm "${tmpd}"
+	# Copy the create-vm init script
+	cp "${CONFIG_DIR}"/create-vm/create-vm "${tmpd}"
+
+	# Copy the APT ESM sources list
+	if [ -e "${CONFIG_DIR}/${RELEASE}-esm-ppa.list" ] ; then
+		cp "${CONFIG_DIR}/${RELEASE}-esm-ppa.list" "${tmpd}"/esm-ppa.list
+	fi
 
 	# Create the config drive ISO image
 	genisoimage -ldots -allow-lowercase -allow-multidot -l -J -r \
@@ -319,7 +324,7 @@ function define_vm()
 	# shellcheck disable=SC2090
 	export NAME UUID OS_LOADER KERNEL_PATH INITRD_PATH KERNEL_CMDLINE \
 		   OS_IMAGE_PATH CONFIG_DRIVE_PATH MAC_ADDRESS VM_ARCH MEMORY CPUS
-	envsubst < "${SCRIPT_DIR}/config/create-vm/domain-${VM_ARCH}.xml" > \
+	envsubst < "${CONFIG_DIR}/create-vm/domain-${VM_ARCH}.xml" > \
 			 "${tmpf}"
 	virsh define "${tmpf}"
 
@@ -432,7 +437,7 @@ fi
 
 # Defaults
 IMAGES_DIR=/srv/cloud-images
-SCRIPT_DIR=$(dirname "$(realpath -e "${0}")")
+CONFIG_DIR=$(dirname "$(realpath -e "${0}")")/config
 CPUS=1
 MEMORY=768
 NAME_SUFFIX=
