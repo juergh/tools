@@ -260,12 +260,13 @@ runcmd:
     mount \${dev} /mnt/cidata
     cp -aR /mnt/cidata/ /etc/cloud/
     umount /mnt/cidata
-    /etc/cloud/cidata/create-vm
+    /etc/cloud/cidata/create-vm &
     fi
 EOF
 
 	# Copy the create-vm init script
 	cp "${CONFIG_DIR}"/create-vm/create-vm "${tmpd}"
+	sed -i -e "s,__REBOOT__,${REBOOT}," "${tmpd}"/create-vm
 
 	# Copy the APT ESM sources list
 	if [ -e "${CONFIG_DIR}/${RELEASE}-esm-ppa.list" ] ; then
@@ -354,6 +355,8 @@ Optional arguments:
   -i, --image IMAGE  Use image <IMAGE> as the guest VM image.
   -o, --download     Download and use a new cloud image rather than using an
                      already cached image.
+  -r, --reboot       Configure the VM to automatically reboot after the
+                     first boot initialization is done.
   -s, --size SIZE    Image size in GB. If not specified, defaults to 8(GB).
   -t, --type TYPE    Create a VM of type <TYPE>. Valid types are:
                        dep8:  For dep8 kernel testing.
@@ -368,6 +371,7 @@ ARCH=
 FORCE=0
 IMAGE=
 DOWNLOAD=0
+REBOOT=0
 SIZE=8
 TYPE=
 UEFI=0
@@ -397,6 +401,9 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-o|--download)
 			DOWNLOAD=1
+			;;
+		-r|--reboot)
+			REBOOT=1
 			;;
 		-s|--size)
 			SIZE=${2}

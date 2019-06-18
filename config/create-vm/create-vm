@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Init script for create-vm which is run on first boot
+# Init script for create-vm which is run at first boot
 #
 
 function fix_grub()
@@ -45,12 +45,32 @@ function setup_esm_repo()
 	apt-get --yes update
 }
 
-# Main entry point
+function do_init()
 {
+	# Timestamp
 	date -R
+
 	fix_grub
 	setup_esm_repo
-	date -R
-} 2>&1 | tee /etc/cloud/create-vm.log
 
+	# Timestamp
+	date -R
+}
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+# Wait until cloud-init is finished
+while ! [ -e /var/lib/cloud/instance/boot-finished ] ; do
+	sleep 1
+done
+
+# Do the initialization
+do_init 2>&1 | tee /etc/cloud/create-vm.log
 date -R > /etc/cloud/create-vm.done
+
+# Reboot
+# shellcheck disable=SC2170,SC2050
+if [ __REBOOT__ -eq 1 ] ; then
+	reboot
+fi
