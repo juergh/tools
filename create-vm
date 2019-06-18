@@ -455,6 +455,7 @@ case "${TYPE}" in
 		CPUS=2
 		MEMORY=2048
 		NAME_SUFFIX="-dep8"
+		REBOOT=1
 		;;
 	"")
 		;;
