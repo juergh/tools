@@ -59,16 +59,24 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
-# Check for a Python interpreter
-# shellcheck disable=SC2230
-if [ -z "$(which python)" ] ; then
-	echo "No Python interpreter found. Run 'apt install python'." >&2
-	exit 1
-fi
+# Check for required commands
+for cmd in git python ; do
+	# shellcheck disable=SC2230
+	if [ -z "$(which "${cmd}")" ] ; then
+		echo "Command not found: ${cmd}" >&2
+		exit 1
+	fi
+done
 
 # Check for APT 'source' URIs
 if ! grep -q '^deb-src ' /etc/apt/sources.list ; then
-	echo "No APT 'source' URIs found in /etc/apt/sources.list." >&2
+	echo "No APT 'source' URIs found in /etc/apt/sources.list" >&2
+	exit 1
+fi
+
+# Check for extra modules
+if ! modinfo quota_v2 >/dev/null 2>&1 ; then
+	echo "Extra modules not found" >&2
 	exit 1
 fi
 
