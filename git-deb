@@ -39,6 +39,10 @@ function set_globals()
 		fi
 		SUBJECT_PREFIX="SRU][${RELEASE^}][PATCH"
 	fi
+
+	if [ "${VERSION}" -gt 0 ] ; then
+		SUBJECT_PREFIX="${SUBJECT_PREFIX} v${VERSION}"
+	fi
 }
 
 function send_patch()
@@ -66,6 +70,8 @@ function do_format_patch()
 	fi
 	if [ -n "${IN_REPLY_TO}" ] ; then
 		opts+=("--in-reply-to=${IN_REPLY_TO}")
+		opts+=("--thread")
+		opts+=("--no-chain-reply-to")
 	fi
 
 	rm -rf .outgoing/
@@ -91,7 +97,7 @@ function do_send_patch()
 function usage()
 {
 	cat <<EOF
-Usage: git-deb [-d] [-h] COMMAND [ARGS]
+Usage: git-deb [-c] [-d] [-h] [-i MSG_ID] [-r RELEASE] [-v NUM] COMMAND [ARGS]
 
 Helper script for managing Ubuntu package git repos.
 
@@ -105,6 +111,8 @@ Optional arguments:
   -h, --help                Show this help text.
   -i, --in-reply-to MSG_ID  Reply to the given MSG_ID.
   -r, --release RELEASE     The release to include in the subject prefix.
+  -v, --version NUM         The revision number of the patch to include in the
+                            subject prefix.
 EOF
 }
 
@@ -115,6 +123,7 @@ COVER_LETTER=0
 DRY_RUN=0
 IN_REPLY_TO=
 RELEASE=
+VERSION=0
 SUBJECT_PREFIX=
 
 cmd=
@@ -139,6 +148,10 @@ while [ ${#} -gt 0 ] ; do
 		-r|--release)
 			shift
 			RELEASE=${1}
+			;;
+		-v|--version)
+			shift
+			VERSION=${1}
 			;;
 		format-patch|send-patch)
 			cmd=${1//-/_}
