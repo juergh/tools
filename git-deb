@@ -71,7 +71,6 @@ function do_format_patch()
 	if [ -n "${IN_REPLY_TO}" ] ; then
 		opts+=("--in-reply-to=${IN_REPLY_TO}")
 		opts+=("--thread")
-		opts+=("--no-chain-reply-to")
 	fi
 
 	rm -rf .outgoing/
