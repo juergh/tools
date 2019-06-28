@@ -1,14 +1,14 @@
 <domain type='kvm'>
-  <name>${NAME}</name>
-  <uuid>${UUID}</uuid>
-  <memory unit='MiB'>${MEMORY}</memory>
-  <vcpu placement='static'>${CPUS}</vcpu>
+  <name>${XML_NAME}</name>
+  <uuid>${XML_UUID}</uuid>
+  <memory unit='MiB'>${XML_MEMORY}</memory>
+  <vcpu placement='static'>${XML_VCPU}</vcpu>
   <resource>
     <partition>/machine</partition>
   </resource>
   <os>
-    <type arch='${VM_ARCH}' machine='pc'>hvm</type>
-    ${OS_LOADER}
+    <type arch='${XML_ARCH}' machine='pc'>hvm</type>
+    ${XML_OS_LOADER}
     <boot dev='hd'/>
   </os>
   <features>
@@ -16,6 +16,7 @@
     <apic/>
     <pae/>
   </features>
+  ${XML_CPU}
   <clock offset='utc'/>
   <on_poweroff>destroy</on_poweroff>
   <on_reboot>restart</on_reboot>
@@ -24,13 +25,13 @@
     <emulator>/usr/bin/kvm-spice</emulator>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
-      <source file='${OS_IMAGE_PATH}'/>
+      <source file='${XML_OS_IMAGE_PATH}'/>
       <target dev='vda' bus='virtio'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x04' function='0x0'/>
     </disk>
     <disk type='file' device='disk'>
       <driver name='qemu' type='raw'/>
-      <source file='${CONFIG_DRIVE_PATH}'/>
+      <source file='${XML_CONFIG_DRIVE_PATH}'/>
       <target dev='vdb' bus='virtio'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x05' function='0x0'/>
     </disk>
@@ -39,7 +40,7 @@
     </controller>
     <controller type='pci' index='0' model='pci-root'/>
     <interface type='network'>
-      <mac address='${MAC_ADDRESS}'/>
+      <mac address='${XML_MAC_ADDRESS}'/>
       <source network='default'/>
       <model type='virtio'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0'/>

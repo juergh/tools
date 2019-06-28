@@ -1,16 +1,16 @@
 <domain type='qemu'>
-  <name>${NAME}</name>
-  <uuid>${UUID}</uuid>
-  <memory unit='MiB'>${MEMORY}</memory>
-  <vcpu placement='static'>${CPUS}</vcpu>
+  <name>${XML_NAME}</name>
+  <uuid>${XML_UUID}</uuid>
+  <memory unit='MiB'>${XML_MEMORY}</memory>
+  <vcpu placement='static'>${XML_VCPU}</vcpu>
   <resource>
     <partition>/machine</partition>
   </resource>
   <os>
     <type arch='armv7l' machine='virt'>hvm</type>
-    <kernel>${KERNEL_PATH}</kernel>
-    <initrd>${INITRD_PATH}</initrd>
-    <cmdline>${KERNEL_CMDLINE}</cmdline>
+    <kernel>${XML_KERNEL_PATH}</kernel>
+    <initrd>${XML_INITRD_PATH}</initrd>
+    <cmdline>${XML_KERNEL_CMDLINE}</cmdline>
     <boot dev='hd'/>
   </os>
   <features>
@@ -24,13 +24,13 @@
     <emulator>/usr/bin/qemu-system-arm</emulator>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
-      <source file='${OS_IMAGE_PATH}'/>
+      <source file='${XML_OS_IMAGE_PATH}'/>
       <target dev='sda' bus='scsi'/>
       <address type='drive' controller='0' bus='0' target='0' unit='0'/>
     </disk>
     <disk type='file' device='cdrom'>
       <driver name='qemu' type='raw'/>
-      <source file='${CONFIG_DRIVE_PATH}'/>
+      <source file='${XML_CONFIG_DRIVE_PATH}'/>
       <target dev='sdb' bus='scsi'/>
       <readonly/>
       <address type='drive' controller='0' bus='0' target='0' unit='1'/>
@@ -63,7 +63,7 @@
       <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x3'/>
     </controller>
     <interface type='network'>
-      <mac address='${MAC_ADDRESS}'/>
+      <mac address='${XML_MAC_ADDRESS}'/>
       <source network='default'/>
       <model type='virtio'/>
       <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x0'/>

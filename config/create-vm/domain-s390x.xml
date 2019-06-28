@@ -1,8 +1,8 @@
 <domain type='qemu'>
-  <name>${NAME}</name>
-  <uuid>${UUID}</uuid>
-  <memory unit='MiB'>${MEMORY}</memory>
-  <vcpu placement='static'>${CPUS}</vcpu>
+  <name>${XML_NAME}</name>
+  <uuid>${XML_UUID}</uuid>
+  <memory unit='MiB'>${XML_MEMORY}</memory>
+  <vcpu placement='static'>${XML_VCPU}</vcpu>
   <os>
     <type arch='s390x' machine='s390-ccw-virtio'>hvm</type>
     <boot dev='hd'/>
@@ -15,18 +15,18 @@
     <emulator>/usr/bin/qemu-system-s390x</emulator>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
-      <source file='${OS_IMAGE_PATH}'/>
+      <source file='${XML_OS_IMAGE_PATH}'/>
       <target dev='vda' bus='virtio'/>
       <address type='ccw' cssid='0xfe' ssid='0x0' devno='0x0000'/>
     </disk>
     <disk type='file' device='disk'>
       <driver name='qemu' type='raw'/>
-      <source file='${CONFIG_DRIVE_PATH}'/>
+      <source file='${XML_CONFIG_DRIVE_PATH}'/>
       <target dev='vdb' bus='virtio'/>
       <address type='ccw' cssid='0xfe' ssid='0x0' devno='0x0001'/>
     </disk>
     <interface type='network'>
-      <mac address='${MAC_ADDRESS}'/>
+      <mac address='${XML_MAC_ADDRESS}'/>
       <source network='default'/>
       <model type='virtio'/>
       <address type='ccw' cssid='0xfe' ssid='0x0' devno='0x0002'/>

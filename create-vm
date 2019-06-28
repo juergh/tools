@@ -302,31 +302,38 @@ function define_vm()
 	# shellcheck disable=SC2064
 	trap "rm -f ${tmpf}" EXIT INT TERM HUP
 
-	UUID=$(uuidgen)
 	if [ "${UEFI}" -eq 1 ] ; then
 		# shellcheck disable=SC2089
-		OS_LOADER="
+		XML_OS_LOADER="
 <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE.fd</loader>
 <nvram>/var/lib/libvirt/qemu/nvram/${NAME}_VARS.fd</nvram>
 "
 	fi
 
 	if has_direct_boot ; then
-		KERNEL_PATH=$(virsh vol-path --pool default "${KERNEL}")
-		INITRD_PATH=$(virsh vol-path --pool default "${INITRD}")
+		XML_KERNEL_PATH=$(virsh vol-path --pool default "${KERNEL}")
+		XML_INITRD_PATH=$(virsh vol-path --pool default "${INITRD}")
+		XML_KERNEL_CMDLINE="root=LABEL=cloudimg-rootfs"
 	fi
 
-	OS_IMAGE_PATH=$(virsh vol-path --pool default "${OS_IMAGE}")
-	CONFIG_DRIVE_PATH=$(virsh vol-path --pool default "${CONFIG_DRIVE}")
-	MAC_ADDRESS="52:54:00:${UUID:0:2}:${UUID:2:2}:${UUID:4:2}"
-	VM_ARCH=${ARCH_MAP["${ARCH}"]}
+	XML_UUID=$(uuidgen)
+	XML_OS_IMAGE_PATH=$(virsh vol-path --pool default "${OS_IMAGE}")
+	XML_CONFIG_DRIVE_PATH=$(virsh vol-path --pool default "${CONFIG_DRIVE}")
+	XML_MAC_ADDRESS="52:54:00:${XML_UUID:0:2}:${XML_UUID:2:2}:${XML_UUID:4:2}"
+	XML_ARCH=${ARCH_MAP["${ARCH}"]}
+
+	# Export the variables for the domain XML
+	export XML_NAME=${NAME}
+	export XML_VCPU=${VCPU}
+	export XML_CPU=${CPU}
+	export XML_MEMORY=${MEMORY}
+	# shellcheck disable=SC2090
+	export XML_OS_LOADER XML_KERNEL_PATH XML_INITRD_PATH XML_KERNEL_CMDLINE \
+		   XML_UUID XML_OS_IMAGE_PATH XML_CONFIG_DRIVE_PATH XML_MAC_ADDRESS \
+		   XML_ARCH
 
 	# Create the domain XML and define the VM
-	# shellcheck disable=SC2090
-	export NAME UUID OS_LOADER KERNEL_PATH INITRD_PATH KERNEL_CMDLINE \
-		   OS_IMAGE_PATH CONFIG_DRIVE_PATH MAC_ADDRESS VM_ARCH MEMORY CPUS \
-		   CPU
-	envsubst < "${CONFIG_DIR}/create-vm/domain-${VM_ARCH}.xml" > \
+	envsubst < "${CONFIG_DIR}/create-vm/domain-${XML_ARCH}.xml" > \
 			 "${tmpf}"
 	virsh define "${tmpf}"
 
@@ -446,7 +453,7 @@ fi
 # Defaults
 IMAGES_DIR=/srv/cloud-images
 CONFIG_DIR=$(dirname "$(realpath -e "${0}")")/config
-CPUS=1
+VCPU=1
 CPU=
 MEMORY=768
 NAME_SUFFIX=
@@ -454,7 +461,7 @@ NAME_SUFFIX=
 # Set type specific variables
 case "${TYPE}" in
 	dep8)
-		CPUS=2
+		VCPU=2
 		CPU="
 <cpu mode='host-model' check='partial'>
   <model fallback='allow'/>
@@ -522,11 +529,9 @@ CONFIG_DRIVE=${NAME}-config.iso
 # The kernel, initrd and cmdline (for direct boot architectures)
 KERNEL=
 INITRD=
-KERNEL_CMDLINE=
 if has_direct_boot ; then
 	KERNEL=${NAME}-kernel
 	INITRD=${NAME}-initrd
-	KERNEL_CMDLINE="root=LABEL=cloudimg-rootfs"
 fi
 
 # Sanity check
@@ -536,7 +541,7 @@ if [ "${RELEASE}" = "precise" ] && [ "${UEFI}" -eq 1 ] ; then
 fi
 
 print_var NAME CPUS MEMORY ARCH FORCE VENDOR DIST RELEASE OS_IMAGE \
-		  CONFIG_DRIVE KERNEL INITRD KERNEL_CMDLINE
+		  CONFIG_DRIVE KERNEL INITRD
 echo
 
 # -----------------------------------------------------------------------------
