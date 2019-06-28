@@ -80,6 +80,12 @@ if ! modinfo quota_v2 >/dev/null 2>&1 ; then
 	exit 1
 fi
 
+# Check for kernel headers
+if ! [ -d "/usr/src/linux-headers-$(uname -r)" ] ; then
+	echo "Kernel headers not found"
+	exit 1
+fi
+
 # The logfile
 logfile="${PWD}"/dep8_"$(uname -r)".log
 
