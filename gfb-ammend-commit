@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+#
+# git filter-branch helper: Ammend commit messages
+#
+
+import argparse
+import os
+import sys
+import json
+
+from subprocess import run, PIPE
+
+class colors:
+    """
+    Helper class for colored output
+    """
+    ERR = '\033[31m'     # dark red
+    INFO = '\033[33m'    # dark yellow
+    GREEN = '\033[32m'   # dark green
+    END = '\033[0m'
+
+def run_cmd(cmd):
+    """
+    Run a command and return the exit status and stdout
+    """
+    proc = run(cmd, stdout=PIPE, universal_newlines=True)
+    stdout = proc.stdout.split('\n')[:-1]
+    return proc.returncode, stdout
+
+def modify_msg(msg, acks=[], sobs=[], colored=False):
+    """
+    Modify a commit message
+    """
+    # Remove trailing newlines
+    while msg[-1] == "":
+        msg = msg[:-1]
+
+    # Set colors (for a dry run)
+    if colored:
+        col = colors.GREEN
+        end = colors.END
+    else:
+        col = ""
+        end = ""
+
+    # Add acked-by tags
+    for ack in acks:
+        msg.append(col + "Acked-by: {}".format(ack) + end)
+
+    # Add signed-off-by tags
+    for sob in sobs:
+        msg.append(col + "Signed-off-by: {}".format(sob) + end)
+
+    return msg
+
+def main():
+    """
+    Main entry point
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-f", "--force", action="store_true",
+                        help="Really do run git filter-branch.")
+    parser.add_argument("--ack", metavar="nick[,nick,...]",
+                        help="IRC nickname of the person who ack'ed the "
+                        "commit(s). Can be a comma separated list of "
+                        "multiple nicknames.")
+    parser.add_argument("--sob", metavar="nick[,nick,...]",
+                        help="IRC nickname of the person who signed off on "
+                        "commit(s). Can be a comma separated list of "
+                        "multiple nicknames.")
+    parser.add_argument("rev_list_opts", nargs="*", metavar="rev-list-options",
+                        help="Arguments for git rev-list. All positive refs "
+                        "included by these options are rewritten.")
+
+    args = parser.parse_args()
+
+    # Read the aliases config file
+    with open(os.path.expanduser(os.path.join("~", ".kteam.rc"))) as fh:
+        kteam_rc = json.load(fh)
+
+    # Assemble the acked-by list
+    acks = []
+    if args.ack:
+        for nick in args.ack.split(","):
+            try:
+                acks.append(kteam_rc["irc-aliases"][nick])
+            except KeyError:
+                print(colors.ERR +
+                      "Nick '{}' not found in ~/.kteam.rc".format(nick) +
+                      colors.END)
+                return 1
+
+    # Assemble the signed-off-by list
+    sobs = []
+    if args.sob:
+        for nick in args.sob.split(","):
+            try:
+                sobs.append(kteam_rc["irc-aliases"][nick])
+            except KeyError:
+                print(colors.ERR +
+                      "Nick '{}' not found in ~/.kteam.rc".format(nick) +
+                      colors.END)
+                return 1
+
+    # If the rev_list_opts argument not specified, we expect a commit message
+    # on stdin, so read it, modify it and write it back out to stdout. This
+    # is the case when we're being called by git-filter-branch.
+    if not args.rev_list_opts:
+        # Read the commit message from stdin
+        msg = []
+        for line in sys.stdin:
+            msg.append(line.rstrip('\n'))
+
+        # Modify the message and print it
+        msg = modify_msg(msg, acks=acks, sobs=sobs)
+        print('\n'.join(msg))
+
+        return 0
+
+    # Construct the message filter command
+    mf_cmd = [sys.argv[0]]
+    for key, val in vars(args).items():
+        if key in ("ack", "sob") and val:
+            mf_cmd.extend(["--" + key, val])
+
+    # Construct the git-filter-branch command
+    gfb_cmd = ["git", "filter-branch", "--force", "--msg-filter",
+               ' '.join(mf_cmd), "--"] + args.rev_list_opts
+
+    # Do run git-filter-branch
+    if args.force:
+        run(gfb_cmd)
+        return 0
+
+    # Do a dry-run, i.e., print the modified commit message(s) to stdout
+
+    # Get the list of commits to modify
+    rc, commits = run_cmd(["git", "rev-list"] + args.rev_list_opts)
+    if rc != 0:
+        return rc
+
+    # Get the commit message for each of the commits and modify them
+    for commit in commits:
+        # Get the commit message
+        _, msg = run_cmd(["git", "log", "--format=%b", commit, "-1"])
+
+        # Modify the commit message using colors so we can spot the changes
+        msg = modify_msg(msg, acks=acks, sobs=sobs, colored=True)
+
+        # Get the commit subject
+        _, subject = run_cmd(["git", "log", "--format=%s", commit, "-1"])
+
+        # Write the message to stdout
+        print(colors.INFO + "commit {}".format(commit) + colors.END)
+        print()
+        print(colors.INFO + "    {}".format(subject[0]) + colors.END)
+        print()
+        for m in msg:
+            print("    {}".format(m))
+        print()
+
+    # Print the git-filter-branch command
+    print(colors.INFO + ' '.join(gfb_cmd) + colors.END)
+    print("Use -f,--force to really run the above command")
+
+if __name__ == "__main__":
+    sys.exit(main())
