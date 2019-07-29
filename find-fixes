@@ -6,10 +6,16 @@
 #
 
 git_dir=${1}
-fixes_file=${2}
+
+if echo "${2}" | grep -qP "^[0-9a-f]{12,}$" ; then
+	stop_commit=${2}
+	fixes_file="__foo__"
+else
+	fixes_file=${2}
+	stop_commit="__foo__"
+fi
 
 # Read the 'stop commit' from the fixes file
-stop_commit=FOO
 if [ -e "${fixes_file}" ] ; then
 	stop_commit=$(head -1 "${fixes_file}")
 	stop_commit=${stop_commit%% *}
@@ -48,6 +54,13 @@ while IFS= read -r line ; do
 			;;
 	esac
 done
+
+# Dry-run
+if [ "${fixes_file}" = "__foo__" ] ; then
+	cat "${tmp_file}"
+	rm -f "${tmp_file}"
+	exit
+fi
 
 # Append the existing fixes file to the temp file and move it
 if [ -e "${fixes_file}" ] ; then
