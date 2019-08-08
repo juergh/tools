@@ -1,0 +1,34 @@
+#!/bin/sh
+#
+# Update git repos
+#
+
+fetch_repo()
+{
+	_git_dir=${1}
+
+	echo "Fetching ${_git_dir}"
+
+	git -C "${_git_dir}" fetch --prune
+	if [ -d "${_git_dir}"/.git ] ; then
+		git -C "${_git_dir}" reset --hard FETCH_HEAD
+	fi
+
+	date -R > "${_git_dir}"/.fetched
+}
+
+# Current working directory
+cwd=$(dirname "$(readlink -e "${0}")")
+
+# Fetch the main linux repo first (since all the others use it as a reference)
+fetch_repo "${cwd}"/linux.git
+
+for git_dir in "${cwd}"/*.git ; do
+	if [ -d "${git_dir}" ] ; then
+		fetch_repo "${git_dir}"
+	fi
+done
+
+# Update the fixes file
+echo "Finding fixes commits"
+"${cwd}"/find-fixes "${cwd}"/linux.git "${cwd}"/linux.fixes
