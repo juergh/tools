@@ -5,6 +5,11 @@
 # that fix other commits.
 #
 
+if [ $# != 2 ] ; then
+	echo "Usage: find-fixes GIT_DIR STOP_COMMIT|FIXES_FILE" >&2
+	exit 1
+fi
+
 git_dir=${1}
 
 if echo "${2}" | grep -qP "^[0-9a-f]{12,}$" ; then
@@ -27,7 +32,7 @@ rm -f "${tmp_file}"
 touch "${tmp_file}"
 
 # Parse the commits
-git --git-dir "${git_dir}" log --no-merges \
+git --git-dir "${git_dir}" log --no-merges --abbrev-commit --abbrev=12 \
 	--format="__COMMIT__%h%n__SUBJECT__%s%n%b%n__END__%n" | \
 	grep -P '^__COMMIT__|^__SUBJECT__|^\s*Fixes:.*\b[0-9a-f]{8,}\b|^__END__' | \
 while IFS= read -r line ; do
