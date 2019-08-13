@@ -248,7 +248,7 @@ function do_remove()
 function usage()
 {
 	cat <<EOF
-Usage: upkg [-a ARCH] [-f FLAVOR] [-h] [-x] [-t] COMMAND [ARGS]
+Usage: upkg [-a ARCH] [-d DIR] [-f FLAVOR] [-h] [-x] COMMAND [ARGS]
 
 Ubuntu kernel (debug) package manager.
 
