@@ -7,7 +7,7 @@
 # -----------------------------------------------------------------------------
 # Helper functions
 
-function verify_pkg_idx()
+function verify_pkg_index()
 {
 	# Verify that the package index is valid
 	# shellcheck disable=SC2012
@@ -19,146 +19,112 @@ function verify_pkg_idx()
 	fi
 }
 
-function install_pkg()
+function pkg_files_from_pkg_version()
 {
-	local package version arch flavor sub_dir inst_dir tarball_dir tarball
-
-	# shellcheck disable=SC2016
-	package=$(dpkg-deb --show --showformat='${Package}' "${PKG_FILE}")
-	# shellcheck disable=SC2016
-	version=$(dpkg-deb --show --showformat='${Version}' "${PKG_FILE}")
-	# shellcheck disable=SC2016
-	arch=$(dpkg-deb --show --showformat='${Architecture}' "${PKG_FILE}")
-
-	case ${package} in
-		linux-image-*-dbgsym)
-			flavor=${package%-dbgsym}
-			flavor=-${flavor##*-}
-			sub_dir=usr/lib/debug/lib/modules
-			;;
-		linux-image-*)
-			flavor=-${package##*-}
-			sub_dir=lib/modules
-			;;
-		linux-source-*)
-			flavor=
-			sub_dir=usr/src
-			;;
-		*)
-			echo "Error: Unrecognized package type: ${PKG_FILE}" >&2
-			exit 1
-			;;
-	esac
-
-	echo "Package name	  : ${package}"
-	echo "Package version : ${version}"
-	echo "Package arch	  : ${arch}"
-	echo "Flavor name	  : ${flavor}"
-
-	inst_dir=${UPKG_DIR}/${arch}/${version}${flavor}
-
-	# Check if the package is already installed
-	if [ -d "${inst_dir}/${sub_dir}" ] ; then
-		if [ "${FORCE}" -eq 0 ] ; then
-			echo "Error: Package is already installed" >&2
-			echo "	     Use --force to reinstall it" >&2
-			exit 1
-		else
-			rm -rf "${inst_dir:?}/${sub_dir}"
-		fi
-	fi
-
-	# Install it
-	echo -n "Installing package ... "
-	mkdir -p "${inst_dir}"
-	dpkg-deb -x "${PKG_FILE}" "${inst_dir}"
-	echo "done"
-
-	# Unpack the source tarball
-	tarball_dir=${inst_dir}/${sub_dir}
-	tarball=${tarball_dir}/${package}.tar.bz2
-	if [ -e  "${tarball}" ] ; then
-		echo -n "Extracting source tarball ... "
-		tar -C "${tarball_dir}" -xaf "${tarball}"
-		echo "done"
-
-		# Delete the tarball to save some space
-		rm -f "$(readlink -f "${tarball}")" "${tarball}"
-	fi
-}
-
-
-# -----------------------------------------------------------------------------
-# Command functions
-
-function do_download()
-{
-	local base rev abi dbg img src
-
-	if ! [ -d "${TARGET}" ] ; then
-		echo "Error: No such target directory: ${TARGET}" >&2
-		exit 1
-	fi
+	local base rev abi
 
 	base=${PKG_VERSION%%-*}
 	rev=${PKG_VERSION#*-}
 	abi=${base}-${rev%%.*}
 
-	dbg=linux-image-${abi}-${FLAVOR}-dbgsym_${PKG_VERSION}_${ARCH}.ddeb
-	img=linux-image-${abi}-${FLAVOR}_${PKG_VERSION}_${ARCH}.deb
-	src=linux-source-${base}_${PKG_VERSION}_all.deb
+	PKG_FILES=(
+		"linux-image-${abi}-${FLAVOR}-dbgsym_${PKG_VERSION}_${ARCH}.ddeb"
+		"linux-image-${abi}-${FLAVOR}_${PKG_VERSION}_${ARCH}.deb"
+		"linux-modules-${abi}-${FLAVOR}_${PKG_VERSION}_${ARCH}.deb"
+		"linux-source-${base}_${PKG_VERSION}_all.deb"
+	)
+}
 
-	for pkg in ${dbg} ${img} ${src} ; do
-		if [ -e "${TARGET}/${pkg}" ] ; then
-			echo "Skipping ${pkg} (exists already)"
-		else
-			echo -n "Downloading ${pkg} to directory ${TARGET} ... "
-			( cd "${TARGET}" && wget -q "${ARCHIVE_URL}/${pkg}" ) || \
-				( echo "failed" ; exit 1 )
+function install_pkg_files()
+{
+	local pkg_file package version arch flavor manifest inst_dir
+
+	for pkg_file in "${PKG_FILES[@]}" ; do
+		# shellcheck disable=SC2016
+		package=$(dpkg-deb --show --showformat='${Package}' "${pkg_file}")
+		# shellcheck disable=SC2016
+		version=$(dpkg-deb --show --showformat='${Version}' "${pkg_file}")
+		# shellcheck disable=SC2016
+		arch=$(dpkg-deb --show --showformat='${Architecture}' "${pkg_file}")
+
+		case "${package}" in
+			linux-image-*-dbgsym)
+				flavor=${package%-dbgsym}
+				flavor=-${flavor##*-}
+				manifest=.dbg
+				;;
+			linux-image-*)
+				flavor=-${package##*-}
+				manifest=.img
+				;;
+			linux-modules-*)
+				flavor=-${package##*-}
+				manifest=.mod
+				;;
+			linux-source-*)
+				flavor=
+				manifest=.src
+				;;
+			*)
+				echo "Error: Unrecognized package: ${pkg_file}" >&2
+				exit 1
+				;;
+		esac
+
+		echo "Package name    : ${package}"
+		echo "Package version : ${version}"
+		echo "Package arch    : ${arch}"
+		echo "Flavor name     : ${flavor}"
+
+		inst_dir=${UPKG_DIR}/${arch}/${version}${flavor}
+
+		# Check if the package is already installed
+		if [ -e "${inst_dir}/${manifest}" ] ; then
+			if [ "${FORCE}" -eq 0 ] ; then
+				echo "Error: Package is already installed" >&2
+				echo "	     Use --force to reinstall it" >&2
+				exit 1
+			fi
+		fi
+
+		# Install it
+		echo -n "Installing package ... "
+		mkdir -p "${inst_dir}"
+		dpkg-deb -x "${pkg_file}" "${inst_dir}"
+		touch "${inst_dir}/${manifest}"
+		echo "done"
+
+		# Unpack the source tarball
+		tarball_dir=${inst_dir}/usr/src
+		tarball=${tarball_dir}/${package}.tar.bz2
+		if [ -e  "${tarball}" ] ; then
+			echo -n "Extracting source tarball ... "
+			tar -C "${tarball_dir}" -xaf "${tarball}"
 			echo "done"
+
+			# Delete the tarball to save some space
+			rm -f "$(readlink -f "${tarball}")" "${tarball}"
 		fi
 	done
 }
 
-function do_install()
+function list_pkgs()
 {
-	# Install a single package
-	if [ -n "${PKG_FILE}" ] ; then
-		if ! [ -e "${PKG_FILE}" ] ; then
-			echo "Error: No such package file: ${PKG_FILE}" >&2
-			exit 1
-		fi
-		install_pkg
+	local fmt num inst_dir arch version flavor dbg img mod src
 
-	# Otherwise download the set of packages from the archive and install them
-	# afterwards
-	else
-		TARGET=$(mktemp -d)
-		# shellcheck disable=SC2064
-		trap "rm -rf ${TARGET}" INT TERM EXIT
-
-		do_download
-		for PKG_FILE in "${TARGET}"/* ; do
-			install_pkg
-		done
-	fi
-}
-
-function do_list()
-{
-	local fmt num sub_dir arch version flavor dbg img src
-
-	fmt="%3s   %-7s   %-20s   %-10s   %3s   %3s   %3s\n"
+	fmt="%3s   %-7s   %-20s   %-10s   %3s   %3s   %3s   %3s\n"
 
 	# shellcheck disable=SC2059
-	printf "${fmt}" "Idx" "Arch" "Version" "Flavor" "Dbg" "Img" "Src"
-	echo "-------------------------------------------------------------------"
+	printf "${fmt}" "Idx" "Arch" "Version" "Flavor" "Dbg" "Img" "Mod" "Src"
+	echo "-------------------------------------------------------------------------"
 
 	num=1
 	# shellcheck disable=SC2035
-	for sub_dir in $(cd "${UPKG_DIR}" && ls -1d */* 2>/dev/null) ; do
-		arch=${sub_dir%/*}
-		version=${sub_dir#*/}
+	for inst_dir in $(cd "${UPKG_DIR}" && ls -1d */* 2>/dev/null) ; do
+		arch=${inst_dir%/*}
+		arch=${arch##*/}
+		version=${inst_dir##*/}
+
 		if [ "${arch}" = "all" ] ; then
 			flavor=
 		else
@@ -166,45 +132,109 @@ function do_list()
 			version=${version%-*}
 		fi
 
-		dbg=
-		if [ -d "${UPKG_DIR}/${sub_dir}/usr/lib/debug/lib/modules" ] ; then
-			dbg=" * "
-		fi
-
-		img=
-		if [ -d "${UPKG_DIR}/${sub_dir}/lib/modules" ] ; then
-			img=" * "
-		fi
-
-		src=
-		if [ -d "${UPKG_DIR}/${sub_dir}/usr/src" ] ; then
-			src=" * "
-		fi
+		[ -f "${UPKG_DIR}/${inst_dir}/.dbg" ] && dbg=" * " || dbg=
+		[ -f "${UPKG_DIR}/${inst_dir}/.img" ] && img=" * " || img=
+		[ -f "${UPKG_DIR}/${inst_dir}/.mod" ] && mod=" * " || mod=
+		[ -f "${UPKG_DIR}/${inst_dir}/.src" ] && src=" * " || src=
 
 		# shellcheck disable=SC2059
 		printf "${fmt}" "${num}" "${arch}" "${version}" "${flavor}" \
-			   "${dbg}" "${img}" "${src}"
+			   "${dbg}" "${img}" "${mod}" "${src}"
 
 		num=$((num + 1))
 	done
 }
 
-function do_listfiles()
+
+function list_pkgs_files()
 {
 	local inst_dir
 
-	verify_pkg_idx
+	verify_pkg_index
 
 	# shellcheck disable=SC2012
-	inst_dir=$(ls -1d "${UPKG_DIR}"/*/* | head -"${PKG_INDEX}" | tail -1)
+	inst_dir=$(ls -1d "${UPKG_DIR}"/*/* | head "-${PKG_INDEX}" | tail -1)
 	find "${inst_dir}" | sed "s,^${UPKG_DIR}/,,"
+}
+
+# -----------------------------------------------------------------------------
+# Command functions
+
+function do_download()
+{
+	local pkg_file
+
+	if [ "${#CMD_ARGS[@]}" -ne 1 ] ; then
+		usage
+		exit 2
+	fi
+
+	if ! [ -d "${PKG_DIR}" ] ; then
+		echo "Error: No such target directory: ${PKG_DIR}" >&2
+		exit 1
+	fi
+
+	PKG_VERSION=${CMD_ARGS[0]}
+	pkg_files_from_pkg_version
+
+	for pkg_file in "${PKG_FILES[@]}" ; do
+		if [ -e "${PKG_DIR}/${pkg_file}" ] ; then
+			echo "Skipping ${pkg_file} (exists already)"
+			continue
+		fi
+
+		echo -n "Downloading ${pkg_file}  ... "
+		if wget -q -O "${PKG_DIR}/${pkg_file}" \
+				"${ARCHIVE_URL}/${pkg_file}" ; then
+			echo "done"
+		else
+			rm -f "${PKG_DIR}/${pkg_file}"
+			echo "failed"
+		fi
+	done
+}
+
+function do_install()
+{
+	if [ "${#CMD_ARGS[@]}" -eq 0 ] ; then
+		usage
+		exit 2
+	elif [ -f "${CMD_ARGS[0]}" ] ; then
+		PKG_FILES=("${CMD_ARGS[@]}")
+	else
+		PKG_DIR=$(mktemp -d)
+		# shellcheck disable=SC2064
+		trap "rm -rf ${PKG_DIR}" EXIT INT TERM HUP
+		do_download
+	fi
+
+	install_pkg_files
+}
+
+function do_list()
+{
+	if [ "${#CMD_ARGS[@]}" -eq 0 ] ; then
+		list_pkgs
+	elif [ "${#CMD_ARGS[@]}" -eq 1 ] ; then
+		PKG_INDEX=${CMD_ARGS[0]}
+		list_pkgs_files
+	else
+		usage
+		exit 2
+	fi
 }
 
 function do_remove()
 {
 	local inst_dir
 
-	verify_pkg_idx
+	if [ "${#CMD_ARGS[@]}" -ne 1 ] ; then
+		usage
+		exit 2
+	fi
+
+	PKG_INDEX=${CMD_ARGS[0]}
+	verify_pkg_index
 
 	# shellcheck disable=SC2012
 	inst_dir=$(ls -1d "${UPKG_DIR}"/*/* | head -"${PKG_INDEX}" | tail -1)
@@ -218,17 +248,17 @@ function do_remove()
 function usage()
 {
 	cat <<EOF
-Usage: upkg [-a ARCH] [-f FLAVOR] [-h] [-x] [-t] COMMAND [ARGUMENTS]
+Usage: upkg [-a ARCH] [-f FLAVOR] [-h] [-x] [-t] COMMAND [ARGS]
 
 Ubuntu kernel (debug) package manager.
 
 Available commands:
   download PKG_VERSION  Download the packages with packge version PKG_VERSION
                         from the archive.
-  install PKG_FILE|PKG_VERSION
-                        Install the local package PKG_FILE or download and
-                        install the packages with package version PKG_VERSION
-                        from the archive.
+  install PKG_VERSION | PKG_FILE [PKG_FILE ...]
+                        Download and install the packages with package version
+                        PKG_VERSION from the archive or install the local
+                        install the local packages PKG_FILE [PKG_FILE ...].
   list [PKG_INDEX]      List all installed packages or, if PKG_INDEX is
                         specified, the files provided by the package(s) with
                         the index PKG_INDEX.
@@ -237,11 +267,11 @@ Available commands:
 Optional arguments:
   -a, --arch ARCH      Download the packages for kernel architecture ARCH
                        (defaults to ${ARCH}).
+  -d, --dir DIR        Target directory for downloaded files (defaults to ./).
   -f, --flavor FLAVOR  Download the binary package for flavor FLAVOR (defaults
                        to generic).
   -h, --help           Show this help.
   -x, --force          Force an action (only useful with certain commands).
-  -t, --target DIR     Target directory for downloaded files (defaults to ./).
 EOF
 }
 
@@ -262,12 +292,10 @@ ARCHIVE_URL="https://launchpad.net/ubuntu/+archive/primary/+files/"
 
 ARCH=$(dpkg --print-architecture)
 CMD=
+CMD_ARGS=
 FLAVOR=generic
 FORCE=0
-PKG_FILE=
-PKG_INDEX=
-PKG_VERSION=
-TARGET=./
+PKG_DIR=
 
 # Parse the commandline options
 while [ ${#} -gt 0 ] ; do
@@ -287,41 +315,19 @@ while [ ${#} -gt 0 ] ; do
 		-x|--force)
 			FORCE=1
 			;;
-		-t|--target)
+		-d|--dir)
 			shift
-			TARGET="${1}"
+			PKG_DIR="${1}"
 			;;
 		download|install|list|remove)
 			CMD="${1}"
+			shift
+			CMD_ARGS=("${@}")
+			break
 			;;
 		*)
-			case "${CMD}" in
-				download)
-					PKG_VERSION="${1}"
-					break
-					;;
-				install)
-					if [ -e "${1}" ] ; then
-						PKG_FILE="${1}"
-					else
-						PKG_VERSION="${1}"
-					fi
-					break
-					;;
-				list)
-					CMD="listfiles"
-					PKG_INDEX="${1}"
-					break
-					;;
-				remove)
-					PKG_INDEX="${1}"
-					break
-					;;
-				*)
-					echo "Error: Unexpected argument: ${1}" >&2
-					exit 2
-					;;
-			esac
+			echo "Error: Unexpected argument: ${1}" >&2
+			exit 2
 			;;
 	esac
 	shift
@@ -332,4 +338,4 @@ if [ -z "${CMD}" ] ; then
 	exit 2
 fi
 
-do_${CMD}
+"do_${CMD}"
