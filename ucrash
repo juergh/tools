@@ -102,13 +102,12 @@ function set_globals()
 
 function run_crash()
 {
-	local chroot_cmd chroot_list crash module rel_path src_file infile
+	local chroot_list mod_file rel_path src_file bld_path infile
 
-	# We need to run in a chroot if the architecture of the dump file is
+	# We need to run crash in a chroot if the architecture of the dump file is
 	# different from the host architecture
-	CHROOT=
-	chroot_cmd=
-	if [ "${DUMP_ARCH}" != "$(dpkg --print-architecture)" ] ; then
+	if [ -z "${CHROOT}" ] && \
+	   [ "${DUMP_ARCH}" != "$(dpkg --print-architecture)" ] ; then
 		readarray -t chroot_list < <(schroot -l | \
 									 grep -P "^chroot:.*-${DUMP_ARCH}$" | \
 									 sed -e 's,^chroot:,,')
@@ -118,77 +117,83 @@ function run_crash()
 		fi
 		# TODO: Which one to use when there are multiples?
 		CHROOT=${chroot_list[0]}
-		chroot_cmd="schroot -c ${CHROOT} --"
 	fi
 
-	# Make sure the crash tool is available
-	if ! crash="$(${chroot_cmd} which crash)" ; then
+	# Assemble the crash command
+	CRASH=()
+	if [ -n "${CHROOT}" ] ; then
+		CRASH=("schroot" "-c" "${CHROOT}" "--")
+	fi
+	if ! CRASH+=("$("${CRASH[@]}" which crash)") ; then
 		pr_error "Crash tool not found"
 	fi
 
-	CRASH_MODULE_PATH=
-	CRASH_INFILE=
-	if [ -n "${DEBUG_MODULES:-}" ] ; then
-		CRASH_MODULE_PATH=${DEBUG_MODULES}
+	# Get the build path of the kernel
+	mod_file=$(find "${DEBUG_MODULES}"/kernel/*/* -type f -name '*.ko' | \
+                   head -1)
+	rel_path=${mod_file##*/kernel/}
+	rel_path=${rel_path%/*}
+	src_file=$(objdump --dwarf=decodedline "${mod_file}" | \
+				   grep "^/.*/${rel_path}/.*\.c:$" | head -1)
+	bld_path=${src_file%/${rel_path}/*}
 
-		# Get the build path of the kernel
-		module=$(find "${DEBUG_MODULES}"/kernel/*/* -type f -name '*.ko' | \
-                      head -1)
-		rel_path=${module##*/kernel/}
-		rel_path=${rel_path%/*}
-		src_file=$(objdump --dwarf=decodedline "${module}" | \
-					   grep "^/.*/${rel_path}/.*\.c:$" | head -1)
-		BUILD_PATH=${src_file%/${rel_path}/*}
+	# Substitute the kernel build path with the real kernel source
+	# directory so that gdb can find the source
+	infile=$(mktemp --tmpdir ucrash-XXXXXXXX)
+	# shellcheck disable=SC2064
+	trap "rm -f ${infile}" INT TERM EXIT HUP
+	echo "gdb set substitute-path ${bld_path} ${KERNEL_SOURCE}" > "${infile}"
 
-		pr_info "kernel build path" "${BUILD_PATH}"
+	# Assemble the crash tool options
+	CRASH_OPTS+=("-x" "-i" "${infile}" "${DEBUG_KERNEL}" "${DUMP_FILE}"
+				 "${SYSTEM_MAP}")
 
-		# Substitute the kernel build path with the real kernel source
-		# directory so that gdb can find the source
-		infile=$(mktemp .ucrash-XXXXXXXX)
-		# shellcheck disable=SC2064
-		trap "rm ${infile}" EXIT
-		echo "gdb set substitute-path ${BUILD_PATH} ${KERNEL_SOURCE}" > \
-             "${infile}"
-
-		CRASH_INFILE="-i ${infile}"
-	fi
-
-	CRASH="${chroot_cmd} ${crash}"
-	CRASH="${CRASH# }"
-	CRASH_VERSION="$(${CRASH} --version | grep -m1 '^crash ' | \
-		sed -e 's/crash //')"
+	# Set the exports for the crash tool
+	CRASH_MODULE_PATH=${DEBUG_MODULES}
 	CRASH_EXTENSIONS="/usr/lib/crash/extensions"
 	CRASHPAGER="/usr/bin/less -X -E"
 
-	# Assemble the crash tool options
-	CRASH_OPTS+=("-x" "${CRASH_INFILE}" "${DEBUG_KERNEL}" "${DUMP_FILE}" \
-				 "${SYSTEM_MAP}")
+	# Get the version of the crash tool
+	CRASH_VERSION=$("${CRASH[@]}" --version | grep -m1 '^crash ' | \
+						sed -e 's/crash //')
     
-	pr_info "chroot"        "${CHROOT}"
-	pr_info "crash tool"    "${CRASH}"
-	pr_info "crash version" "${CRASH_VERSION}"
-	pr_info "crash export"  "CRASH_MODULE_PATH=${CRASH_MODULE_PATH}"
-	pr_info "crash export"  "CRASH_EXTENSIONS=${CRASH_EXTENSIONS}"
-	pr_info "crash export"  "CRASHPAGER=${CRASHPAGER}"
-	pr_info "crash options" "${CRASH_OPTS[*]}"
+	pr_info "kernel build path" "${bld_path}"
+	pr_info "chroot"            "${CHROOT}"
+	pr_info "crash tool"        "${CRASH[*]}"
+	pr_info "crash options"     "${CRASH_OPTS[*]}"
+	pr_info "crash version"     "${CRASH_VERSION}"
+	pr_info "crash export"      "CRASH_MODULE_PATH=${CRASH_MODULE_PATH}"
+	pr_info "crash export"      "CRASH_EXTENSIONS=${CRASH_EXTENSIONS}"
+	pr_info "crash export"      "CRASHPAGER=${CRASHPAGER}"
 
 	# Finally run crash
 	if [ "${INFO}" -eq 0 ] ; then
 		export CRASH_MODULE_PATH CRASH_EXTENSIONS CRASHPAGER
-		${CRASH} "${CRASH_OPTS[@]}"
+		"${CRASH[@]}" "${CRASH_OPTS[@]}"
 	fi
 }
 
 function usage()
 {
 	cat <<EOF
-Usage: ucrash [-d] [-i] DUMP_FILE[@ADDRESS] [DEBUG_KERNEL]
+Usage: ucrash [-c CHROOT] [-d] [-h] [-i] DUMP_FILE[@ADDRESS] [DEBUG_KERNEL]
        [[--] [CRASH_OPTIONS]]
 
+Run the crash tool against the given kernel dump file.
+
+Positional arguments:
+  DUMP_FILE      The kernel core dump file.
+  @ADDRESS       An @ADDRESS value must be provided if the dumpfile is a raw
+                 RAM dumpfile that has no header information.
+  DEBUG_KERNEL   The debug kernel to use. If not specified, the tool will try
+                 to locate the correct debug kernel.
+  CRASH_OPTIONS  Additional options passed to the crash tool.
+
 Optional arguments:
-  -d, --debug  Enable debugging output (set -x).
-  -h, --help   Show this help text.
-  -i, --info   Just show all the info without actually running crash.
+  -c, --chroot CHROOT  Run crash in the chroot CHROOT.
+  -d, --debug          Enable debugging output (set -x).
+  -h, --help           Show this help text.
+  -i, --info           Just show all the info without actually running crash.
 EOF
 }
 
@@ -207,10 +212,15 @@ CRASH_OPTS=()
 DUMP_FILE=
 DEBUG_KERNEL=
 SYSTEM_MAP=
+CHROOT=
 
 # Parse the commandline
 while [ $# -gt 0 ] ; do
 	case "${1}" in
+		-c|--chroot)
+			shift
+			CHROOT=${1}
+			;;
 		-d|--debug)
 			set -x;
 			;;
