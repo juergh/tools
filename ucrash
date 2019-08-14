@@ -38,15 +38,9 @@ function lookup_arch()
 
 function parse_dump_file()
 {
-	local filev arch upload
-
-	filev="$(file "${DUMP_FILE}")"
-	arch="${filev#* core file }"
-	arch="${arch%%,*}"
-	DUMP_ARCH="$(lookup_arch "${arch}")"
+	local text upload
 
 	pr_info "dump file"      "${DUMP_FILE}"
-	pr_info "dump file arch" "${DUMP_ARCH}"
     
 	# If a debug kernel was specified on the commandline, skip the parsing of
 	# the dump file and assume it's the correct debug kernel
@@ -54,25 +48,26 @@ function parse_dump_file()
 		return
 	fi
 
-	if ! DUMP_LINUX_VERSION="$(strings "${DUMP_FILE}" | head -200000 | \
-	           grep -m 1 '^Linux version ')" ; then
-		pr_error "No Linux version found in dumpfile"
+	readarray -t text < <(strings "${DUMP_FILE}" | head -6)
+	if [ "${text[0]}" != "KDUMP   " ] ; then
+		pr_error "Failed to parse dumpfile"
 	fi
 
-	DUMP_RELEASE="${DUMP_LINUX_VERSION##*Linux version }"
-	DUMP_RELEASE="${DUMP_RELEASE%% *}"
+	DUMP_ARCH=${text[5]}
 
+	DUMP_LINUX_VERSION="${text[3]} ${text[4]}"
+
+	DUMP_RELEASE=${text[3]}
 	DUMP_FLAVOR="${DUMP_RELEASE##*-}"
-
 	DUMP_BASE="${DUMP_RELEASE%%-*}"
 
-	upload="${DUMP_LINUX_VERSION##* #}"
-	upload="${upload%%-*}"
-	upload="${upload%% *}"
+	upload=${text[4]%%-*}
+	upload=${upload:1}
 	DUMP_SOURCE="${DUMP_RELEASE%-*}.${upload}"
     
 	DUMP_VERSION="${DUMP_SOURCE}-${DUMP_FLAVOR}"
 
+	pr_info "dump file arch"      "${DUMP_ARCH}"
 	pr_info "dump linux version"  "${DUMP_LINUX_VERSION}"
 	pr_info "dump kernel release" "${DUMP_RELEASE}"
 	pr_info "dump kernel flavor"  "${DUMP_FLAVOR}"
@@ -107,29 +102,27 @@ function set_globals()
 
 function run_crash()
 {
-	local schroot_cmd schroot_list crash module rel_path src_file infile
+	local chroot_cmd chroot_list crash module rel_path src_file infile
 
-	# We need to run in a schroot if the architecture of the dump file is
+	# We need to run in a chroot if the architecture of the dump file is
 	# different from the host architecture
-	SCHROOT=
-	schroot_cmd=
+	CHROOT=
+	chroot_cmd=
 	if [ "${DUMP_ARCH}" != "$(dpkg --print-architecture)" ] ; then
-		# shellcheck disable=SC2012
-		schroot_list=$(ls -1 /etc/schroot/chroot.d/* | sed -e 's,.*/,,' | \
-                           grep "\-${DUMP_ARCH}$" || echo "")
-		if [ -z "${schroot_list}" ] ; then
-			pr_error "No schroot found for arch: ${DUMP_ARCH}"
+		readarray -t chroot_list < <(schroot -l | \
+									 grep -P "^chroot:.*-${DUMP_ARCH}$" | \
+									 sed -e 's,^chroot:,,')
+
+		if [ "${#chroot_list[@]}" -eq 0 ] ; then
+			pr_error "No chroot found for arch: ${DUMP_ARCH}"
 		fi
-		for SCHROOT in ${schroot_list} ; do
-			[ "${SCHROOT#artful-}" = "${SCHROOT}" ] || break
-			[ "${SCHROOT#zesty-}" = "${SCHROOT}" ] || break
-			[ "${SCHROOT#xenial-}" = "${SCHROOT}" ] || break
-		done
-		schroot_cmd="schroot -c ${SCHROOT} --"
+		# TODO: Which one to use when there are multiples?
+		CHROOT=${chroot_list[0]}
+		chroot_cmd="schroot -c ${CHROOT} --"
 	fi
 
 	# Make sure the crash tool is available
-	if ! crash="$(${schroot_cmd} which crash)" ; then
+	if ! crash="$(${chroot_cmd} which crash)" ; then
 		pr_error "Crash tool not found"
 	fi
 
@@ -160,7 +153,7 @@ function run_crash()
 		CRASH_INFILE="-i ${infile}"
 	fi
 
-	CRASH="${schroot_cmd} ${crash}"
+	CRASH="${chroot_cmd} ${crash}"
 	CRASH="${CRASH# }"
 	CRASH_VERSION="$(${CRASH} --version | grep -m1 '^crash ' | \
 		sed -e 's/crash //')"
@@ -168,9 +161,10 @@ function run_crash()
 	CRASHPAGER="/usr/bin/less -X -E"
 
 	# Assemble the crash tool options
-	CRASH_OPTS="${CRASH_OPTS} -x ${CRASH_INFILE} ${DEBUG_KERNEL} ${DUMP_FILE} ${SYSTEM_MAP}"
+	CRASH_OPTS+=("-x" "${CRASH_INFILE}" "${DEBUG_KERNEL}" "${DUMP_FILE}" \
+				 "${SYSTEM_MAP}")
     
-	pr_info "schroot"       "${SCHROOT}"
+	pr_info "chroot"        "${CHROOT}"
 	pr_info "crash tool"    "${CRASH}"
 	pr_info "crash version" "${CRASH_VERSION}"
 	pr_info "crash export"  "CRASH_MODULE_PATH=${CRASH_MODULE_PATH}"
