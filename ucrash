@@ -136,7 +136,7 @@ function run_crash()
 	# Debug kernel, modules, system map and source code location
 	debug_kernel=${kernel_bin_root}/usr/lib/debug/boot/vmlinux-${DUMP_RELEASE}
 	debug_modules=${kernel_bin_root}/usr/lib/debug/lib/modules/${DUMP_RELEASE}
-	system_map=${kernel_bin_root}/boot/System.map-${DUMP_RELEASE}
+#	system_map=${kernel_bin_root}/boot/System.map-${DUMP_RELEASE}
 	kernel_source=${kernel_src_root}/usr/src/linux-source-${DUMP_BASE}
 
 	# A debug kernel was specified on the commandline and it does *not* match
@@ -145,13 +145,13 @@ function run_crash()
 		   ! cmp -s "${DEBUG_KERNEL}" "${debug_kernel}" ; then
 		debug_kernel=${DEBUG_KERNEL}
 		debug_modules=
-		system_map=
+#		system_map=
 		kernel_source=
 	fi
 
 	pr_info "debug kernel"  "${debug_kernel}"
 	pr_info "debug modules" "${debug_modules}"
-	pr_info "system map"    "${system_map}"
+#	pr_info "system map"    "${system_map}"
 	pr_info "kernel source" "${kernel_source}"
 
 	# Set the chroot to run crash in
@@ -176,7 +176,7 @@ function run_crash()
 	crash_cmd=()
 	if [ -n "${chroot}" ] ; then
 		pr_info "chroot" "${chroot}"
-		crash_cmd=("schroot" "-c" "${chroot}" "--")
+		crash_cmd=("schroot" "-p" "-c" "${chroot}" "--")
 	fi
 	if ! crash_cmd+=("$("${crash_cmd[@]}" which crash)") ; then
 		pr_error "Crash tool not found"
@@ -185,7 +185,7 @@ function run_crash()
 						sed -e 's/crash //')
 
 	# Assemble the base crash command options
-	crash_opts=("${CRASH_OPTS[@]}" "-x")
+	crash_opts=("${CRASH_OPTS[@]}" "-x" "--CRASHPAGER")
 
 	# Substitute the kernel build path with the real kernel source directory
 	# so that gdb can find the source
@@ -209,11 +209,10 @@ function run_crash()
 
 	# Final crash command options
 	crash_opts+=("${debug_kernel}" "${DUMP_FILE}")
-	if [ -n "${system_map}" ] ; then
-		crash_opts+=("${system_map}")
-	fi
+#	if [ -n "${system_map}" ] ; then
+#		crash_opts+=("${system_map}")
+#	fi
     
-
 	# Return if --info is specified
 	if [ "${INFO}" -eq 1 ] ; then
 		return
@@ -224,8 +223,8 @@ function run_crash()
 		export CRASH_MODULE_PATH=${debug_modules}
 		pr_info "crash export" "CRASH_MODULE_PATH=${CRASH_MODULE_PATH}"
 	fi
-	CRASH_EXTENSIONS="/usr/lib/crash/extensions"
-	CRASHPAGER="/usr/bin/less -X -F"
+	export CRASH_EXTENSIONS="/usr/lib/crash/extensions"
+	export CRASHPAGER="/usr/bin/less -F -X"
 
 	pr_info "crash export" "CRASH_EXTENSIONS=${CRASH_EXTENSIONS}"
 	pr_info "crash export" "CRASHPAGER=${CRASHPAGER}"
