@@ -9,7 +9,7 @@
 
 function pr_info()
 {
-	printf "%-19s : %s\n" "${1}" "${2}"
+	echo -e "\e[0;33m$(printf "%-24s : %s\n" "${1}" "${2}")\e[0m"
 }
 
 function pr_error()
@@ -20,7 +20,9 @@ function pr_error()
 
 function lookup_arch()
 {
-	case "${1,,}" in
+	local arch=${1} errmsg=${2}
+
+	case "${arch,,}" in
 		*s/390*)
 			echo "s390x"
 			;;
@@ -31,83 +33,134 @@ function lookup_arch()
 			echo "amd64"
 			;;
 		*)
-			pr_error "Unknown architecture: ${1}"
+			pr_error "${errmsg}"
 			;;
 	esac
 }
 
-function parse_dump_file()
+function parse_linux_version()
 {
-	local text upload
+	local linux_version=${1}
 
-	pr_info "dump file"      "${DUMP_FILE}"
-    
-	# If a debug kernel was specified on the commandline, skip the parsing of
-	# the dump file and assume it's the correct debug kernel
-	if [ -n "${DEBUG_KERNEL}" ] ; then
-		return
+	DUMP_RELEASE=${linux_version#Linux version }
+	DUMP_RELEASE=${DUMP_RELEASE%% *}
+
+	DUMP_BASE=${DUMP_RELEASE%%-*}
+
+	DUMP_ABI=${DUMP_RELEASE#*-}
+	DUMP_ABI=${DUMP_ABI%%-*}
+	DUMP_ABI=${DUMP_BASE}-${DUMP_ABI}
+
+	DUMP_FLAVOR=${DUMP_RELEASE#${DUMP_ABI}-}
+
+    DUMP_UPLOAD=${linux_version##* #}
+    DUMP_UPLOAD=${DUMP_UPLOAD%%-*}
+    DUMP_UPLOAD=${DUMP_UPLOAD%% *}
+
+	DUMP_VERSION=${DUMP_ABI}.${DUMP_UPLOAD}
+
+    DUMP_FULL_VERSION=${DUMP_VERSION}-${DUMP_FLAVOR}
+ }
+
+function parse_debug_kernel()
+{
+	local arch linux_version
+
+	# Determine the architecture
+	arch=$(file "${DEBUG_KERNEL}")
+	arch=${arch%%, version *}
+	arch=${arch##*, }
+	DUMP_ARCH=$(lookup_arch "${arch}" \
+				"Unknown architecture found in debug kernel: ${arch}")
+
+	# Get the Linux version from the debug kernel
+    if ! linux_version=$(strings "${DEBUG_KERNEL}" | \
+							 grep -m 1 '^Linux version ') ; then
+        pr_error "No Linux version found in debug kernel"
 	fi
 
-	readarray -t text < <(strings "${DUMP_FILE}" | head -6)
-	if [ "${text[0]}" != "KDUMP   " ] ; then
+	parse_linux_version "${linux_version}"
+}
+
+function parse_dump_file()
+{
+	local tmp
+
+	readarray -t tmp < <(strings "${DUMP_FILE}" | head -6)
+	if [ "${tmp[0]}" != "KDUMP   " ] ; then
 		pr_error "Failed to parse dumpfile"
 	fi
 
-	DUMP_ARCH=${text[5]}
+	DUMP_ARCH=${tmp[5]}
 
-	DUMP_LINUX_VERSION="${text[3]} ${text[4]}"
+	DUMP_RELEASE=${tmp[3]}
 
-	DUMP_RELEASE=${text[3]}
-	DUMP_FLAVOR="${DUMP_RELEASE##*-}"
-	DUMP_BASE="${DUMP_RELEASE%%-*}"
+	DUMP_BASE=${DUMP_RELEASE%%-*}
 
-	upload=${text[4]%%-*}
-	upload=${upload:1}
-	DUMP_SOURCE="${DUMP_RELEASE%-*}.${upload}"
-    
-	DUMP_VERSION="${DUMP_SOURCE}-${DUMP_FLAVOR}"
+	DUMP_ABI=${DUMP_RELEASE#*-}
+	DUMP_ABI=${DUMP_ABI%%-*}
+	DUMP_ABI=${DUMP_BASE}-${DUMP_ABI}
 
-	pr_info "dump file arch"      "${DUMP_ARCH}"
-	pr_info "dump linux version"  "${DUMP_LINUX_VERSION}"
-	pr_info "dump kernel release" "${DUMP_RELEASE}"
-	pr_info "dump kernel flavor"  "${DUMP_FLAVOR}"
-	pr_info "dump kernel base"    "${DUMP_BASE}"
-	pr_info "dump kernel source"  "${DUMP_SOURCE}"
-	pr_info "dump kernel version" "${DUMP_VERSION}"
-}
+	DUMP_FLAVOR=${DUMP_RELEASE#${DUMP_ABI}-}
 
-function set_globals()
-{
-	if [ -n "${DEBUG_KERNEL}" ] ; then
-		return
-	fi
+	DUMP_UPLOAD=${tmp[4]%%-*}
+	DUMP_UPLOAD=${DUMP_UPLOAD:1}
 
-	# Kernel binary and source root directories
-	KERNEL_BIN="${UPKG_DIR}/${DUMP_ARCH}/${DUMP_VERSION}"
-	KERNEL_SRC="${UPKG_DIR}/all/${DUMP_SOURCE}"
+	DUMP_VERSION=${DUMP_ABI}.${DUMP_UPLOAD}
 
-	# Debug kernel, modules and system map
-	DEBUG_KERNEL="${KERNEL_BIN}/usr/lib/debug/boot/vmlinux-${DUMP_RELEASE}"
-	DEBUG_MODULES="${KERNEL_BIN}/usr/lib/debug/lib/modules/${DUMP_RELEASE}"
-	SYSTEM_MAP="${KERNEL_BIN}/boot/System.map-${DUMP_RELEASE}"
-
-	# Kernel source
-	KERNEL_SOURCE="${KERNEL_SRC}/usr/src/linux-source-${DUMP_BASE}"
-
-	pr_info "debug kernel"  "${DEBUG_KERNEL}"
-	pr_info "debug modules" "${DEBUG_MODULES}"
-	pr_info "system map"    "${SYSTEM_MAP}"
-	pr_info "kernel source" "${KERNEL_SOURCE}"
+    DUMP_FULL_VERSION=${DUMP_VERSION}-${DUMP_FLAVOR}
 }
 
 function run_crash()
 {
-	local chroot_list mod_file rel_path src_file bld_path infile
+	local kernel_bin_root kernel_src_root
+	local debug_kernel debug_modules system_map kernel_source
+	local chroot_list chroot crash_cmd crash_version crash_opts
+	local build_path infile
 
-	# We need to run crash in a chroot if the architecture of the dump file is
-	# different from the host architecture
-	if [ -z "${CHROOT}" ] && \
-	   [ "${DUMP_ARCH}" != "$(dpkg --print-architecture)" ] ; then
+	pr_info "dump file" "${DUMP_FILE}"
+
+	pr_info "dump kernel arch"         "${DUMP_ARCH}"
+	pr_info "dump kernel release"      "${DUMP_RELEASE}"
+	pr_info "dump kernel base"         "${DUMP_BASE}"
+	pr_info "dump kernel abi"          "${DUMP_ABI}"
+	pr_info "dump kernel flavor"       "${DUMP_FLAVOR}"
+	pr_info "dump kernel upload"       "${DUMP_UPLOAD}"
+	pr_info "dump kernel version"      "${DUMP_VERSION}"
+	pr_info "dump kernel full version" "${DUMP_FULL_VERSION}"
+
+	# upkg kernel root directories
+	kernel_bin_root=${UPKG_DIR}/${DUMP_ARCH}/${DUMP_FULL_VERSION}
+	kernel_src_root=${UPKG_DIR}/all/${DUMP_VERSION}
+
+	# Debug kernel, modules, system map and source code location
+	debug_kernel=${kernel_bin_root}/usr/lib/debug/boot/vmlinux-${DUMP_RELEASE}
+	debug_modules=${kernel_bin_root}/usr/lib/debug/lib/modules/${DUMP_RELEASE}
+	system_map=${kernel_bin_root}/boot/System.map-${DUMP_RELEASE}
+	kernel_source=${kernel_src_root}/usr/src/linux-source-${DUMP_BASE}
+
+	# A debug kernel was specified on the commandline and it does *not* match
+	# the corresponding upkg kernel
+	if [ -n "${DEBUG_KERNEL}" ] && \
+		   ! cmp -s "${DEBUG_KERNEL}" "${debug_kernel}" ; then
+		debug_kernel=${DEBUG_KERNEL}
+		debug_modules=
+		system_map=
+		kernel_source=
+	fi
+
+	pr_info "debug kernel"  "${debug_kernel}"
+	pr_info "debug modules" "${debug_modules}"
+	pr_info "system map"    "${system_map}"
+	pr_info "kernel source" "${kernel_source}"
+
+	# Set the chroot to run crash in
+	chroot=
+	if [ -n "${CHROOT}" ] ; then
+		chroot=${CHROOT}
+	elif [ "${DUMP_ARCH}" != "$(dpkg --print-architecture)" ] ; then
+		# We need to run crash in a chroot if the dump architecture is
+		# different from the host architecture
 		readarray -t chroot_list < <(schroot -l | \
 									 grep -P "^chroot:.*-${DUMP_ARCH}$" | \
 									 sed -e 's,^chroot:,,')
@@ -116,61 +169,73 @@ function run_crash()
 			pr_error "No chroot found for arch: ${DUMP_ARCH}"
 		fi
 		# TODO: Which one to use when there are multiples?
-		CHROOT=${chroot_list[0]}
+		chroot=${chroot_list[0]}
 	fi
 
-	# Assemble the crash command
-	CRASH=()
-	if [ -n "${CHROOT}" ] ; then
-		CRASH=("schroot" "-c" "${CHROOT}" "--")
+	# Assemble the crash command and get its version
+	crash_cmd=()
+	if [ -n "${chroot}" ] ; then
+		pr_info "chroot" "${chroot}"
+		crash_cmd=("schroot" "-c" "${chroot}" "--")
 	fi
-	if ! CRASH+=("$("${CRASH[@]}" which crash)") ; then
+	if ! crash_cmd+=("$("${crash_cmd[@]}" which crash)") ; then
 		pr_error "Crash tool not found"
 	fi
-
-	# Get the build path of the kernel
-	mod_file=$(find "${DEBUG_MODULES}"/kernel/*/* -type f -name '*.ko' | \
-                   head -1)
-	rel_path=${mod_file##*/kernel/}
-	rel_path=${rel_path%/*}
-	src_file=$(objdump --dwarf=decodedline "${mod_file}" | \
-				   grep "^/.*/${rel_path}/.*\.c:$" | head -1)
-	bld_path=${src_file%/${rel_path}/*}
-
-	# Substitute the kernel build path with the real kernel source
-	# directory so that gdb can find the source
-	infile=$(mktemp --tmpdir ucrash-XXXXXXXX)
-	# shellcheck disable=SC2064
-	trap "rm -f ${infile}" INT TERM EXIT HUP
-	echo "gdb set substitute-path ${bld_path} ${KERNEL_SOURCE}" > "${infile}"
-
-	# Assemble the crash tool options
-	CRASH_OPTS+=("-x" "-i" "${infile}" "${DEBUG_KERNEL}" "${DUMP_FILE}"
-				 "${SYSTEM_MAP}")
-
-	# Set the exports for the crash tool
-	CRASH_MODULE_PATH=${DEBUG_MODULES}
-	CRASH_EXTENSIONS="/usr/lib/crash/extensions"
-	CRASHPAGER="/usr/bin/less -X -E"
-
-	# Get the version of the crash tool
-	CRASH_VERSION=$("${CRASH[@]}" --version | grep -m1 '^crash ' | \
+	crash_version=$("${crash_cmd[@]}" --version | grep -m1 '^crash ' | \
 						sed -e 's/crash //')
+
+	# Assemble the base crash command options
+	crash_opts=("${CRASH_OPTS[@]}" "-x")
+
+	# Substitute the kernel build path with the real kernel source directory
+	# so that gdb can find the source
+	if [ -n "${kernel_source}" ] ; then
+		# Get the build path of the kernel
+		build_path=$(objdump --dwarf=decodedline "${debug_kernel}" | \
+						 grep -m1 '^/.*/init/main\.c:$' | \
+						 sed -e 's,/init/main\.c:,,')
+
+		pr_info "kernel build path" "${build_path}"
+
+		# Create a temporary commands file that crash loads on start
+		infile=$(mktemp --tmpdir ucrash-XXXXXXXX)
+		# shellcheck disable=SC2064
+		trap "rm -f ${infile}" INT TERM EXIT HUP
+		echo "gdb set substitute-path ${build_path} ${kernel_source}" > \
+			 "${infile}"
+
+		crash_opts+=("-i" "${infile}")
+	fi
+
+	# Final crash command options
+	crash_opts+=("${debug_kernel}" "${DUMP_FILE}")
+	if [ -n "${system_map}" ] ; then
+		crash_opts+=("${system_map}")
+	fi
     
-	pr_info "kernel build path" "${bld_path}"
-	pr_info "chroot"            "${CHROOT}"
-	pr_info "crash tool"        "${CRASH[*]}"
-	pr_info "crash options"     "${CRASH_OPTS[*]}"
-	pr_info "crash version"     "${CRASH_VERSION}"
-	pr_info "crash export"      "CRASH_MODULE_PATH=${CRASH_MODULE_PATH}"
-	pr_info "crash export"      "CRASH_EXTENSIONS=${CRASH_EXTENSIONS}"
-	pr_info "crash export"      "CRASHPAGER=${CRASHPAGER}"
+
+	# Return if --info is specified
+	if [ "${INFO}" -eq 1 ] ; then
+		return
+	fi
+
+	# Set the crash exports
+	if [ -n "${debug_modules}" ] ; then
+		export CRASH_MODULE_PATH=${debug_modules}
+		pr_info "crash export" "CRASH_MODULE_PATH=${CRASH_MODULE_PATH}"
+	fi
+	CRASH_EXTENSIONS="/usr/lib/crash/extensions"
+	CRASHPAGER="/usr/bin/less -X -F"
+
+	pr_info "crash export" "CRASH_EXTENSIONS=${CRASH_EXTENSIONS}"
+	pr_info "crash export" "CRASHPAGER=${CRASHPAGER}"
+
+	pr_info "crash command" "${crash_cmd[*]}"
+	pr_info "crash options" "${crash_opts[*]}"
+	pr_info "crash version" "${crash_version}"
 
 	# Finally run crash
-	if [ "${INFO}" -eq 0 ] ; then
-		export CRASH_MODULE_PATH CRASH_EXTENSIONS CRASHPAGER
-		"${CRASH[@]}" "${CRASH_OPTS[@]}"
-	fi
+	"${crash_cmd[@]}" "${crash_opts[@]}"
 }
 
 function usage()
@@ -211,7 +276,6 @@ INFO=0
 CRASH_OPTS=()
 DUMP_FILE=
 DEBUG_KERNEL=
-SYSTEM_MAP=
 CHROOT=
 
 # Parse the commandline
@@ -267,8 +331,9 @@ if [ -n "${DEBUG_KERNEL}" ] ; then
 		pr_error "No such debug kernel: ${DEBUG_KERNEL}"
 	fi
 	DEBUG_KERNEL=$(readlink -e "${DEBUG_KERNEL}")
+	parse_debug_kernel
+else
+	parse_dump_file
 fi
 
-parse_dump_file
-set_globals
 run_crash
