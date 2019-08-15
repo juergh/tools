@@ -19,25 +19,9 @@ function verify_pkg_index()
 	fi
 }
 
-function pkg_files_from_pkg_version()
-{
-	local base rev abi
-
-	base=${PKG_VERSION%%-*}
-	rev=${PKG_VERSION#*-}
-	abi=${base}-${rev%%.*}
-
-	PKG_FILES=(
-		"linux-image-${abi}-${FLAVOR}-dbgsym_${PKG_VERSION}_${ARCH}.ddeb"
-		"linux-image-${abi}-${FLAVOR}_${PKG_VERSION}_${ARCH}.deb"
-		"linux-modules-${abi}-${FLAVOR}_${PKG_VERSION}_${ARCH}.deb"
-		"linux-source-${base}_${PKG_VERSION}_all.deb"
-	)
-}
-
 function install_pkg_files()
 {
-	local pkg_file package version arch flavor manifest inst_dir
+	local pkg_file package version arch flavor inst_dir
 
 	for pkg_file in "${PKG_FILES[@]}" ; do
 		# shellcheck disable=SC2016
@@ -71,24 +55,11 @@ function install_pkg_files()
 				;;
 		esac
 
-		echo "Package name    : ${package}"
-		echo "Package version : ${version}"
-		echo "Package arch    : ${arch}"
-		echo "Flavor name     : ${flavor}"
-
+		# The package installation directory
 		inst_dir=${UPKG_DIR}/${arch}/${version}${flavor}
 
-		# Check if the package is already installed
-		if [ -e "${inst_dir}/${manifest}" ] ; then
-			if [ "${FORCE}" -eq 0 ] ; then
-				echo "Error: Package is already installed" >&2
-				echo "	     Use --force to reinstall it" >&2
-				exit 1
-			fi
-		fi
-
 		# Install it
-		echo -n "Installing package ... "
+		echo -n "Installing package ${pkg_file##*/} ... "
 		mkdir -p "${inst_dir}"
 		dpkg-deb -x "${pkg_file}" "${inst_dir}"
 		touch "${inst_dir}/${manifest}"
@@ -98,7 +69,7 @@ function install_pkg_files()
 		tarball_dir=${inst_dir}/usr/src
 		tarball=${tarball_dir}/${package}.tar.bz2
 		if [ -e  "${tarball}" ] ; then
-			echo -n "Extracting source tarball ... "
+			echo -n "Extracting source tarball ${tarball##*/} ... "
 			tar -C "${tarball_dir}" -xaf "${tarball}"
 			echo "done"
 
@@ -162,7 +133,7 @@ function list_pkgs_files()
 
 function do_download()
 {
-	local pkg_file
+	local base rev abi pkg_files pkg_file pkg_file_path
 
 	if [ "${#CMD_ARGS[@]}" -ne 1 ] ; then
 		usage
@@ -175,18 +146,34 @@ function do_download()
 	fi
 
 	PKG_VERSION=${CMD_ARGS[0]}
-	pkg_files_from_pkg_version
 
-	for pkg_file in "${PKG_FILES[@]}" ; do
-		if [ -e "${PKG_DIR}/${pkg_file}" ] ; then
-			echo "Skipping ${pkg_file} (exists already)"
+	base=${PKG_VERSION%%-*}
+	rev=${PKG_VERSION#*-}
+	abi=${base}-${rev%%.*}
+
+	pkg_files=(
+		"linux-image-unsigned-${abi}-${FLAVOR}-dbgsym_${PKG_VERSION}_${ARCH}.ddeb"
+		"linux-image-${abi}-${FLAVOR}-dbgsym_${PKG_VERSION}_${ARCH}.ddeb"
+		"linux-image-unsigned-${abi}-${FLAVOR}_${PKG_VERSION}_${ARCH}.deb"
+		"linux-image-${abi}-${FLAVOR}_${PKG_VERSION}_${ARCH}.deb"
+		"linux-modules-${abi}-${FLAVOR}_${PKG_VERSION}_${ARCH}.deb"
+		"linux-source-${base}_${PKG_VERSION}_all.deb"
+	)
+
+	PKG_FILES=()
+	for pkg_file in "${pkg_files[@]}" ; do
+		pkg_file_path=${PKG_DIR}/${pkg_file}
+		if [ -e "${pkg_file_path}" ] ; then
+			echo "Skipping ${pkg_file} (already exists)"
+			PKG_FILES+=("${pkg_file_path}")
 			continue
 		fi
 
 		echo -n "Downloading ${pkg_file}  ... "
-		if wget -q -O "${PKG_DIR}/${pkg_file}" \
+		if wget -q -O "${pkg_file_path}" \
 				"${ARCHIVE_URL}/${pkg_file}" ; then
 			echo "done"
+			PKG_FILES+=("${pkg_file_path}")
 		else
 			rm -f "${PKG_DIR}/${pkg_file}"
 			echo "failed"
@@ -271,7 +258,6 @@ Optional arguments:
   -f, --flavor FLAVOR  Download the binary package for flavor FLAVOR (defaults
                        to generic).
   -h, --help           Show this help.
-  -x, --force          Force an action (only useful with certain commands).
 EOF
 }
 
@@ -294,8 +280,7 @@ ARCH=$(dpkg --print-architecture)
 CMD=
 CMD_ARGS=
 FLAVOR=generic
-FORCE=0
-PKG_DIR=
+PKG_DIR=${PWD}
 
 # Parse the commandline options
 while [ ${#} -gt 0 ] ; do
@@ -311,9 +296,6 @@ while [ ${#} -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
-			;;
-		-x|--force)
-			FORCE=1
 			;;
 		-d|--dir)
 			shift
