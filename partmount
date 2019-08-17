@@ -1,0 +1,35 @@
+#!/bin/bash -eu
+#
+# Mount a partition of a disk image file
+#
+
+imagef=${1}
+partnum=${2}
+mountp=${3:-}
+
+readarray -t -d ' ' comps < <(fdisk -l "${1}" | \
+								  grep "^${imagef}${partnum}\s" | \
+								  tr -s ' ')
+
+# Get the partition offset
+offset=${comps[1]}
+if [ "${offset}" = '*' ] ; then
+	offset=${comps[2]}
+fi
+
+# Create a mount point
+if [ -z "${mountp}" ] ; then
+	mountp=$(mktemp -p /tmp -d "partmount-XXXXXX-part${partnum}")
+else
+	[ -d "${mountp}" ] || mkdir -p "${mountp}"
+fi
+
+# Mount the partition
+sudo mount -o loop,offset=$(("${offset}" * 512)) "${imagef}" "${mountp}" || \
+	{
+		rmdir "${mountp}"
+		echo "Failed to mount partition"
+		exit 1
+	}
+
+echo "Partition mounted on ${mountp}"

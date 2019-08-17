@@ -1,0 +1,15 @@
+#!/bin/bash -eu
+#
+# Unmount a partition of a disk image file
+#
+
+mountp=$1
+
+sudo umount "${mountp}" || \
+	{
+		echo "Failed to unmount partition"
+		exit 1
+	}
+
+rmdir "${mountp}"
+echo "Partition unmounted"
