@@ -1,47 +1,60 @@
 #!/bin/sh -eu
 #
 # Search the given git repo for commits with 'Fixes:' tags and add them
-# to the given file. This creates a fast searchable 'database' for commits
-# that fix other commits.
+# to the given fixes file. This creates a fast searchable 'database' for
+# commits that fix other commits.
 #
 
 if [ $# != 2 ] ; then
-	echo "Usage: find-fixes GIT_DIR STOP_COMMIT|FIXES_FILE" >&2
+	cat <<EOF >&2
+Usage: find-fixes GIT_DIR START_COMMIT|FIXES_FILE
+
+Positional argument:
+  GIT_DIR       The local git repo to search.
+  START_COMMIT  Limit the search to the commit range <START_COMMIT>..HEAD. In
+                this mode, the found commits are simply written to stdout and
+                not to a file.
+  FIXES_FILE    Add the found commits to the file <FIXES_FILE>. The start
+                commit for the search is read from the first line of the
+                <FIXES_FILE> file, if it exists. Otherwise the whole commit
+                history is searched.
+EOF
 	exit 1
 fi
 
 git_dir=${1}
 
 if echo "${2}" | grep -qP "^[0-9a-f]{12,}$" ; then
-	stop_commit=${2}
-	fixes_file="__foo__"
+	rev_range=${2}..
+	fixes_file=
 else
 	fixes_file=${2}
-	stop_commit="__foo__"
+	rev_range=
 fi
 
-# Read the 'stop commit' from the fixes file
-if [ -e "${fixes_file}" ] ; then
-	stop_commit=$(head -1 "${fixes_file}")
-	stop_commit=${stop_commit%% *}
-fi
-
-# Create an empty temp file
+# Create a temp file with the current (new) HEAD commit
 tmp_file=${fixes_file}.tmp
-rm -f "${tmp_file}"
-touch "${tmp_file}"
+head=$(git --git-dir "${git_dir}" log --abbrev-commit --abbrev=12 \
+		   --format="%h %s" -1)
+echo "__HEAD__ ${head}" > "${tmp_file}"
+
+# Read the previous (old) HEAD commit from the fixes file and construct the
+# range of commits to search
+if [ -e "${fixes_file}" ] ; then
+	head=$(head -1 "${fixes_file}")
+	head=${head#__HEAD__ }
+	head=${head%% *}
+	rev_range=${head}..
+fi
 
 # Parse the commits
-git --git-dir "${git_dir}" log --no-merges --abbrev-commit --abbrev=12 \
-	--format="__COMMIT__%h%n__SUBJECT__%s%n%b%n__END__%n" | \
+git --git-dir "${git_dir}" log --abbrev-commit --abbrev=12 \
+	--format="__COMMIT__%h%n__SUBJECT__%s%n%b%n__END__%n" ${rev_range} | \
 	grep -P '^__COMMIT__|^__SUBJECT__|^\s*Fixes:.*\b[0-9a-f]{8,}\b|^__END__' | \
 while IFS= read -r line ; do
 	case "${line}" in
 		__COMMIT__*)
 			commit=${line#__COMMIT__}
-			if [ "${commit}" = "${stop_commit}" ] ; then
-				break
-			fi
 			subject=
 			fixes=
 			;;
@@ -61,7 +74,7 @@ while IFS= read -r line ; do
 done
 
 # Dry-run
-if [ "${fixes_file}" = "__foo__" ] ; then
+if [ -z "${fixes_file}" ] ; then
 	cat "${tmp_file}"
 	rm -f "${tmp_file}"
 	exit
@@ -69,6 +82,6 @@ fi
 
 # Append the existing fixes file to the temp file and move it
 if [ -e "${fixes_file}" ] ; then
-	cat "${fixes_file}" >> "${tmp_file}"
+	tail +2 "${fixes_file}" >> "${tmp_file}"
 fi
 mv "${tmp_file}" "${fixes_file}"
