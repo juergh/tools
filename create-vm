@@ -548,7 +548,7 @@ echo
 # -----------------------------------------------------------------------------
 # Purge existing VM
 
-if virsh vcpuinfo "${NAME}" >/dev/null 2>&1 ; then
+if virsh dumpxml "${NAME}" >/dev/null 2>&1 ; then
 	if [ "${FORCE}" -eq 0 ] ; then
 		pr_error "VM '${NAME}' exists already. Use -f, --force to recreate it."
 		exit 1
