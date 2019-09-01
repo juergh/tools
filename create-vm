@@ -8,6 +8,7 @@ declare -A ARCH_MAP=(
 	# Debian
 	[i386]=i686
 	[amd64]=x86_64
+	[s390x]=s390x
 	# RHEL
 	[i686]=i686
 	[x86_64]=x86_64
@@ -540,7 +541,7 @@ if [ "${RELEASE}" = "precise" ] && [ "${UEFI}" -eq 1 ] ; then
 	exit 1
 fi
 
-print_var NAME CPUS MEMORY ARCH FORCE VENDOR DIST RELEASE OS_IMAGE \
+print_var NAME VCPU MEMORY ARCH FORCE VENDOR DIST RELEASE OS_IMAGE \
 		  CONFIG_DRIVE KERNEL INITRD
 echo
 
