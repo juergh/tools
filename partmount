@@ -3,18 +3,32 @@
 # Mount a partition of a disk image file
 #
 
+function usage()
+{
+	cat <<EOF
+Usage: partmount DEVICE PARTITION [MOUNTPOINT]
+EOF
+}
+
+if [ $# -lt 2 ] ; then
+	usage
+	exit 2
+fi
+
 imagef=${1}
 partnum=${2}
 mountp=${3:-}
 
-readarray -t -d ' ' comps < <(fdisk -l "${1}" | \
-								  grep "^${imagef}${partnum}\s" | \
-								  tr -s ' ')
+if ! [ -e "${imagef}" ] ; then
+	echo "No such image file: ${imagef}"
+	exit 2
+fi
 
-# Get the partition offset
-offset=${comps[1]}
-if [ "${offset}" = '*' ] ; then
-	offset=${comps[2]}
+# Get the starting sector of the specified partition
+offset=$(partx -g -n "${partnum}" -o START "${imagef}")
+if [ -z "${offset}" ] ; then
+	echo "Failed to find offset of partition: ${partnum}"
+	exit 1
 fi
 
 # Create a mount point
@@ -28,7 +42,7 @@ fi
 sudo mount -o loop,offset=$(("${offset}" * 512)) "${imagef}" "${mountp}" || \
 	{
 		rmdir "${mountp}"
-		echo "Failed to mount partition"
+		echo "Failed to mount partition: ${partnum}"
 		exit 1
 	}
 
