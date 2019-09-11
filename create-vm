@@ -178,8 +178,9 @@ function download_debian_image()
 	local num name url release
 
 	case "${RELEASE}" in
-		jessie)  num=8 ;;
-		stretch) num=9 ;;
+		jessie)  num=8  ;;
+		stretch) num=9  ;;
+		buster)  num=10 ;;
 	esac
 
 	name=debian-${num}-openstack-${ARCH}.qcow2
@@ -487,7 +488,7 @@ case "${DIST}" in
 		VENDOR=${DIST%-*}
 		RELEASE=${DIST#*-}
 		;;
-	jessie|stretch)
+	jessie|stretch|buster)
 		VENDOR=debian
 		RELEASE=${DIST}
 		;;
