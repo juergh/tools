@@ -23,13 +23,13 @@ function lookup_arch()
 	local arch=${1} errmsg=${2}
 
 	case "${arch,,}" in
-		*s/390*)
+		*s/390*|s390x)
 			echo "s390x"
 			;;
 		*64-bit*powerpc*)
 			echo "ppc64el"
 			;;
-		x86-64)
+		x86-64|x86_64)
 			echo "amd64"
 			;;
 		*)
@@ -53,13 +53,13 @@ function parse_linux_version()
 
 	DUMP_FLAVOR=${DUMP_RELEASE#${DUMP_ABI}-}
 
-    DUMP_UPLOAD=${linux_version##* #}
-    DUMP_UPLOAD=${DUMP_UPLOAD%%-*}
-    DUMP_UPLOAD=${DUMP_UPLOAD%% *}
+	DUMP_UPLOAD=${linux_version##* #}
+	DUMP_UPLOAD=${DUMP_UPLOAD%%-*}
+	DUMP_UPLOAD=${DUMP_UPLOAD%% *}
 
 	DUMP_VERSION=${DUMP_ABI}.${DUMP_UPLOAD}
 
-    DUMP_FULL_VERSION=${DUMP_VERSION}-${DUMP_FLAVOR}
+	DUMP_FULL_VERSION=${DUMP_VERSION}-${DUMP_FLAVOR}
  }
 
 function parse_debug_kernel()
@@ -82,18 +82,17 @@ function parse_debug_kernel()
 	parse_linux_version "${linux_version}"
 }
 
-function parse_dump_file()
+function parse_kdump()
 {
-	local tmp
+	local header=("$@")
+	local arch
 
-	readarray -t tmp < <(strings "${DUMP_FILE}" | head -6)
-	if [ "${tmp[0]}" != "KDUMP   " ] ; then
-		pr_error "Failed to parse dumpfile"
-	fi
+	# Determine the architecture
+	arch=${header[5]}
+	DUMP_ARCH=$(lookup_arch "${arch}" \
+				"Unknown architecture found in dumpfile: ${arch}")
 
-	DUMP_ARCH=${tmp[5]}
-
-	DUMP_RELEASE=${tmp[3]}
+	DUMP_RELEASE=${header[3]}
 
 	DUMP_BASE=${DUMP_RELEASE%%-*}
 
@@ -103,12 +102,60 @@ function parse_dump_file()
 
 	DUMP_FLAVOR=${DUMP_RELEASE#${DUMP_ABI}-}
 
-	DUMP_UPLOAD=${tmp[4]%%-*}
+	DUMP_UPLOAD=${header[4]%%-*}
 	DUMP_UPLOAD=${DUMP_UPLOAD:1}
 
 	DUMP_VERSION=${DUMP_ABI}.${DUMP_UPLOAD}
 
     DUMP_FULL_VERSION=${DUMP_VERSION}-${DUMP_FLAVOR}
+}
+
+function parse_core()
+{
+	local linux_version
+
+	# Determine the architecture
+	arch=$(file "${DUMP_FILE}")
+	arch=${arch%%, version *}
+	arch=${arch##*, }
+	DUMP_ARCH=$(lookup_arch "${arch}" \
+				"Unknown architecture found in dumpfile: ${arch}")
+
+	# Get the Linux version from the debug kernel
+	if ! linux_version=$(strings "${DUMP_FILE}" | \
+							 grep -m 1 '^Linux version ') ; then
+		pr_error "No Linux version found in dumpfile"
+	fi
+
+	parse_linux_version "${linux_version}"
+}
+
+function parse_makedumpfile()
+{
+	local header=("$@")
+	local arch
+
+	# Determine the architecture
+	arch=${header[2]}
+	DUMP_ARCH=$(lookup_arch "${arch}" \
+				"Unknown architecture found in dumpfile: ${arch}")
+}
+
+function parse_dump_file()
+{
+	local header
+
+	readarray -t header < <(strings "${DUMP_FILE}" | head -10)
+
+	if [ "${header[0]}" = "KDUMP   " ] ; then
+		parse_kdump "${header[@]}"
+	elif [ "${header[0]}" = "CORE" ] ; then
+		 parse_core
+	elif [ "${header[0]}" = "makedumpfile" ] ; then
+		parse_makedumpfile "${header[@]}"
+	else
+		pr_error "Failed to parse dumpfile"
+	fi
 }
 
 function run_crash()
@@ -223,8 +270,8 @@ function run_crash()
 		export CRASH_MODULE_PATH=${debug_modules}
 		pr_info "crash export" "CRASH_MODULE_PATH=${CRASH_MODULE_PATH}"
 	fi
-	export CRASH_EXTENSIONS="/usr/lib/crash/extensions"
-	export CRASHPAGER="/usr/bin/less -F -X"
+	export CRASH_EXTENSIONS=${CRASH_EXTENSIONS:-/usr/lib/crash/extensions}
+	export CRASHPAGER=${CRASHPAGER:-/usr/bin/less -F -X}
 
 	pr_info "crash export" "CRASH_EXTENSIONS=${CRASH_EXTENSIONS}"
 	pr_info "crash export" "CRASHPAGER=${CRASHPAGER}"
