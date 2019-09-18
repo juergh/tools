@@ -1,0 +1,19 @@
+#!/bin/sh -eu
+#
+# Update git repos
+#
+
+fetch_repo()
+{
+	echo "Fetching ${1}"
+	cd "${1}"
+	git fetch --prune
+	if [ -d .git ] ; then
+		git reset --hard FETCH_HEAD
+	fi
+	date > .fetched
+}
+
+for git_dir in /srv/git/kteam-tools ; do
+	fetch_repo "${git_dir}"
+done

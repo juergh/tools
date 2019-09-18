@@ -19,16 +19,18 @@ fetch_repo()
 
 # Current working directory
 cwd=$(dirname "$(readlink -e "${0}")")
+cd "${cwd}"
 
 # Fetch the main linux repo first (since all the others use it as a reference)
-fetch_repo "${cwd}"/linux.git
-
-for git_dir in "${cwd}"/*.git ; do
-	if [ -d "${git_dir}" ] ; then
-		fetch_repo "${git_dir}"
-	fi
-done
+fetch_repo linux.git
 
 # Update the fixes file
 echo "Finding fixes commits"
-"${cwd}"/find-fixes "${cwd}"/linux.git "${cwd}"/linux.fixes
+./find-fixes linux.git linux.fixes
+
+# Fetch the remaining repos
+for git_dir in *.git ; do
+	if [ -d "${git_dir}" ] && [ "${git_dir}" != "linux.git" ] ; then
+		fetch_repo "${git_dir}"
+	fi
+done
