@@ -23,7 +23,7 @@ function pr_error()
 
 function set_globals()
 {
-	local remote
+	local remote repo derivative
 
 	remote=$(git remote get-url origin)
 	repo=${remote##*/}
@@ -37,6 +37,13 @@ function set_globals()
 			RELEASE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
 										  -S Distribution)
 			RELEASE=${RELEASE^}
+
+			# Add the derivative name
+			derivative=${DEBIAN#debian.}
+			if [ "${derivative}" != "${DEBIAN}" ] && \
+			   [ "${derivative}" != "master" ] ; then
+				RELEASE=${RELEASE}/${derivative}
+			fi
 		fi
 
 		SUBJECT_PREFIX="${RELEASE}][PATCH"
