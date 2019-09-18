@@ -36,12 +36,21 @@ function set_globals()
 			. debian/debian.env
 			RELEASE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
 										  -S Distribution)
+			RELEASE=${RELEASE^}
 		fi
-		SUBJECT_PREFIX="SRU][${RELEASE^}][PATCH"
+
+		SUBJECT_PREFIX="${RELEASE}][PATCH"
+		if [ "${NO_SRU}" -eq 0 ] ; then
+			SUBJECT_PREFIX="SRU][${SUBJECT_PREFIX}"
+		fi
 	fi
 
 	if [ "${VERSION}" -gt 0 ] ; then
 		SUBJECT_PREFIX="${SUBJECT_PREFIX} v${VERSION}"
+	fi
+
+	if [ "${RESEND}" -gt 0 ] ; then
+		SUBJECT_PREFIX="${SUBJECT_PREFIX} RESEND"
 	fi
 }
 
@@ -57,8 +66,16 @@ function send_patch()
 	git send-email .outgoing/*.patch --suppress-cc=all "${opts[@]}"
 }
 
+function _get_first_buglink()
+{
+	for f in "${@}" ; do
+		grep -m1 '^BugLink: ' "${f}" && return
+	done
+}
+
 function do_format_patch()
 {
+	local buglink url subject blurb
 	local opts=()
 
 	# Additional options
@@ -73,8 +90,33 @@ function do_format_patch()
 		opts+=("--thread")
 	fi
 
+	# Create the patchset
 	rm -rf .outgoing/
 	git format-patch -o .outgoing/ "${opts[@]}" "${@}"
+
+	# Try to fill in the cover letter
+	if [ -f .outgoing/0000-cover-letter.patch ] ; then
+		subject="*** SUBJECT HERE ***"
+		blurb="*** BLURB HERE ***"
+
+		buglink=$(_get_first_buglink .outgoing/*.patch)
+		if [ -n "${buglink}" ] ; then
+			buglink=${buglink#BugLink: }
+			url=${buglink%% *}
+			if [ "${url}" = "${buglink}" ] ; then
+				# Try to query launchpad
+				true
+			else
+				# Buglink contains a subject, so must be a private bug
+				subject=${buglink#* }
+				subject=${subject:1:-1}
+			fi
+		fi
+		sed -i \
+			-e "s,\*\*\* SUBJECT HERE \*\*\*,${subject}," \
+			-e "s,\*\*\* BLURB HERE \*\*\*,${blurb}," \
+			.outgoing/0000-cover-letter.patch
+	fi
 
 	if [ "${DRY_RUN}" -eq 1 ] ; then
 		echo "git format-patch -o .outgoing/ ${opts[*]} ${*}"
@@ -110,6 +152,8 @@ Optional arguments:
   -h, --help                Show this help text.
   -i, --in-reply-to MSG_ID  Reply to the given MSG_ID.
   -r, --release RELEASE     The release to include in the subject prefix.
+  -s, --resend              Add RESEND to the subject prefix.
+  -u, --no-sru              Don't include [SRU] in the subject prefix.
   -v, --version NUM         The revision number of the patch to include in the
                             subject prefix.
 EOF
@@ -122,6 +166,8 @@ COVER_LETTER=0
 DRY_RUN=0
 IN_REPLY_TO=
 RELEASE=
+RESEND=0
+NO_SRU=0
 VERSION=0
 SUBJECT_PREFIX=
 
@@ -147,6 +193,12 @@ while [ ${#} -gt 0 ] ; do
 		-r|--release)
 			shift
 			RELEASE=${1}
+			;;
+		-s|--resend)
+			RESEND=1
+			;;
+		-u|--no-sru)
+			NO_SRU=1
 			;;
 		-v|--version)
 			shift
