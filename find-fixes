@@ -41,7 +41,7 @@ echo "__HEAD__ ${head}" > "${tmp_file}"
 # Read the previous (old) HEAD commit from the fixes file and construct the
 # range of commits to search
 if [ -e "${fixes_file}" ] ; then
-	head=$(head -1 "${fixes_file}")
+	head=$(head -n 1 "${fixes_file}")
 	head=${head#__HEAD__ }
 	head=${head%% *}
 	rev_range=${head}..
@@ -82,6 +82,6 @@ fi
 
 # Append the existing fixes file to the temp file and move it
 if [ -e "${fixes_file}" ] ; then
-	tail +2 "${fixes_file}" >> "${tmp_file}"
+	tail -n +2 "${fixes_file}" >> "${tmp_file}"
 fi
 mv "${tmp_file}" "${fixes_file}"
