@@ -46,17 +46,29 @@ function set_globals()
 			fi
 		fi
 
-		SUBJECT_PREFIX="${RELEASE}][PATCH"
-		if [ "${NO_SRU}" -eq 0 ] ; then
-			SUBJECT_PREFIX="SRU][${SUBJECT_PREFIX}"
+		# [SRU][RELEASE]
+		if [ "${NO_SRU}" -eq 1 ] ; then
+			SUBJECT_PREFIX="${RELEASE}"
+		else
+			SUBJECT_PREFIX="SRU][${RELEASE}"
 		fi
+
+		# [TOKEN]
+		if [ -n "${TOKEN}" ] ; then
+			SUBJECT_PREFIX="${SUBJECT_PREFIX}][${TOKEN}"
+		fi
+
+		# [PATCH]
+		SUBJECT_PREFIX="${SUBJECT_PREFIX}][PATCH"
 	fi
 
+	# Patch version
 	if [ "${VERSION}" -gt 0 ] ; then
 		SUBJECT_PREFIX="${SUBJECT_PREFIX} v${VERSION}"
 	fi
 
-	if [ "${RESEND}" -gt 0 ] ; then
+	# Patch resend
+	if [ "${RESEND}" -eq 1 ] ; then
 		SUBJECT_PREFIX="${SUBJECT_PREFIX} RESEND"
 	fi
 }
@@ -160,6 +172,8 @@ Optional arguments:
   -i, --in-reply-to MSG_ID  Reply to the given MSG_ID.
   -r, --release RELEASE     The release to include in the subject prefix.
   -s, --resend              Add RESEND to the subject prefix.
+  -t, --token TEXT          Add an additional token [TEXT] to the subject
+                            prefix.
   -u, --no-sru              Don't include [SRU] in the subject prefix.
   -v, --version NUM         The revision number of the patch to include in the
                             subject prefix.
@@ -177,6 +191,7 @@ RESEND=0
 NO_SRU=0
 VERSION=0
 SUBJECT_PREFIX=
+TOKEN=
 
 cmd=
 args=()
@@ -203,6 +218,10 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-s|--resend)
 			RESEND=1
+			;;
+		-t|--token)
+			shift
+			TOKEN=${1}
 			;;
 		-u|--no-sru)
 			NO_SRU=1
