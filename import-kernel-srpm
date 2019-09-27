@@ -23,16 +23,23 @@ Usage: import-kernel-srpm [-d] [-h] SRPM
 Import a kernel source provided by <SRPM> into the current git repo.
 
 Options:
-  -d, --dry-run  Extract the SRPM but don't commit anything to the git repo.
-  -d, --help     Show this help text.
+  -c, --chroot CHROOT  Use chroot CHROOT for processing the SRPM.
+  -d, --dry-run        Extract the SRPM but don't commit anything to the git
+                       repo.
+  -d, --help           Show this help text.
 EOF
 }
 
+chroot=
 dry_run=0
 srpm=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
+		-c|--chroot)
+			shift
+			chroot=${1}
+			;;
 		-d|--dry-run)
 			dry_run=1
 			;;
@@ -74,17 +81,21 @@ version=$(rpm -qp --qf '%{VERSION}\n' "${srpm}")
 release=$(rpm -qp --qf '%{RELEASE}\n' "${srpm}")
 tag=${version}-${release}
 
+# Which schroot to use
+if [ -z "${chroot}" ] ; then
+	num=${release##*el}
+	num=${num%%.*}
+	num=${num%_*}
+	chroot=centos${num}-x86_64
+fi
+
 pr_info "name:    ${name}"
 pr_info "version: ${version}"
 pr_info "release: ${release}"
 pr_info "tag:     ${tag}"
+pr_info "chroot:  ${chroot}"
 
-# Which schroot to use
-num=${release##*el}
-num=${num%%.*}
-schroot=centos${num}-x86_64
-
-# To silence schroot locale warnings
+# To silence chroot locale warnings
 export LANG=
 export LC_ALL=POSIX
 
@@ -98,14 +109,14 @@ mv ./*.spec ../SPECS/
 
 # Apply the patches
 cd "${rpmbuildd}/SPECS"
-schroot -c "${schroot}" -- rpmbuild -bp "${name}.spec"
+schroot -p -c "${chroot}" -- rpmbuild -bp "${name}.spec"
 
 # The build directory
 buildd=$(cd "${rpmbuildd}/BUILD" && find . -mindepth 2 -maxdepth 2 -type d)
 
 # Clean the source
 cd "${rpmbuildd}/BUILD/${buildd}"
-schroot -c "${schroot}" -- make mrproper
+schroot -p -c "${chroot}" -- make mrproper
 
 if [ "${dry_run}" -eq 1 ] ; then
 	pr_info "Dry run only, exiting..."
@@ -119,4 +130,5 @@ rsync -a "${rpmbuildd}/BUILD/${buildd}/" .
 
 # Commit
 git add .
+git add -f *.spec
 git commit -s -m "Import kernel version ${tag}"
