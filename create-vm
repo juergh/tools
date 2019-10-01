@@ -9,6 +9,7 @@ declare -A ARCH_MAP=(
 	[i386]=i686
 	[amd64]=x86_64
 	[s390x]=s390x
+	[arm64]=aarch64
 	# RHEL
 	[i686]=i686
 	[x86_64]=x86_64
@@ -558,7 +559,7 @@ if virsh dumpxml "${NAME}" >/dev/null 2>&1 ; then
 	for vol in "${OS_IMAGE}" "${CONFIG_DRIVE}" "${KERNEL}" "${INITRD}" ; do
 		virsh vol-delete --pool default "${vol}" 2>/dev/null || true
 	done
-	virsh undefine "${NAME}" || true
+	virsh undefine --nvram "${NAME}" || true
 fi
 
 # -----------------------------------------------------------------------------
