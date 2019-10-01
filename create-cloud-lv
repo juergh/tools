@@ -183,7 +183,7 @@ EOF
 		mkdir "${MOUNTP}"/etc/default/grub.d
 
 	cat <<EOF > "${MOUNTP}"/etc/default/grub.d/99-create-cloud-lv.cfg
-unset GRUB_HIDDEN_TIMEOUT GRUB_TIMEOUT_STYLE
+unset GRUB_HIDDEN_TIMEOUT GRUB_TIMEOUT_STYLE GRUB_FORCE_PARTUUID
 GRUB_TIMEOUT=10
 GRUB_CMDLINE_LINUX_DEFAULT="earlyprintk=ttyS0,115200 console=ttyS0,115200 console=tty0 loglevel=7"
 GRUB_TERMINAL="console serial"
