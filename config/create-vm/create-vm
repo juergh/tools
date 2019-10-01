@@ -9,14 +9,10 @@ function fix_grub()
 		return
 	fi
 
-	# Purge the infamous 40-force-partuuid.cfg config file to prevent
-	# booting without an initrd first
-	rm -f /etc/default/grub.d/40-force-partuuid.cfg
-
 	# Configure grub
 	test -d /etc/default/grub.d || mkdir /etc/default/grub.d
 	cat <<__EOF__ > /etc/default/grub.d/99-create-vm.cfg
-unset GRUB_HIDDEN_TIMEOUT GRUB_TIMEOUT_STYLE
+unset GRUB_HIDDEN_TIMEOUT GRUB_TIMEOUT_STYLE GRUB_FORCE_PARTUUID
 GRUB_TIMEOUT=2
 GRUB_CMDLINE_LINUX_DEFAULT="console=tty1 console=ttyS0"
 __EOF__
