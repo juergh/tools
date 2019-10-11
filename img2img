@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+
+import argparse
+import os
+import re
+
+from datetime import datetime
+
+from PIL import Image
+from PIL.ExifTags import TAGS
+
+def get_exif(fn):
+    ret = {}
+    i = Image.open(fn)
+    info = i._getexif()
+    if info is None:
+        return
+    for tag, value in info.items():
+        decoded = TAGS.get(tag, tag)
+        ret[decoded] = value
+    return ret
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-f", "--force", action="store_true", default=False)
+args = parser.parse_args()
+
+files = [f for f in os.listdir('.') if (os.path.isfile(f) and
+                                        f.lower().endswith('.jpg'))]
+
+regex = re.compile(r'IMG_[0-9]{8}_[0-9]{6}(_[0-9]+)?.jpg')
+
+found = False
+for f in files:
+    if regex.match(f):
+        continue
+
+    exif = get_exif(f)
+    if exif:
+        dt = exif['DateTimeOriginal'].replace(':', '').replace(' ', '_')
+    else:
+        ctime = os.stat(f).st_ctime
+        dt = datetime.fromtimestamp(ctime).strftime("%Y%m%d_%H%M%S")
+
+    new = "IMG_{}.jpg".format(dt)
+
+    if os.path.exists(new):
+        for num in range(1, 100):
+            new =  "IMG_{}_{}.jpg".format(dt, num)
+            if not os.path.exists(new):
+                break
+
+    if os.path.exists(new):
+        print("Hu? {} exists??".format(new))
+        continue
+
+    found = True
+    print("{} -> {}".format(f, new))
+    if args.force:
+        os.rename(f, new)
+
+if found and not args.force:
+    print("Dry-run only, use -f, --force to really rename the files.")
