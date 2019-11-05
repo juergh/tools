@@ -123,10 +123,10 @@ function unmount_lv_device()
 
 function fix_resolv_conf()
 {
-	if [ -e "${CONFIGD}"/resolv.conf ] ; then
+	if [ -e "${CONFIG_DIR}"/resolv.conf ] ; then
 		echo "Fix resolv.conf temporarily"
 		mv "${MOUNTP}"/etc/resolv.conf "${MOUNTP}"/etc/resolv.conf.orig
-		cp "${CONFIGD}"/etc/resolv.conf "${MOUNTP}"/etc/
+		cp "${CONFIG_DIR}"/etc/resolv.conf "${MOUNTP}"/etc/
 	fi
 }
 
@@ -134,7 +134,8 @@ function blacklist_modules()
 {
 	local files
 
-	readarray -t files < <(find "${CONFIGD}"/ -type f -name 'blacklist-*.conf')
+	readarray -t files < <(find "${CONFIG_DIR}"/ -type f -name \
+								'blacklist-*.conf')
 	if [ "${#files[@]}" -eq 0 ] ; then
 		return
 	fi
@@ -261,7 +262,7 @@ function add_apt_repos()
 {
 	local files keyids keyid
 
-	readarray -t files < <(find "${CONFIGD}"/ -type f -name '*.list')
+	readarray -t files < <(find "${CONFIG_DIR}"/ -type f -name '*.list')
 	if [ "${#files[@]}" -eq 0 ] ; then
 		return
 	fi
@@ -308,7 +309,7 @@ function install_packages()
 	fi
 
 	# Install local packages
-	readarray -t debs < <(find "${CONFIGD}"/ -type f -name '*.deb')
+	readarray -t debs < <(find "${CONFIG_DIR}"/ -type f -name '*.deb')
 	if [ "${#debs[@]}" -gt 0 ] ; then
 		pr_info "Install local packages"
 		rm -rf "${MOUNTP}"/var/tmp/*.deb
@@ -395,7 +396,7 @@ LV_DEVICE=/dev/mapper/${VG_NAME}-${LV_NAME}
 LV_HOME=/dev/mapper/${VG_NAME}-home
 LV_SWAP=/dev/mapper/${VG_NAME}-swap
 LV_BOOT=/dev/mapper/${VG_NAME}-boot
-CONFIGD=create-cloud-lv.d/$(hostname)/${RELEASE}
+CONFIG_DIR=create-cloud-lv.d/$(hostname)/${RELEASE}
 
 trap out EXIT INT TERM HUP
 
