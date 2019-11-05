@@ -396,7 +396,7 @@ LV_DEVICE=/dev/mapper/${VG_NAME}-${LV_NAME}
 LV_HOME=/dev/mapper/${VG_NAME}-home
 LV_SWAP=/dev/mapper/${VG_NAME}-swap
 LV_BOOT=/dev/mapper/${VG_NAME}-boot
-CONFIG_DIR=create-cloud-lv.d/$(hostname)/${RELEASE}
+CONFIG_DIR=config/create-cloud-lv/$(hostname)/${RELEASE}
 
 trap out EXIT INT TERM HUP
 

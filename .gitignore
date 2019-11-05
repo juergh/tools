@@ -1,5 +1,5 @@
 *~
 *.pyc
+*.deb
 __pycache__
-create-cloud-lv.d/*-esm.list
 config/*-esm-ppa.list
