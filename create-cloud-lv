@@ -134,8 +134,7 @@ function blacklist_modules()
 {
 	local files
 
-	readarray -t files < <(find "${CONFIG_DIR}"/ -type f -name \
-								'blacklist-*.conf')
+	readarray -t files < <(find "${CONFIG_DIR}"/ -name 'blacklist-*.conf')
 	if [ "${#files[@]}" -eq 0 ] ; then
 		return
 	fi
