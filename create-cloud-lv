@@ -159,8 +159,8 @@ function create_fstab()
 	rootfs=${LV_DEVICE}${rootfs#*LABEL=cloudimg-rootfs}
 	cat <<EOF > "${MOUNTP}"/etc/fstab
 ${rootfs}
-/dev/mapper/vg0-home   /home   ext4   defaults   0   2
-/dev/mapper/vg0-swap   none    swap   sw         0   0
+${LV_HOME}   /home   ext4   defaults   0   2
+${LV_SWAP}   none    swap   sw         0   0
 EOF
 }
 
@@ -170,8 +170,8 @@ function configure_grub()
 	cat <<EOF > "${MOUNTP}"/usr/local/sbin/update-grub
 #!/bin/bash
 /usr/sbin/update-grub "\${@}"
-echo "Copy grub.cfg to /dev/mapper/vg0-boot"
-mount /dev/mapper/vg0-boot /mnt/boot/
+echo "Copy grub.cfg to ${LV_BOOT}"
+mount ${LV_BOOT} /mnt/boot/
 cp /boot/grub/grub.cfg /mnt/boot/grub/grub-${RELEASE}-${ARCH}.cfg
 umount /mnt/boot/ || umount -l /mnt/boot
 EOF
@@ -386,11 +386,15 @@ fi
 IMAGE=
 MOUNTP=
 VG_NAME=vg0
+
 LV_NAME=${RELEASE}
 if [ "${ARCH}" != "$(dpkg --print-architecture)" ] ; then
 	LV_NAME=${LV_NAME}_${ARCH}
 fi
 LV_DEVICE=/dev/mapper/${VG_NAME}-${LV_NAME}
+LV_HOME=/dev/mapper/${VG_NAME}-home
+LV_SWAP=/dev/mapper/${VG_NAME}-swap
+LV_BOOT=/dev/mapper/${VG_NAME}-boot
 CONFIGD=create-cloud-lv.d/$(hostname)/${RELEASE}
 
 trap out EXIT INT TERM HUP
