@@ -150,7 +150,7 @@ function create_fstab()
 {
 	local rootfs
 
-	rootfs=$(grep 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab)
+	rootfs=$(grep 'LABEL=cloudimg-rootfs' "${MOUNTP}"/etc/fstab || true)
 	if [ -z "${rootfs}" ] ; then
 		return
 	fi
