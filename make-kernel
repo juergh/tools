@@ -160,7 +160,7 @@ function build_upstream_kernel()
 	fi
 
 	# Create the out-of-tree build directory and copy the config file
-	buildd="$(readlink -m "build/${DEB_ARCH}")"
+	buildd="$(readlink -m "buildd/${DEB_ARCH}")"
 	if ! [ -d "${buildd}" ] ; then
 		mkdir -p "${buildd}"
 	fi
