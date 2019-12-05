@@ -1,0 +1,109 @@
+#!/bin/bash -eu
+#
+# Run a chroot session. Create it first, if it doesn't exist
+#
+
+function pr_info()
+{
+	echo -e "\033[33m${*}\033[0m"
+}
+
+function pr_error()
+{
+	echo -e "\033[31m${*}\033[0m" 1>&2
+}
+
+function session_exists()
+{
+	schroot -r -c "${1}" /bin/true >/dev/null 2>&1
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: run-chroot [-h] [-r] [-u USER] CHROOT [--] [COMMAND [ARGS]]
+
+Run a chroot session.
+
+Positional arguments:
+  CHROOT  Name of the base chroot to use for the session.
+
+Optional 
+  -h, --help       Show this help text and exit.
+  -r, --recreate   Recreate an already existing session.
+  -u, --user USER  Run the session as the user USER.
+EOF
+}
+
+recreate=0
+chroot=
+user=${USER}
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-r|--recreate)
+			recreate=1
+			;;
+		-u|--user)
+			shift
+			user=${1}
+			;;
+		--)
+			shift
+			break
+			;;
+		-*)
+			pr_error "Unexprected argument: ${1}"
+			exit 2
+			;;
+		*)
+			if [ -z "${chroot}" ] ; then
+				chroot=${1}
+			else
+				break
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${chroot}" ] ; then
+	usage
+	exit 2
+fi
+
+# Check if the chroot exists
+if ! schroot -l | grep -q "^chroot:${chroot}$" ; then
+	pr_error "No such chroot: ${chroot}"
+	exit 1
+fi
+
+session=${USER}-${chroot}
+
+# Delete an existing session if -r, --recreate is supplied
+if [ "${recreate}" -eq 1 ] && session_exists "${session}" ; then
+	pr_info "Remove existing session ${session}"
+	schroot -e -c "${session}"
+fi
+
+# Create the session if it doesn't exist
+if ! session_exists "${session}" ; then
+	pr_info "Create new session ${session}"
+	schroot -b -n "${session}" -c "${chroot}"
+	schroot -u root -r -c "${session}" -- apt-get update
+	schroot -u root -r -c "${session}" -- apt-get -y dist-upgrade
+fi
+
+# Assemble the PS1 prefix
+debian_chroot=${chroot}
+if [ "${user}" != "${USER}" ] ; then
+	debian_chroot=${user}@${debian_chroot}
+fi
+
+# Run the session
+export debian_chroot
+schroot -p -r -c "${session}" -u "${user}" -- "${@}"
