@@ -22,6 +22,20 @@ function out()
 
 function run_in_schroot()
 {
+	local cmd
+
+	if [ "${SUDO}" -eq 1 ] ; then
+		cmd=("sudo")
+	else
+		cmd=()
+	fi
+	cmd+=("${@}")
+
+	if [ "${SCHROOT}" = "None" ] ; then
+		"${cmd[@]}"
+		return
+	fi
+
 	# FIXME: Silence chroot warnings
 	export LANG=
 	export LC_TIME=POSIX
@@ -36,11 +50,11 @@ function run_in_schroot()
 	export LC_PAPER=POSIX
 
 	echo
-	echo "+++ Running in '${SCHROOT}': ${*}"
+	echo "+++ Running in '${SCHROOT}': ${cmd[*]}"
 	echo
 
 	if [ "${DRY_RUN}" -eq 0 ] ; then
-		schroot -c "${SCHROOT}" -- "${@}"
+		run-chroot "${SCHROOT}" -- "${cmd[@]}"
 	fi
 }
 
@@ -67,10 +81,18 @@ function need_cross_compilation()
 
 	schroot_arch=${SCHROOT#*-}
 
-	# Need to cross compile if the schroot and the deb architectures differ
+	# Need to cross compile if the schroot and the deb architectures differ,
 	# unless we're building an i386 kernel in an amd64 schroot
-	[ "${schroot_arch}" != "${DEB_ARCH}" ] && \
-		! { [ "${schroot_arch}" = "amd64" ] && [ "${DEB_ARCH}" = "i386" ] ; }
+	if [ "${SCHROOT}" = "None" ] || \
+	   [ "${schroot_arch}" = "${DEB_ARCH}" ] || \
+	   { [ "${schroot_arch}" = "amd64" ] && \
+		 [ "${DEB_ARCH}" = "i386" ] ; } ; then
+		# No need to cross compile
+		return 1
+	else
+		# Need to cross compile
+		return 0
+	fi
 }
 
 
@@ -264,7 +286,9 @@ Optional arguments:
   -c, --config CONFIG     Use config file CONFIG instead of .config.
   -d, --dry-run           Show the build command but don't execute it.
   -h, --help              Show this help text.
-  -s, --schroot SCHROOT   Use schroot SCHROOT for the build.
+  -r, --root
+  -s, --schroot SCHROOT   Use schroot SCHROOT for the build. Use 'None' to not
+                          use a schroot.
   -u, --ubuntu            Build an Ubuntu kernel.
 EOF
 	exit 2
@@ -281,6 +305,7 @@ SCHROOT=
 TARGET=()
 UBUNTU=0
 ARGS=()
+SUDO=0
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -297,6 +322,9 @@ while [ $# -gt 0 ] ; do
 			;;
 		-h|--help)
 			usage
+			;;
+		-r|--root)
+			SUDO=1
 			;;
 		-s|--schroot)
 			shift
