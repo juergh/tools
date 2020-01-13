@@ -49,6 +49,42 @@ function config_no()
 }
 
 # -----------------------------------------------------------------------------
+# 'tcm' configs
+
+# shellcheck disable=SC2034
+help_tcm="Enable TCM (target core module) support"
+
+function config_tcm()
+{
+	CONFIG+=(
+		TARGET_CORE:m
+		LOOPBACK_TARGET:m
+		CONFIGFS_FS:y
+		TCM_USER2:m
+		TCM_IBLOCK:m
+		TCM_FILEIO:m
+		TCM_PSCSI:m
+		TCM_USER2:m
+		UIO:m
+	)
+}
+
+# -----------------------------------------------------------------------------
+# 'vfat' configs
+
+# shellcheck disable=SC2034
+help_vfat="Enable VFAT support"
+
+function config_vfat()
+{
+	CONFIG+=(
+		FAT_FS:m
+		NLS_ISO8859_1:m
+		VFAT_FS:m
+	)
+}
+
+# -----------------------------------------------------------------------------
 # '9p' configs
 
 # shellcheck disable=SC2034
@@ -530,7 +566,7 @@ if [ ${#opts_not_found[@]} -gt 0 ] ; then
 
 	# Emit a warning for all unsupported options
 	if [ ${#opts_not_supported[@]} -gt 0 ] ; then
-		warn "+++ Warning: The following options are not supported by this " \
+		warn "+++ Warning: The following options are not supported by this" \
 			 "kernel:"
 		for opt in "${opts_not_supported[@]}" ; do
 			warn "  ${opt}"
