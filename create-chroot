@@ -213,8 +213,12 @@ function fedora_create_chroot()
 			pattern=">fedora-release-server-${RELEASE}-.*\.rpm<|>fedora-repos-${RELEASE}-.*\.rpm<"
 			;;
 		centos)
-			url="http://mirror.centos.org/${DIST}/${RELEASE}/os/${ARCH}/Packages"
-			pattern=">centos-release-.*\.rpm<"
+			if [ "${RELEASE}" -lt 8 ] ; then
+				url="http://mirror.centos.org/${DIST}/${RELEASE}/os/${ARCH}/Packages"
+			else
+				url="http://mirror.centos.org/${DIST}/${RELEASE}/BaseOS/${ARCH}/os/Packages"
+			fi
+			pattern=">centos-release-.*\\.${ARCH}.rpm<"
 			;;
 		opensuse)
 			url="http://download.opensuse.org/distribution/leap/${RELEASE}/repo/oss/suse/${ARCH}"
@@ -241,16 +245,22 @@ function fedora_create_chroot()
 
 	# We need to reinstall the base system because the original installation
 	# put the RPM database in ~/.rpmdb
-	${SCHROOT} "${pkg_manager}" --releasever="${RELEASE}" --assumeyes --nogpgcheck install \
-			   "${pkg_manager}" "${RPM_INCLUDE[@]}"
+	${SCHROOT} "${pkg_manager}" --releasever="${RELEASE}" --assumeyes \
+			   --nogpgcheck install "${pkg_manager}"
+
+	# Install the base packages
+	${SCHROOT} "${pkg_manager}" --assumeyes install epel-release || true
+	for package in "${RPM_INCLUDE[@]}" ; do
+		${SCHROOT} "${pkg_manager}" --assumeyes install "${package}" || true
+	done
 
 	# Install the additional packages
 	if [ "${BASE}" -eq 0 ] ; then
 		for package in "${RPM_PACKAGES[@]}" ; do
-			${SCHROOT} "${pkg_manager}" --assumeyes install "${package}" 2>/dev/null || true
+			${SCHROOT} "${pkg_manager}" --assumeyes install "${package}" || true
 		done
 		# Install kernel build dependencies
-		${SCHROOT} "${pkg_manager}" builddep --assumeyes kernel
+		${SCHROOT} "${pkg_manager}" builddep --assumeyes kernel || true
 	fi
 
 	# Clean the cache
