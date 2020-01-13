@@ -37,11 +37,6 @@ function print_var()
 	done
 }
 
-function has_direct_boot()
-{
-	[ "${ARCH}" = "armhf" ]
-}
-
 function mount_image()
 {
 	local image=${1} mountp=${2}
@@ -101,7 +96,7 @@ function download_image()
 	fi
 
 	# Extract the kernel and initrd from the image for direct boot
-	if has_direct_boot ; then
+	if [ "${BOOT_MODE}" = "db" ] ; then
 		tmpd=$(mktemp -d)
 		# shellcheck disable=SC2064
 		trap "rm -rf ${tmpf} ${tmpf2} ${tmpd}" EXIT INT TERM HUP
@@ -208,7 +203,7 @@ function download_ubuntu_image()
 	if [ "${RELEASE}" = "precise" ] || [ "${RELEASE}" = "trusty" ] || \
 		   [ "${RELEASE}" = "xenial" ] ; then
 		suffix="-disk1"
-		if [ "${UEFI}" -eq 1 ] ; then
+		if [ "${BOOT_MODE}" = "uefi" ] ; then
 			suffix="-uefi1"
 		fi
 	fi
@@ -305,7 +300,7 @@ function define_vm()
 	# shellcheck disable=SC2064
 	trap "rm -f ${tmpf}" EXIT INT TERM HUP
 
-	if [ "${UEFI}" -eq 1 ] ; then
+	if [ "${BOOT_MODE}" = "uefi" ] ; then
 		# shellcheck disable=SC2089
 		XML_OS_LOADER="
 <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE.fd</loader>
@@ -313,7 +308,7 @@ function define_vm()
 "
 	fi
 
-	if has_direct_boot ; then
+	if [ "${BOOT_MODE}" = "db" ] ; then
 		XML_KERNEL_PATH=$(virsh vol-path --pool default "${KERNEL}")
 		XML_INITRD_PATH=$(virsh vol-path --pool default "${INITRD}")
 		XML_KERNEL_CMDLINE="root=LABEL=cloudimg-rootfs"
@@ -347,8 +342,8 @@ function define_vm()
 function usage()
 {
 	cat <<EOF
-Usage: create-vm [-a ARCH] [-d] [-f] [-h] [-i IMAGE] [-s SIZE] [-t TYPE] [-u]
-                 DIST [NAME]
+Usage: create-vm [-a ARCH] [-d] [-f] [-h] [-i IMAGE] [-o] [-r] [-s SIZE]
+                 [-t TYPE] [-u] [-y] DIST [NAME]
 
 Create a libvirt guest VM.
 
@@ -372,6 +367,7 @@ Optional arguments:
   -t, --type TYPE    Create a VM of type <TYPE>. Valid types are:
                        dep8:  For dep8 kernel testing.
   -u, --uefi         Configure the VM to boot from UEFI.
+  -y, --dry-run
 EOF
 }
 
@@ -385,9 +381,10 @@ DOWNLOAD=0
 REBOOT=0
 SIZE=8
 TYPE=
-UEFI=0
+BOOT_MODE=
 DIST=
 NAME=
+DRY_RUN=0
 
 while [ ${#} -gt 0 ] ; do
 	case ${1} in
@@ -425,7 +422,10 @@ while [ ${#} -gt 0 ] ; do
 			TYPE=${1}
 			;;
 		-u|--uefi)
-			UEFI=1
+			BOOT_MODE="uefi"
+			;;
+		-y|--dry-run)
+			DRY_RUN=1
 			;;
 		-*)
 			pr_error "Unexpected option: ${1}"
@@ -499,53 +499,65 @@ case "${DIST}" in
 		;;
 esac
 
+# Sanity check
+if [ "${RELEASE}" = "precise" ] && [ "${BOOT_MODE}" = "uefi" ] ; then
+	pr_error "Precise does not support boot from UEFI"
+	exit 1
+fi
+
+# The vendor specific host architecture name
+case "${VENDOR}" in
+	fedora|centos)
+		HOST_ARCH=$(dpkg-architecture -q DEB_HOST_GNU_CPU)
+		;;
+	*)
+		HOST_ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
+		;;
+esac
+
+# Set the image architecture if not specified
+if [ -z "${ARCH}" ] ; then
+	ARCH=${HOST_ARCH}
+fi
+
+# Set the boot mode
+if [ "${RELEASE}" = "xenial" ] && [ "${ARCH}" = "arm64" ] ; then
+	BOOT_MODE="uefi"
+elif [ "${ARCH}" = "armhf" ] ; then
+	BOOT_MODE="db"
+fi
+
 # The name of the VM
 if [ -z "${NAME}" ] ; then
 	NAME=${VENDOR}-${RELEASE}
-	if [ ${UEFI} -eq 1 ] ; then
-		NAME=${NAME}-uefi
+	if [ -n "${BOOT_MODE}" ] ; then
+		NAME=${NAME}-${BOOT_MODE}
 	fi
-	if [ -n "${ARCH}" ] ; then
+	if [ "${ARCH}" != "${HOST_ARCH}" ] ; then
 		NAME=${NAME}-${ARCH}
 	fi
 	NAME=${NAME}${NAME_SUFFIX}
 fi
 
-# The vendor specific architecture name
-case "${VENDOR}" in
-	fedora|centos)
-		if [ -z "${ARCH}" ] ; then
-			ARCH=$(dpkg-architecture -q DEB_HOST_GNU_CPU)
-		fi
-		;;
-	*)
-		if [ -z "${ARCH}" ] ; then
-			ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
-		fi
-		;;
-esac
-
-# The OS image and config drive
+# The image filenames
 OS_IMAGE=${NAME}.qcow2
 CONFIG_DRIVE=${NAME}-config.iso
-
-# The kernel, initrd and cmdline (for direct boot architectures)
-KERNEL=
-INITRD=
-if has_direct_boot ; then
-	KERNEL=${NAME}-kernel
-	INITRD=${NAME}-initrd
-fi
-
-# Sanity check
-if [ "${RELEASE}" = "precise" ] && [ "${UEFI}" -eq 1 ] ; then
-	pr_error "Precise does not support boot from UEFI"
-	exit 1
-fi
+KERNEL=${NAME}-kernel
+INITRD=${NAME}-initrd
 
 print_var NAME VCPU MEMORY ARCH FORCE VENDOR DIST RELEASE OS_IMAGE \
-		  CONFIG_DRIVE KERNEL INITRD
+		  CONFIG_DRIVE BOOT_MODE
+
+if [ "${BOOT_MODE}" = "db" ] ; then
+	print_var KERNEL INITRD
+fi
+
 echo
+
+if [ "${DRY_RUN}" -eq 1 ] ; then
+	echo "(dry-run) Exiting..."
+	exit
+fi
 
 # -----------------------------------------------------------------------------
 # Purge existing VM
