@@ -4,17 +4,19 @@
 #
 
 LINUX_FIXES=/srv/git/linux.fixes
+LINUX_REPO=/srv/git/linux.git
 
 function find_fixes()
 {
-	local commit=${1}
+	local commit=${1} indent=${2}
 	local fixes fix
 
 	readarray -t fixes < <(grep -P "__FIXES__\s+${commit::12}" "${LINUX_FIXES}")
 
 	for fix in "${fixes[@]}" ; do
+		printf "%0.s " $(seq "${indent}")
 		echo "${fix%% __FIXES__*}"
-		find_fixes "${fix%% *}"
+		find_fixes "${fix%% *}" "$((indent + 2))"
 	done
 }
 
@@ -51,5 +53,12 @@ while [ $# -gt 0 ] ; do
 done
 
 for commit in "${commits[@]}" ; do
-	find_fixes "${commit}"
+	first=$(git --git-dir="${LINUX_REPO}" log --format='%h ("%s")' \
+				"${commit}" -1 || true)
+	if [ -z "${first}" ] ; then
+		echo "Error: ${commit} is not a commit in Linus' repo"
+	else
+		echo "${first}"
+		find_fixes "${commit}" 2
+	fi
 done
