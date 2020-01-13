@@ -20,18 +20,43 @@ function find_fixes()
 	done
 }
 
+function find_upstream_ref()
+{
+	local commit=${1}
+    local pattern_list pattern found
+
+    pattern_list=(
+        "commit [0-9a-f]* upstream"
+        "upstream commit [0-9a-f]*"
+        "cherry[ -]?picked from .*\b[0-9a-f]*"
+        "back[ -]?ported from .*\b[0-9a-f]*"
+    )
+    pattern=$(printf "|%s" "${pattern_list[@]}")
+    pattern=${pattern:1}
+
+    found=$(git log --format="%b" "${commit}" -1 | \
+                grep -iP "${pattern}" | \
+                grep -oP '[0-9a-f]{12,}' | head -1 | tr -d '\n' || true)
+
+    echo "${found}"
+}
+
 function usage()
 {
 	cat <<EOF
-Usage: find-linux-fixes [-d] COMMIT [COMMIT ...]
+Usage: find-linux-fixes [-h] [-s] COMMIT [COMMIT ...]
 
 Find 'Fixes:' commits in the main Linux repo for the specified COMMIT.
 
 Optional arguments:
-  -h, --help  Show this help text.
+  -h, --help   Show this help text and exit.
+  -s, --smart  If a provided commit is not found in Linus' repo, parse its
+               commit message for a reference to the original upstream
+               commit and if found, find 'Fixes:' commits for that commit hash.
 EOF
 }
 
+smart=0
 commits=()
 
 while [ $# -gt 0 ] ; do
@@ -40,6 +65,9 @@ while [ $# -gt 0 ] ; do
             usage
             exit
             ;;
+		-s|--smart)
+			smart=1
+			;;
         -*)
             echo "Unexpected argument: ${1}" 1>&2
             exit 1
@@ -53,12 +81,37 @@ while [ $# -gt 0 ] ; do
 done
 
 for commit in "${commits[@]}" ; do
-	first=$(git --git-dir="${LINUX_REPO}" log --format='%h ("%s")' \
-				"${commit}" -1 || true)
-	if [ -z "${first}" ] ; then
-		echo "Error: ${commit} is not a commit in Linus' repo"
-	else
-		echo "${first}"
-		find_fixes "${commit}" 2
+	# Check that the commit exists in Linus' repo
+	linus=$(git --git-dir="${LINUX_REPO}" log --format='%h ("%s")' \
+				"${commit}" -1 2>/dev/null || true)
+	if [ -z "${linus}" ] ; then
+		if [ "${smart}" -eq 0 ] ; then
+			echo "Error: Commit ${commit} not found in Linus' repo"
+			continue
+		fi
+
+		# Try to find an upstream commit reference in the commit message
+		upstream=$(find_upstream_ref "${commit}")
+		if [ -z "${upstream}" ] ; then
+			echo "Error: Commit ${commit} not found in Linus' repo and" \
+				 "doesn't contain an upstream reference"
+			continue
+		fi
+
+		# Check that that upstream commit reference exists in Linus' repo
+		linus=$(git --git-dir="${LINUX_REPO}" log --format='%h ("%s")' \
+					"${upstream}" -1 2>/dev/null || true)
+		if [ -z "${linus}" ] ; then
+			echo "Error: Commit ${commit} not found in Linus' repo but" \
+				 "contains an upstream reference (${commit::12}) which is" \
+				 "also not found in Linus' repo"
+			continue
+		fi
+
+		# Make it clear that we're processing a different commit
+		linus="${commit::12} -> [upstream] ${linus}"
 	fi
+
+	echo "${linus}"
+	find_fixes "${commit}" 2
 done
