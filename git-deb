@@ -21,6 +21,11 @@ function pr_error()
 	echo -e "\033[31m${*}\033[0m" 1>&2
 }
 
+function pr_warn()
+{
+	echo -e "\033[33m${*}\033[0m"
+}
+
 function set_globals()
 {
 	local remote repo derivative
@@ -31,7 +36,10 @@ function set_globals()
 	if [ "${repo}" = kteam-tools ] ; then
 		SUBJECT_PREFIX="kteam-tools][PATCH"
 	else
-		if [ -z "${RELEASE}" ] ; then
+		SUBJECT_PREFIX=
+
+		# Determine the release name
+		if [ -z "${RELEASE}" ] && [ -e debian/debian.env ] ; then
 			# shellcheck disable=SC1091
 			. debian/debian.env
 			RELEASE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
@@ -46,11 +54,14 @@ function set_globals()
 			fi
 		fi
 
-		# [SRU][RELEASE]
-		if [ "${NO_SRU}" -eq 1 ] ; then
-			SUBJECT_PREFIX="${RELEASE}"
-		else
-			SUBJECT_PREFIX="SRU][${RELEASE}"
+		# [SRU]
+		if [ "${SRU}" -eq 1 ] ; then
+			SUBJECT_PREFIX="${SUBJECT_PREFIX}][SRU"
+		fi
+
+		# [RELEASE]
+		if [ -n "${RELEASE}" ] ; then
+			SUBJECT_PREFIX="${SUBJECT_PREFIX}][${RELEASE}"
 		fi
 
 		# [TOKEN]
@@ -71,6 +82,9 @@ function set_globals()
 	if [ "${RESEND}" -eq 1 ] ; then
 		SUBJECT_PREFIX="${SUBJECT_PREFIX} RESEND"
 	fi
+
+	# Remove leading '][' from the subjext prefix
+	SUBJECT_PREFIX=${SUBJECT_PREFIX#][}
 }
 
 function send_patch()
@@ -94,7 +108,7 @@ function _get_first_buglink()
 
 function do_format_patch()
 {
-	local buglink url subject blurb
+	local patch buglink url subject blurb
 	local opts=()
 
 	# Additional options
@@ -112,6 +126,17 @@ function do_format_patch()
 	# Create the patchset
 	rm -rf .outgoing/
 	git format-patch -o .outgoing/ "${opts[@]}" "${@}"
+
+	# Check for BugLink and CVE tags
+	for patch in .outgoing/*.patch ; do
+		if [ "${patch}" = ".outgoing/0000-cover-letter.patch" ] ; then
+			continue
+		fi
+		if ! grep -m1 -qP "^(BugLink: https://.*|CVE-[0-9]{4}-[0-9]*)$" \
+			 "${patch}" ; then
+			pr_warn "Missing BugLink and/or CVE tag in ${patch#*/}"
+		fi
+	done
 
 	# Try to fill in the cover letter
 	if [ -f .outgoing/0000-cover-letter.patch ] ; then
@@ -138,12 +163,11 @@ function do_format_patch()
 	fi
 
 	if [ "${DRY_RUN}" -eq 1 ] ; then
+		echo
 		echo "git format-patch -o .outgoing/ ${opts[*]} ${*}"
-		for p in .outgoing/*.patch ; do
-			echo
-			echo -e "\e[33m*** ${p#*/} ***\e[0m"
-			echo
-			colordiff < "${p}"
+		for patch in .outgoing/*.patch ; do
+			pr_warn "Patch ${patch#*/}"
+			colordiff < "${patch}"
 		done
 	fi
 }
@@ -188,7 +212,7 @@ DRY_RUN=0
 IN_REPLY_TO=
 RELEASE=
 RESEND=0
-NO_SRU=0
+SRU=1
 VERSION=0
 SUBJECT_PREFIX=
 TOKEN=
@@ -224,7 +248,7 @@ while [ ${#} -gt 0 ] ; do
 			TOKEN=${1}
 			;;
 		-u|--no-sru)
-			NO_SRU=1
+			SRU=0
 			;;
 		-v|--version)
 			shift
