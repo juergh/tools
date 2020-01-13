@@ -29,12 +29,15 @@ Positional arguments:
   CHROOT  Name of the base chroot to use for the session.
 
 Optional 
-  -h, --help       Show this help text and exit.
-  -r, --recreate   Recreate an already existing session.
-  -u, --user USER  Run the session as the user USER.
+  -h,  --help              Show this help text and exit.
+  -np, --no-preserve-env   Don't preserve the user's environment inside the
+                           chroot.
+  -r,  --recreate          Recreate an already existing session.
+  -u,  --user USER         Run the session as the user USER.
 EOF
 }
 
+preserve_env=1
 recreate=0
 chroot=
 user=${USER}
@@ -44,6 +47,9 @@ while [ $# -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-np|--no-preserve-env)
+			preserve_env=0
 			;;
 		-r|--recreate)
 			recreate=1
@@ -103,7 +109,13 @@ debian_chroot=${chroot}
 if [ "${user}" != "${USER}" ] ; then
 	debian_chroot=${user}@${debian_chroot}
 fi
+export debian_chroot
+
+# Assemble the optional schroot arguments
+args=()
+if [ "${preserve_env}" -eq 1 ] ; then
+	args+=("-p")
+fi
 
 # Run the session
-export debian_chroot
-schroot -p -r -c "${session}" -u "${user}" -- "${@}"
+schroot -r -c "${session}" -u "${user}" "${args[@]}" -- "${@}"
