@@ -14,6 +14,12 @@ function find_fixes()
 	readarray -t fixes < <(grep -P "__FIXES__\s+${commit::12}" "${LINUX_FIXES}")
 
 	for fix in "${fixes[@]}" ; do
+		# We found a match so print the original commit
+		if [ -n "${ONELINE}" ] ; then
+			echo "${ONELINE}"
+			ONELINE=
+		fi
+
 		printf "%0.s " $(seq "${indent}")
 		echo "${fix%% __FIXES__*}"
 		find_fixes "${fix%% *}" "$((indent + 2))"
@@ -51,10 +57,10 @@ COMMIT(s).
 
 Optional arguments:
   -h, --help     Show this help text and exit.
-  -d, --dir DIR  If a provided commit is not found in Linus' repo, try to look it
-                 up in <DIR> and parse its commit message for a reference to the
-                 original upstream commit. If found, find 'Fixes:' commits for
-                 that upstream commit.
+  -d, --dir DIR  If a provided commit is not found in Linus' repo, try to look
+                 it up in <DIR> and parse its commit message for a reference to
+                 the original upstream commit. If found, find 'Fixes:' commits
+                 for that upstream commit.
 EOF
 }
 
@@ -91,11 +97,10 @@ if [ -n "${path}" ] && \
 fi
 
 for commit in "${commits[@]}" ; do
-	# Get the commit subject from Linus' repo
-	linus=$(git --git-dir="${LINUX_REPO}" log --format='%h ("%s")' \
-				"${commit}" -1 2>/dev/null || true)
+	ONELINE=$(git --git-dir="${LINUX_REPO}" log --format='%h %s' \
+				  "${commit}" -1 2>/dev/null || true)
 
-	if [ -z "${linus}" ] ; then
+	if [ -z "${ONELINE}" ] ; then
 		if [ -z "${path}" ] ; then
 			echo "Error: Commit ${commit} not found in Linus' repo"
 			continue
@@ -117,9 +122,9 @@ for commit in "${commits[@]}" ; do
 		fi
 
 		# Get the subject of the upstream commit from Linus' repo
-		linus=$(git --git-dir="${LINUX_REPO}" log --format='%h ("%s")' \
-					"${upstream}" -1 2>/dev/null || true)
-		if [ -z "${linus}" ] ; then
+		ONELINE=$(git --git-dir="${LINUX_REPO}" log --format='%h %s' \
+					  "${upstream}" -1 2>/dev/null || true)
+		if [ -z "${ONELINE}" ] ; then
 			echo "Error: Commit ${commit} found in '${path}' and contains" \
 				 "an upstream reference (${upstream::12}) which is not found" \
 				 "in Linus' repo"
@@ -127,10 +132,9 @@ for commit in "${commits[@]}" ; do
 		fi
 
 		# Make it clear that we're processing a different commit
-		linus="${commit::12} -> [upstream] ${linus}"
+		ONELINE="${commit::12} -> [upstream] ${ONELINE}"
 		commit=${upstream}
 	fi
 
-	echo "${linus}"
 	find_fixes "${commit}" 2
 done
