@@ -1,0 +1,51 @@
+#!/bin/bash -eu
+#
+# Add BugLink tags to commit messages
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: git filter-branch --msg-filter 'gfb-add-buglink <bug> [<bug> <bug> ...]' <rev-list options>...
+
+Add BugLink tags to the commit messages of the commits in <rev-list options>...
+
+Positional arguments:
+  bug         A launchpad bug number.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+bugs=()
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			bugs=("$@")
+			break
+			;;
+	esac
+	shift
+done
+
+if [ "${#bugs[@]}" -eq 0 ] ; then
+	usage
+	exit 2
+fi
+
+cnt=1
+while IFS= read -r line ; do
+	if [ "${cnt}" -eq 3 ] ; then
+		printf "BugLink: https://bugs.launchpad.net/bugs/%s\n" "${bugs[@]}"
+		if [ "${line#BugLink}" = "${line}" ] ; then
+			echo
+		fi
+	fi
+	echo "${line}"
+	cnt=$((cnt + 1))
+done
