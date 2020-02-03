@@ -5,16 +5,32 @@
 
 MOUNTPOINT=${1}
 
-if ! sudo umount "${MOUNTPOINT}" ; then
-	echo "Failed to unmount partition"
+if ! [ -d "${MOUNTPOINT}" ] ; then
+	echo "${MOUNTPOINT} is not a directory" >&2
 	exit 1
 fi
 
-rmdir "${MOUNTPOINT}"
+# Read the config file
+config="/tmp/.partmount-$(readlink -e "${MOUNTPOINT}" | md5sum | sed 's, .*,,')"
+if ! [ -e "${config}" ] ; then
+	echo "No config file found for mount point ${MOUNTPOINT}" >&2
+	exit 1
+fi
+# shellcheck disable=SC1090
+. "${config}"
+
+if ! sudo umount "${MOUNTPOINT}" ; then
+	echo "Failed to unmount partition" >&2
+	exit 1
+fi
+
+rm -f "${config}"
 echo "Partition unmounted"
 
-DEVICE=${MOUNTPOINT%-part*}
-DEVICE=/dev/${DEVICE##*-}
-if [ -b "${DEVICE}" ] ; then
-	sudo qemu-nbd -d "${DEVICE}"
+if [ "${DEL_MOUNTPOINT}" -eq 1 ] ; then
+	rmdir "${MOUNTPOINT}"
+fi
+
+if [ -n "${NBD_DEVICE}" ] ; then
+	sudo qemu-nbd -d "${NBD_DEVICE}"
 fi

@@ -10,11 +10,14 @@ function out()
 	trap - EXIT INT TERM HUP
 
 	if [ "${rc}" -ne 0 ] ; then
-		if [ -d "${MOUNTPOINT}" ] ; then
+		if [ "${MOUNTED}" -eq 1 ] ; then
+			sudo umount "${MOUNTPOINT}"
+		fi
+		if [ "${DEL_MOUNTPOINT}" -eq 1 ] && [ -d "${MOUNTPOINT}" ] ; then
 			rmdir "${MOUNTPOINT}"
 		fi
-		if [ -b "${DEVICE}" ] ; then
-			sudo qemu-nbd -d "${DEVICE}"
+		if [ -n "${NBD_DEVICE}" ] ; then
+			sudo qemu-nbd -d "${NBD_DEVICE}"
 		fi
 	fi
 
@@ -33,20 +36,23 @@ if [ $# -lt 2 ] ; then
 	exit 2
 fi
 
-IMAGE=${1}
-PARTNUM=${2}
-MOUNTPOINT=${3:-}
-DEVICE=
+image=${1}
+partnum=${2}
 
-if ! [ -e "${IMAGE}" ] ; then
-	echo "No such image file: ${IMAGE}" >&2
+MOUNTPOINT=${3:-}
+DEL_MOUNTPOINT=0
+NBD_DEVICE=
+MOUNTED=0
+
+if ! [ -e "${image}" ] ; then
+	echo "No such image file: ${image}" >&2
 	exit 2
 fi
 
 trap out INT TERM EXIT HUP
 
 # Connect a qcow2 image to an nbd device
-if file "${IMAGE}" | grep -q QCOW2 ; then
+if file "${image}" | grep -q QCOW2 ; then
 	# Load the nbd module
 	lsmod | grep -q '\bnbd\b' || sudo modprobe nbd
 
@@ -59,38 +65,54 @@ if file "${IMAGE}" | grep -q QCOW2 ; then
 		exit 1
 	fi
 
-	sudo qemu-nbd -n -c "/dev/nbd${num}" -f qcow2 "${IMAGE}"
-	DEVICE=/dev/nbd${num}
+	sudo qemu-nbd -n -c "/dev/nbd${num}" -f qcow2 "${image}"
+	NBD_DEVICE=/dev/nbd${num}
 fi
 
 # Create the mount point if necessary
 if [ -z "${MOUNTPOINT}" ] ; then
+	DEL_MOUNTPOINT=1
 	MOUNTPOINT=$(mktemp -p /tmp -d \
-				 "partmount-XXXXXX-${DEVICE##*/}-part${PARTNUM}")
+				 "partmount-XXXXXX-part${partnum}")
 else
-	[ -d "${MOUNTPOINT}" ] || mkdir -p "${MOUNTPOINT}"
+	if [ -d "${MOUNTPOINT}" ] ; then
+		# Mountpoit exists already, so don't delete it
+		DEL_MOUNTPOINT=0
+	else
+		DEL_MOUNTPOINT=1
+		mkdir -p "${MOUNTPOINT}"
+	fi
 fi
 
-if [ -b "${DEVICE}" ] ; then
+if [ -n "${NBD_DEVICE}" ] ; then
 	# Mount the partition
-	if ! sudo mount "${DEVICE}p${PARTNUM}" "${MOUNTPOINT}" ; then
-		echo "Failed to mount partition: ${PARTNUM}" >&2
+	if ! sudo mount "${NBD_DEVICE}p${partnum}" "${MOUNTPOINT}" ; then
+		echo "Failed to mount partition: ${partnum}" >&2
 		exit 1
 	fi
 else
 	# Get the starting sector of the specified partition
-	offset=$(partx -g -n "${PARTNUM}" -o START "${IMAGE}")
+	offset=$(partx -g -n "${partnum}" -o START "${image}")
 	if [ -z "${offset}" ] ; then
-		echo "Failed to find offset of partition: ${PARTNUM}" >&2
+		echo "Failed to find offset of partition: ${partnum}" >&2
 		exit 1
 	fi
 
 	# Mount the partition
-	if ! sudo mount -o loop,offset=$(("${offset}" * 512)) "${IMAGE}" \
+	if ! sudo mount -o loop,offset=$(("${offset}" * 512)) "${image}" \
 		 "${MOUNTPOINT}" ; then
-		echo "Failed to mount partition: ${PARTNUM}" >&2
+		echo "Failed to mount partition: ${partnum}" >&2
 		exit 1
 	fi
 fi
+MOUNTED=1
+
+# Create the config file for partumount
+config="/tmp/.partmount-$(readlink -e "${MOUNTPOINT}" | md5sum | sed 's, .*,,')"
+cat << EOF > "${config}"
+MOUNTPOINT=${MOUNTPOINT}
+DEL_MOUNTPOINT=${DEL_MOUNTPOINT}
+NBD_DEVICE=${NBD_DEVICE}
+EOF
 
 echo "Partition mounted on ${MOUNTPOINT}"
