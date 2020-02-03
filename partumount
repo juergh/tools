@@ -3,13 +3,18 @@
 # Unmount a partition of a disk image file
 #
 
-mountp=$1
+MOUNTPOINT=${1}
 
-sudo umount "${mountp}" || \
-	{
-		echo "Failed to unmount partition"
-		exit 1
-	}
+if ! sudo umount "${MOUNTPOINT}" ; then
+	echo "Failed to unmount partition"
+	exit 1
+fi
 
-rmdir "${mountp}"
+rmdir "${MOUNTPOINT}"
 echo "Partition unmounted"
+
+DEVICE=${MOUNTPOINT%-part*}
+DEVICE=/dev/${DEVICE##*-}
+if [ -b "${DEVICE}" ] ; then
+	sudo qemu-nbd -d "${DEVICE}"
+fi

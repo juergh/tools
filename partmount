@@ -3,6 +3,24 @@
 # Mount a partition of a disk image file
 #
 
+function out()
+{
+	local rc=$?
+
+	trap - EXIT INT TERM HUP
+
+	if [ "${rc}" -ne 0 ] ; then
+		if [ -d "${MOUNTPOINT}" ] ; then
+			rmdir "${MOUNTPOINT}"
+		fi
+		if [ -b "${DEVICE}" ] ; then
+			sudo qemu-nbd -d "${DEVICE}"
+		fi
+	fi
+
+	exit "${rc}"
+}
+
 function usage()
 {
 	cat <<EOF
@@ -11,39 +29,68 @@ EOF
 }
 
 if [ $# -lt 2 ] ; then
-	usage
+	usage >&2
 	exit 2
 fi
 
-imagef=${1}
-partnum=${2}
-mountp=${3:-}
+IMAGE=${1}
+PARTNUM=${2}
+MOUNTPOINT=${3:-}
+DEVICE=
 
-if ! [ -e "${imagef}" ] ; then
-	echo "No such image file: ${imagef}"
+if ! [ -e "${IMAGE}" ] ; then
+	echo "No such image file: ${IMAGE}" >&2
 	exit 2
 fi
 
-# Get the starting sector of the specified partition
-offset=$(partx -g -n "${partnum}" -o START "${imagef}")
-if [ -z "${offset}" ] ; then
-	echo "Failed to find offset of partition: ${partnum}"
-	exit 1
-fi
+trap out INT TERM EXIT HUP
 
-# Create a mount point
-if [ -z "${mountp}" ] ; then
-	mountp=$(mktemp -p /tmp -d "partmount-XXXXXX-part${partnum}")
-else
-	[ -d "${mountp}" ] || mkdir -p "${mountp}"
-fi
+# Connect a qcow2 image to an nbd device
+if file "${IMAGE}" | grep -q QCOW2 ; then
+	# Load the nbd module
+	lsmod | grep -q '\bnbd\b' || sudo modprobe nbd
 
-# Mount the partition
-sudo mount -o loop,offset=$(("${offset}" * 512)) "${imagef}" "${mountp}" || \
-	{
-		rmdir "${mountp}"
-		echo "Failed to mount partition: ${partnum}"
+	# Find an available nbd device
+	for num in $(seq 0 16) ; do
+		grep -q "\bnbd${num}\b" /proc/partitions || break
+	done
+	if [ "${num}" -eq 16 ] ; then
+		echo "Failed to find an available nbd device"
 		exit 1
-	}
+	fi
 
-echo "Partition mounted on ${mountp}"
+	sudo qemu-nbd -n -c "/dev/nbd${num}" -f qcow2 "${IMAGE}"
+	DEVICE=/dev/nbd${num}
+fi
+
+# Create the mount point if necessary
+if [ -z "${MOUNTPOINT}" ] ; then
+	MOUNTPOINT=$(mktemp -p /tmp -d \
+				 "partmount-XXXXXX-${DEVICE##*/}-part${PARTNUM}")
+else
+	[ -d "${MOUNTPOINT}" ] || mkdir -p "${MOUNTPOINT}"
+fi
+
+if [ -b "${DEVICE}" ] ; then
+	# Mount the partition
+	if ! sudo mount "${DEVICE}p${PARTNUM}" "${MOUNTPOINT}" ; then
+		echo "Failed to mount partition: ${PARTNUM}" >&2
+		exit 1
+	fi
+else
+	# Get the starting sector of the specified partition
+	offset=$(partx -g -n "${PARTNUM}" -o START "${IMAGE}")
+	if [ -z "${offset}" ] ; then
+		echo "Failed to find offset of partition: ${PARTNUM}" >&2
+		exit 1
+	fi
+
+	# Mount the partition
+	if ! sudo mount -o loop,offset=$(("${offset}" * 512)) "${IMAGE}" \
+		 "${MOUNTPOINT}" ; then
+		echo "Failed to mount partition: ${PARTNUM}" >&2
+		exit 1
+	fi
+fi
+
+echo "Partition mounted on ${MOUNTPOINT}"
