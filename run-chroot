@@ -29,7 +29,8 @@ Positional arguments:
   CHROOT  Name of the base chroot to use for the session.
 
 Optional 
-  -h,  --help              Show this help text and exit.
+  -d,   --destroy          Destroy a session.
+  -h,   --help             Show this help text and exit.
   -npe, --no-preserve-env  Don't preserve the user's environment inside the
                            chroot.
   -r,  --recreate          Recreate an already existing session.
@@ -37,6 +38,7 @@ Optional
 EOF
 }
 
+destroy=0
 preserve_env=1
 recreate=0
 chroot=
@@ -44,6 +46,9 @@ user=${USER}
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
+		-d|--destroy)
+			destroy=1
+			;;
 		-h|--help)
 			usage
 			exit
@@ -102,9 +107,21 @@ fi
 
 session=${USER}-${chroot}
 
-# Delete an existing session if -r, --recreate is supplied
+# Destroy an existing session if -d, --destroy is provided
+if [ "${destroy}" -eq 1 ] ; then
+	if session_exists "${session}" ; then
+		pr_info "Destroy existing session ${session}"
+		schroot -e -c "${session}"
+		exit
+	else
+		pr_error "Not such session: ${session}"
+		exit 1
+	fi
+fi
+
+# Destroy an existing session if -r, --recreate is provided
 if [ "${recreate}" -eq 1 ] && session_exists "${session}" ; then
-	pr_info "Remove existing session ${session}"
+	pr_info "Destroy existing session ${session}"
 	schroot -e -c "${session}"
 fi
 
