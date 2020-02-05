@@ -27,9 +27,31 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: partmount DEVICE PARTITION [MOUNTPOINT]
+Usage: partmount [-b] [-h] DEVICE PARTITION [MOUNTPOINT]
+
+Optional arguments:
+  -b, --brief  Only print the mountpoint.
+  -h, --help   Show this help text and exit.
 EOF
 }
+
+brief=0
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-b|--brief)
+			brief=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
 
 if [ $# -lt 2 ] ; then
 	usage >&2
@@ -115,4 +137,8 @@ DEL_MOUNTPOINT=${DEL_MOUNTPOINT}
 NBD_DEVICE=${NBD_DEVICE}
 EOF
 
-echo "Partition mounted on ${MOUNTPOINT}"
+if [ "${brief}" -eq 1 ] ; then
+	echo "${MOUNTPOINT}"
+else
+	echo "Partition mounted on ${MOUNTPOINT}"
+fi
