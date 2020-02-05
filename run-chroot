@@ -30,7 +30,7 @@ Positional arguments:
 
 Optional 
   -h,  --help              Show this help text and exit.
-  -np, --no-preserve-env   Don't preserve the user's environment inside the
+  -npe, --no-preserve-env  Don't preserve the user's environment inside the
                            chroot.
   -r,  --recreate          Recreate an already existing session.
   -u,  --user USER         Run the session as the user USER.
@@ -48,7 +48,7 @@ while [ $# -gt 0 ] ; do
 			usage
 			exit
 			;;
-		-np|--no-preserve-env)
+		-npe|--no-preserve-env)
 			preserve_env=0
 			;;
 		-r|--recreate)
