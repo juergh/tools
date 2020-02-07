@@ -8,7 +8,7 @@
   </resource>
   <os>
     <type arch='${XML_ARCH}' machine='pc'>hvm</type>
-    ${XML_OS_LOADER}
+    ${XML_UEFI}
     <boot dev='hd'/>
   </os>
   <features>

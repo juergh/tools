@@ -8,14 +8,15 @@
   </resource>
   <os>
     <type arch='armv7l' machine='virt'>hvm</type>
-    <kernel>${XML_KERNEL_PATH}</kernel>
-    <initrd>${XML_INITRD_PATH}</initrd>
-    <cmdline>${XML_KERNEL_CMDLINE}</cmdline>
+    ${XML_DIRECT_BOOT}
     <boot dev='hd'/>
   </os>
   <features>
     <gic version='2'/>
   </features>
+  <cpu mode='custom' match='exact' check='none'>
+    <model fallback='allow'>cortex-a15</model>
+  </cpu>
   <clock offset='utc'/>
   <on_poweroff>destroy</on_poweroff>
   <on_reboot>restart</on_reboot>

@@ -3,18 +3,6 @@
 # Create a base libvirt guest VM
 #
 
-# Mapping between distro and VM architecture names
-declare -A ARCH_MAP=(
-	# Debian
-	[i386]=i686
-	[amd64]=x86_64
-	[s390x]=s390x
-	[arm64]=aarch64
-	# RHEL
-	[i686]=i686
-	[x86_64]=x86_64
-)
-
 function pr_error()
 {
 	echo -e "\033[31m${*}\033[0m" 1>&2
@@ -300,35 +288,61 @@ function define_vm()
 	# shellcheck disable=SC2064
 	trap "rm -f ${tmpf}" EXIT INT TERM HUP
 
+	# Arch-specific XML settings
+	case "${ARCH}" in
+		i386|i686)
+			XML_ARCH=i686
+			XML_PFLASH=/usr/share/OVMF/OVMF_CODE.fd
+			;;
+		amd64|x86_64)
+			XML_ARCH=x86_64
+			XML_PFLASH=/usr/share/OVMF/OVMF_CODE.fd
+			;;
+		s390x)
+			XML_ARCH=s390x
+			;;
+		arm64)
+			XML_ARCH=aarch64
+			;;
+		armhf)
+			XML_ARCH=armv7l
+			;;
+		*)
+			echo "Unsupported architecture: ${ARCH}" >&2
+			exit 1
+			;;
+	esac
+
 	if [ "${BOOT_MODE}" = "uefi" ] ; then
 		# shellcheck disable=SC2089
-		XML_OS_LOADER="
-<loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE.fd</loader>
+		XML_UEFI="
+<loader readonly='yes' type='pflash'>${XML_PFLASH}</loader>
 <nvram>/var/lib/libvirt/qemu/nvram/${NAME}_VARS.fd</nvram>
 "
 	fi
 
 	if [ "${BOOT_MODE}" = "db" ] ; then
-		XML_KERNEL_PATH=$(virsh vol-path --pool default "${KERNEL}")
-		XML_INITRD_PATH=$(virsh vol-path --pool default "${INITRD}")
-		XML_KERNEL_CMDLINE="root=LABEL=cloudimg-rootfs"
+		XML_DIRECT_BOOT="
+<kernel>$(virsh vol-path --pool default "${KERNEL}")</kernel>
+<initrd>$(virsh vol-path --pool default "${INITRD}")</initrd>
+<cmdline>root=LABEL=cloudimg-rootfs</cmdline>
+"
 	fi
 
+	XML_NAME=${NAME}
 	XML_UUID=$(uuidgen)
+	XML_MEMORY=${MEMORY}
+	XML_VCPU=${VCPU}
+	XML_CPU=${CPU}
 	XML_OS_IMAGE_PATH=$(virsh vol-path --pool default "${OS_IMAGE}")
 	XML_CONFIG_DRIVE_PATH=$(virsh vol-path --pool default "${CONFIG_DRIVE}")
 	XML_MAC_ADDRESS="52:54:00:${XML_UUID:0:2}:${XML_UUID:2:2}:${XML_UUID:4:2}"
-	XML_ARCH=${ARCH_MAP["${ARCH}"]}
 
 	# Export the variables for the domain XML
-	export XML_NAME=${NAME}
-	export XML_VCPU=${VCPU}
-	export XML_CPU=${CPU}
-	export XML_MEMORY=${MEMORY}
 	# shellcheck disable=SC2090
-	export XML_OS_LOADER XML_KERNEL_PATH XML_INITRD_PATH XML_KERNEL_CMDLINE \
-		   XML_UUID XML_OS_IMAGE_PATH XML_CONFIG_DRIVE_PATH XML_MAC_ADDRESS \
-		   XML_ARCH
+	export XML_ARCH XML_UEFI XML_DIRECT_BOOT XML_NAME XML_UUID XML_MEMORY \
+		   XML_VCPU XML_CPU XML_OS_IMAGE_PATH XML_CONFIG_DRIVE_PATH \
+		   XML_MAC_ADDRESS
 
 	# Create the domain XML and define the VM
 	envsubst < "${CONFIG_DIR}/create-vm/domain-${XML_ARCH}.xml" > \
@@ -530,11 +544,11 @@ fi
 # The name of the VM
 if [ -z "${NAME}" ] ; then
 	NAME=${VENDOR}-${RELEASE}
-	if [ -n "${BOOT_MODE}" ] ; then
-		NAME=${NAME}-${BOOT_MODE}
-	fi
 	if [ "${ARCH}" != "${HOST_ARCH}" ] ; then
 		NAME=${NAME}-${ARCH}
+	fi
+	if [ -n "${BOOT_MODE}" ] ; then
+		NAME=${NAME}-${BOOT_MODE}
 	fi
 	NAME=${NAME}${NAME_SUFFIX}
 fi
