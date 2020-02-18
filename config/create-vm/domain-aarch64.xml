@@ -13,6 +13,7 @@
     <boot dev="hd"/>
   </os>
   <features>
+    <acpi/>
     <gic version="2"/>
   </features>
   <cpu mode="custom" match="exact" check="none">
