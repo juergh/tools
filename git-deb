@@ -47,9 +47,11 @@ function set_globals()
 			RELEASE=${RELEASE^}
 
 			# Add the derivative name
-			derivative=${DEBIAN#debian.}
-			if [ "${derivative}" != "${DEBIAN}" ] && \
-			   [ "${derivative}" != "master" ] ; then
+			derivative=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
+											 -S Source)
+			derivative=${derivative#linux}
+			derivative=${derivative#-}
+			if [ -n "${derivative}" ] ; then
 				RELEASE=${RELEASE}/${derivative}
 			fi
 		fi
