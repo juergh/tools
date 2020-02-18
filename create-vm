@@ -298,7 +298,14 @@ function define_vm()
 			XML_ARCH=x86_64
 			XML_PFLASH=/usr/share/OVMF/OVMF_CODE.fd
 			;;
-		s390x|arm64|armhf)
+		s390x)
+			XML_ARCH=s390x
+			;;
+		arm64)
+			XML_ARCH=aarch64
+			;;
+		armhf)
+			XML_ARCH=armv7l
 			;;
 		*)
 			echo "Unsupported architecture: ${ARCH}" >&2
