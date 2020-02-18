@@ -282,7 +282,7 @@ EOF
 
 function define_vm()
 {
-	local tmpf
+	local tmpf pflash
 
 	tmpf=$(mktemp)
 	# shellcheck disable=SC2064
@@ -292,11 +292,11 @@ function define_vm()
 	case "${ARCH}" in
 		i386|i686)
 			XML_ARCH=i686
-			XML_PFLASH=/usr/share/OVMF/OVMF_CODE.fd
+			pflash=/usr/share/OVMF/OVMF_CODE.fd
 			;;
 		amd64|x86_64)
 			XML_ARCH=x86_64
-			XML_PFLASH=/usr/share/OVMF/OVMF_CODE.fd
+			pflash=/usr/share/OVMF/OVMF_CODE.fd
 			;;
 		s390x)
 			XML_ARCH=s390x
@@ -316,7 +316,7 @@ function define_vm()
 	if [ "${BOOT_MODE}" = "uefi" ] ; then
 		# shellcheck disable=SC2089
 		XML_UEFI="
-<loader readonly='yes' type='pflash'>${XML_PFLASH}</loader>
+<loader readonly='yes' type='pflash'>${pflash}</loader>
 <nvram>/var/lib/libvirt/qemu/nvram/${NAME}_VARS.fd</nvram>
 "
 	fi
