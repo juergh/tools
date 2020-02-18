@@ -465,7 +465,7 @@ IMAGES_DIR=/srv/cloud-images
 CONFIG_DIR=$(dirname "$(realpath -e "${0}")")/config
 VCPU=1
 CPU=
-MEMORY=768
+MEMORY=1024
 NAME_SUFFIX=
 
 # Set type specific variables
