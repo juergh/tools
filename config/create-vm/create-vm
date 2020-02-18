@@ -5,16 +5,25 @@
 
 function fix_grub()
 {
+	local serial
+
 	if ! [ -e /etc/default/grub ] ; then
 		return
 	fi
+
+	# Figure out the serial console
+	for serial in ttyAMA0 ttyS0 ; do
+		if [ -e "/dev/${serial}" ] ; then
+			break
+		fi
+	done
 
 	# Configure grub
 	test -d /etc/default/grub.d || mkdir /etc/default/grub.d
 	cat <<__EOF__ > /etc/default/grub.d/99-create-vm.cfg
 unset GRUB_HIDDEN_TIMEOUT GRUB_TIMEOUT_STYLE GRUB_FORCE_PARTUUID
 GRUB_TIMEOUT=2
-GRUB_CMDLINE_LINUX_DEFAULT="console=tty1 console=ttyS0"
+GRUB_CMDLINE_LINUX_DEFAULT="console=tty1 console=${serial}"
 __EOF__
 
 	# Reinstall and update grub
