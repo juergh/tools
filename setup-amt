@@ -1,0 +1,11 @@
+#!/bin/bash
+
+AMT_IP=
+AMT_PASSWORD=
+VNC_PASSWORD=
+
+wsman put http://intel.com/wbem/wscim/1/ips-schema/1/IPS_KVMRedirectionSettingData -h "${AMT_IP}" -P 16992 -u admin -p "${AMT_PASSWORD}" -k RFBPassword="${VNC_PASSWORD}"
+wsman put http://intel.com/wbem/wscim/1/ips-schema/1/IPS_KVMRedirectionSettingData -h "${AMT_IP}" -P 16992 -u admin -p "${AMT_PASSWORD}" -k Is5900PortEnabled=true
+wsman put http://intel.com/wbem/wscim/1/ips-schema/1/IPS_KVMRedirectionSettingData -h "${AMT_IP}" -P 16992 -u admin -p "${AMT_PASSWORD}" -k OptInPolicy=false
+wsman put http://intel.com/wbem/wscim/1/ips-schema/1/IPS_KVMRedirectionSettingData -h "${AMT_IP}" -P 16992 -u admin -p "${AMT_PASSWORD}" -k SessionTimeout=0
+wsman invoke -a RequestStateChange http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_KVMRedirectionSAP -h "${AMT_IP}" -P 16992 -u admin -p "${AMT_PASSWORD}" -k RequestedState=2
