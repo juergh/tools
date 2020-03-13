@@ -1,6 +1,6 @@
 #!/bin/bash
 
-model=$(cat /proc/device-tree/model)
+model=$(cat /proc/device-tree/model | tr '\0' '\n')
 echo "${model}"
 
 krelease=$(uname -r)
