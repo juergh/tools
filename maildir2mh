@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+#
+# Convert a MailDir mailbox to a MH mailbox
+#
+
+import argparse
+import mailbox
+import os
+import shutil
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Convert a MailDir mailbox '
+                                     'to a MH mailbox')
+    parser.add_argument('-d', '--dry-run', action='store_true',
+                        help='Do a dry-run without moving any mails')
+    parser.add_argument('source', help='Path to the source MailDir mailbox')
+    parser.add_argument('dest', help='Path to the destination MH mailbox')
+    args = parser.parse_args()
+
+    prefix = 'dry-run: ' if args.dry_run else ''
+    source_path = os.path.expanduser(args.source)
+    dest_path = os.path.expanduser(args.dest)
+
+    for root, dirs, _ in os.walk(source_path):
+        for d in dirs:
+            if d in ("cur", "new", "tmp"):
+                # Skip MailDir system folders
+                continue
+
+            # Determine the absolute paths of the source and destination
+            # mailboxes
+            source_mbox_path = os.path.join(root, d)
+            source_mbox_relpath = os.path.relpath(source_mbox_path, source_path)
+            dest_mbox_path = os.path.join(dest_path, source_mbox_relpath)
+
+            print('{}Moving mails from {} to {}'.format(prefix,
+                                                        source_mbox_path,
+                                                        dest_mbox_path))
+
+            # Open the source mailbox
+            source_mbox = mailbox.Maildir(source_mbox_path)
+
+            # Cycle through the source mails and move them to the destination
+            # mailbox
+            index = 0
+            for index, key in enumerate(source_mbox.iterkeys()):
+                if args.dry_run:
+                    continue
+
+                if index == 0:
+                    # Create/open the destination mailbox
+                    if not os.path.exists(dest_mbox_path):
+                        os.makedirs(dest_mbox_path)
+                    dest_mbox = mailbox.MH(dest_mbox_path, create=True)
+
+                # Move the mail
+                dest_mbox.add(source_mbox.get_message(key))
+                source_mbox.remove(key)
+
+            print('{}Moved {} mails'.format(prefix, index))
+
+            print('{}Removing mailbox {}'.format(prefix, source_mbox_path))
+            if not args.dry_run:
+                shutil.rmtree(source_mbox_path)
