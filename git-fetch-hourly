@@ -1,19 +1,21 @@
-#!/bin/sh -eu
+#!/bin/sh
 #
-# Update git repos
+# Update git repo clones
 #
 
 fetch_repo()
 {
-	echo "Fetching ${1}"
-	cd "${1}"
-	git fetch --prune
-	if [ -d .git ] ; then
-		git reset --hard FETCH_HEAD
-	fi
-	date > .fetched
+	_git_dir=${1}
+
+	echo "Fetching ${_git_dir}"
+
+	git -C "${_git_dir}" fetch --prune
+	git -C "${_git_dir}" reset --hard FETCH_HEAD
+	date > "${_git_dir}"/.fetched
 }
 
-for git_dir in /srv/git/kteam-tools ; do
-	fetch_repo "${git_dir}"
+for git_dir in * ; do
+	if [ -d "${git_dir}" ] && [ "${git_dir%.git}" = "${git_dir}" ] ; then
+		fetch_repo "${git_dir}"
+	fi
 done

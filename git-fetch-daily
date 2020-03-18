@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Update git repos
+# Update git repo mirrors
 #
 
 fetch_repo()
@@ -10,10 +10,6 @@ fetch_repo()
 	echo "Fetching ${_git_dir}"
 
 	git -C "${_git_dir}" fetch --prune
-	if [ -d "${_git_dir}"/.git ] ; then
-		git -C "${_git_dir}" reset --hard FETCH_HEAD
-	fi
-
 	date -R > "${_git_dir}"/.fetched
 }
 
