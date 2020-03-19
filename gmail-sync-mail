@@ -1,0 +1,118 @@
+#!/bin/bash -eu
+
+function out()
+{
+	local rc=$?
+
+	trap - EXIT INT TERM HUP
+
+	if [ -n "${CONFIG}" ] ; then
+		rm -f "${CONFIG}"
+	fi
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: gmail-sync-mail [-d] [-h] [-p PATTERNS] USERNAME
+
+Pull mails from the provided gmail account to a local folder using mbsync.
+
+Positional arguments:
+  USERNAME    The gmail username
+
+Optional arguments:
+  -d, --dry-run            List the remote mailboxes but don't pull anything.
+  -p, --patterns PATTERNS  Pull mails from the mailboxes that match pattern
+                           PATTERNS. If not specified, defaults to '__Archive*'.
+  -h, --help               Show this help text and exit.
+EOF
+}
+
+patterns="__Archive*"
+username=
+dry_run=0
+mbsync_opts=()
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-d|--dry-run)
+			dry_run=1
+			mbsync_opts+=("-l")
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-p|--patterns)
+			shift
+			patterns=${1}
+			;;
+		-*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+		*)
+			if [ -n "${username}" ] ; then
+				usage
+				exit 2
+			fi
+			username=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${username}" ] ; then
+	usage
+	exit 2
+fi
+
+CONFIG=
+trap out EXIT INT TERM HUP
+
+local_path=~/.cache/mbsync/"${username}"/
+if ! [ -d "${local_path}" ] ; then
+	mkdir -p "${local_path}"
+fi
+
+
+CONFIG=$(mktemp)
+cat <<EOF >"${CONFIG}"
+IMAPAccount gmail
+Host imap.gmail.com
+User ${username}
+PassCmd "pass show google.com/${username}"
+Port 993
+SSLType IMAPS
+SSLVersions TLSv1.2
+
+IMAPStore gmail-remote
+Account gmail
+
+MaildirStore gmail-local
+Path ${local_path%%/}/
+Inbox ${local_path%%/}/INBOX
+SubFolders Verbatim
+
+Channel gmail
+Master :gmail-remote:
+Slave :gmail-local:
+Patterns ${patterns}
+Create Slave
+Sync Pull
+SyncState *
+EOF
+
+if [ "${dry_run}" -eq 1 ] ; then
+	cat "${CONFIG}"
+	echo
+fi
+
+mbsync "${mbsync_opts[@]}" -c "${CONFIG}" gmail
