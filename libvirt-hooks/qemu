@@ -1,0 +1,25 @@
+#!/bin/bash
+#
+# Keep a list currently active domains
+#
+
+run=/run/libvirt-hook.qemu
+domains=/etc/libvirt/domains
+
+# First run
+if ! [ -e "${run}" ] ; then
+	touch "${run}"
+	rm -f "${domains}"
+fi
+
+domain_name=$1
+action=$2
+
+case "${action}" in
+	started)
+		echo "${domain_name}" >> "${domains}"
+		;;
+	stopped)
+		sed -i "/^${domain_name}$/d" "${domains}"
+		;;
+esac
