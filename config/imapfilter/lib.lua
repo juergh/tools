@@ -72,3 +72,31 @@ function move_mail(account, source_folder, target_folder, age)
       move_mail(account, _folder, target_folder, age)
    end
 end
+
+-------------------------------------------------------------------------------
+-- Move mails from 'source_folder' to 'target_folder' that contain 'text' in
+-- their subjects
+--
+function move_mail_contain_subject(account, source_folder, target_folder, text)
+   local _, _source_msgs, _target_msgs
+
+   print('Source: ' .. source_folder)
+   print('Target: ' .. target_folder)
+
+   -- Fetch the mails that contain 'text' in their subjects
+   _source_msgs = account[source_folder]:contain_subject(text)
+   if _source_msgs[1] == nil then
+      print('Skipping (no mails to move)')
+      return
+   end
+
+   -- Create the target mailbox if necessary
+   _target_msgs, _, _, _ = account[target_folder]:check_status()
+   if _target_msgs == -1 then
+      print('Creating target mailbox')
+      account:create_mailbox(target_folder)
+   end
+
+   -- Move the mails
+   _source_msgs:move_messages(account[target_folder])
+end
