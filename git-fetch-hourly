@@ -5,17 +5,25 @@
 
 fetch_repo()
 {
-	_git_dir=${1}
+	date -R
+	echo "Fetching ${1}"
 
-	echo "Fetching ${_git_dir}"
-
-	git -C "${_git_dir}" fetch --prune
-	git -C "${_git_dir}" reset --hard FETCH_HEAD
-	date > "${_git_dir}"/.fetched
+	git -C "${1}" fetch --prune
+	git -C "${1}" reset --hard FETCH_HEAD
+	date -R > "${1}"/.fetched
 }
 
-for git_dir in * ; do
-	if [ -d "${git_dir}" ] && [ "${git_dir%.git}" = "${git_dir}" ] ; then
-		fetch_repo "${git_dir}"
-	fi
-done
+fetch_all()
+{
+	# Current working directory
+	cwd=$(dirname "$(readlink -e "${0}")")
+	cd "${cwd}"
+
+	for git_dir in * ; do
+		if [ -d "${git_dir}/.git" ] ; then
+			fetch_repo "${git_dir}"
+		fi
+	done
+}
+
+fetch_all 2>&1 | tee git-fetch-hourly.log

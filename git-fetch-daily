@@ -5,28 +5,33 @@
 
 fetch_repo()
 {
-	_git_dir=${1}
+	date -R
+	echo "Fetching ${1}"
 
-	echo "Fetching ${_git_dir}"
-
-	git -C "${_git_dir}" fetch --prune
-	date -R > "${_git_dir}"/.fetched
+	git -C "${1}" fetch --prune
+	date -R > "${1}"/.fetched
 }
 
-# Current working directory
-cwd=$(dirname "$(readlink -e "${0}")")
-cd "${cwd}"
+fetch_all()
+{
+	# Current working directory
+	cwd=$(dirname "$(readlink -e "${0}")")
+	cd "${cwd}"
 
-# Fetch the main linux repo first (since all the others use it as a reference)
-fetch_repo linux.git
+	# Fetch the main linux repo first (since all the others use it as a
+	# reference)
+	fetch_repo linux.git
 
-# Update the fixes file
-echo "Finding fixes commits"
-./find-fixes linux.git linux.fixes
+	# Update the fixes file
+	echo "Finding fixes commits"
+	./find-fixes linux.git linux.fixes
 
-# Fetch the remaining repos
-for git_dir in *.git ; do
-	if [ -d "${git_dir}" ] && [ "${git_dir}" != "linux.git" ] ; then
-		fetch_repo "${git_dir}"
-	fi
-done
+	# Fetch the remaining repos
+	for git_dir in *.git ; do
+		if [ -d "${git_dir}" ] && [ "${git_dir}" != "linux.git" ] ; then
+			fetch_repo "${git_dir}"
+		fi
+	done
+}
+
+fetch_all 2>&1 | tee git-fetch-daily.log
