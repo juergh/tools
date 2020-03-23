@@ -92,6 +92,7 @@ PassCmd "pass show google.com/${username}"
 Port 993
 SSLType IMAPS
 SSLVersions TLSv1.2
+PipelineDepth 50
 
 IMAPStore gmail-remote
 Account gmail
