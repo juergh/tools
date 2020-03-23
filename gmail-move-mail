@@ -94,6 +94,7 @@ CONFIG=$(mktemp)
 cat "${cwd}/config/imapfilter/lib.lua" > "${CONFIG}"
 
 cat <<EOF >>"${CONFIG}"
+
 options.timeout = 120
 options.subscribe = true
 options.create = true
@@ -106,9 +107,22 @@ gmail_account = IMAP {
    password = show_pass('google.com/${username}'),
    ssl = 'tls1.2',
 }
+EOF
 
+if [ "${username%@canonical.com}" != "${username}" ] ; then
+	cat <<EOF >>"${CONFIG}"
+
+-- Move [ACTIVITY] mails
+move_mail_contain_subject(gmail_account, 'Mailing Lists/Canonical/canonical-kernel-team', 'Canonical/Activity', '[ACTIVITY]')
+move_mail_contain_subject(gmail_account, 'Mailing Lists/Canonical/core-canonical-kernel-team', 'Canonical/Activity', '[ACTIVITY]')
+
+-- Move 'The Daily Bug Report for ...' mails
+move_mail_contain_subject(gmail_account, 'Mailing Lists/Ubuntu/kernel-team', 'Canonical/Bugs', 'The Daily Bug Report for')
+
+-- Move mails older than 'age'
 move_mail(gmail_account, '', '${target}', ${age})
 EOF
+fi
 
 if [ "${dry_run}" -eq 1 ] ; then
 	cat "${CONFIG}"
