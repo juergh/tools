@@ -1,0 +1,92 @@
+#!/bin/bash -eu
+
+function pr_red()    { echo -e "\033[31m${*}\033[0m" ; }
+function pr_green()  { echo -e "\033[32m${*}\033[0m" ; }
+function pr_yellow() { echo -e "\033[33m${*}\033[0m" ; }
+
+function fixup_log()
+{
+	local infile=$1 outfile=$2
+	local prev line
+
+	# Unzip the log and replace some special characters
+	zcat "$infile" | tr '\r' '\n' | tr '\t' ' ' > "$outfile"
+
+	# Remove empty lines
+	sed -i -e '/^\s*$/d' "$outfile"
+
+	# Squeeze indentical adjacent lines
+	prev=
+	while IFS= read -r line ; do
+		# Squeeze identical adjacent lines
+		if [ "$line" = "$prev" ] ; then
+			continue
+		fi
+		prev=$line
+
+		echo "$line"
+
+		# Break the commandline into multiple lines
+		if [ "${line/autopkgtest [/}" != "$line" ] ; then
+			echo "$line" | sed -e 's/--/\n  --/g' -e 's/||/\n    ||/g'
+		fi
+	done < <(cat "$outfile") > "$outfile".tmp
+	mv "$outfile".tmp "$outfile"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: diff-autopkgtest-logs LOG1 LOG2
+
+Show differences between two autopkgtest logfiles.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+log1=
+log2=
+
+while [ $# -gt 0 ] ; do
+	case "$1" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -z "${log1}" ] ; then
+				log1=$1
+			elif [ -z "${log2}" ] ; then
+				log2=$1
+			else
+				usage
+				exit 2
+			fi
+	esac
+	shift
+done
+
+if [ -z "${log1}" ] || [ -z "${log2}" ] ; then
+	usage
+	exit 2
+fi
+
+fixup_log "${log1}" .log1
+fixup_log "${log2}" .log2
+
+#half_width=$(($(tput cols) / 2))
+#width=$((half_width * 2))
+
+while IFS= read -r line ; do
+	if echo "$line" | grep -qP "Error|ERROR" ; then
+		pr_red "$line"
+	elif echo "$line" | grep -qP "PASS" ; then
+		pr_green "$line"
+	elif [ "${line/autopkgtest [/}" != "$line" ] ; then
+		pr_yellow "$line"
+	else
+		echo "$line"
+	fi
+done < <(diff -y -W "$(tput cols)" .log1 .log2)
