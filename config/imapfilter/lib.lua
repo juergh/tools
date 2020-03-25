@@ -80,8 +80,11 @@ end
 function move_mail_contain_subject(account, source_folder, target_folder, text)
    local _, _source_msgs, _target_msgs
 
-   print('Source: ' .. source_folder)
-   print('Target: ' .. target_folder)
+   print()
+   print('Move Mail (contain_subject)')
+   print('  Source: ' .. source_folder)
+   print('  Target: ' .. target_folder)
+   print('  Text:   ' .. text)
 
    -- Fetch the mails that contain 'text' in their subjects
    _source_msgs = account[source_folder]:contain_subject(text)
