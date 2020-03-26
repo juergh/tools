@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+#
+# Reset other Raspberry Pis by pulling their RUN pin low
+#
+
+import argparse
+from time import sleep
+import RPi.GPIO as gpio
+
+run_pin_map = {
+    "rpi-4b":    40,
+    "rpi-3b+":   38,
+    "rpi-3b":    36,
+    "rpi-3a+":   32,
+    "rpi-2b":    26,
+    "rpi-cm3b+": 24,
+}
+
+gpio4_pin_map = {
+    "rpi-4b":     3,
+    "rpi-3b+":    5,
+    "rpi-3b":     7,
+    "rpi-3a+":   11,
+    "rpi-2b":    13,
+    "rpi-cm3b+": 15,
+}
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-4", "--gpio4", nargs=1, choices=('0', '1'))
+parser.add_argument("-n", "--no-reset", action="store_true")
+parser.add_argument("rpi", choices=("rpi-4b", "rpi-3b+", "rpi-3b", "rpi-3a+"
+                                    "rpi-2b", "rpi-cm3b+"))
+args = parser.parse_args()
+
+run_pin = run_pin_map[args.rpi]
+gpio4_pin = gpio4_pin_map[args.rpi]
+gpio4_val = None if args.gpio4 is None else int(args.gpio4[0])
+
+# Use board pin numbers
+gpio.setmode(gpio.BOARD)
+
+# Drive the gpio4 pin
+if gpio4_val is not None:
+    print("Pulling gpio4 pin ({}) {}".format(gpio4_pin,
+                                             "high" if gpio4_val else "low"))
+    gpio.setup(gpio4_pin, gpio.OUT, initial=gpio4_val)
+
+# Drive the run pin low and release it again
+if not args.no_reset:
+    print("Pulling run pin ({}) low".format(run_pin))
+    gpio.setup(run_pin, gpio.OUT, initial=0)
+    sleep(0.5)
+    print("Releasing run pin")
+    gpio.setup(run_pin, gpio.IN)
+
+# Wait long enough for the firmware to sample the state of gpio4 pin and
+# then release it again
+if gpio4_val is not None:
+    sleep(10)
+    print("Releasing gpio4 pin")
+    gpio.setup(gpio4_pin, gpio.IN)
