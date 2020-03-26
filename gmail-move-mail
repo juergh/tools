@@ -99,11 +99,11 @@ if [ "${username%@canonical.com}" != "${username}" ] ; then
 	cat <<EOF >>"${CONFIG}"
 
 -- Move '[ACTIVITY]' mails
-move_mail_contain_subject(gmail_account, 'Mailing Lists/Canonical/canonical-kernel-team', 'Canonical/Activity', '[ACTIVITY]')
-move_mail_contain_subject(gmail_account, 'Mailing Lists/Canonical/core-canonical-kernel-team', 'Canonical/Activity', '[ACTIVITY]')
+move_mail_contain_subject(gmail_account, 'Mailing List/Canonical/canonical-kernel-team', 'Canonical/Activity', '[ACTIVITY]')
+move_mail_contain_subject(gmail_account, 'Mailing List/Canonical/core-canonical-kernel-team', 'Canonical/Activity', '[ACTIVITY]')
 
 -- Move 'The Daily Bug Report for ...' mails
-move_mail_contain_subject(gmail_account, 'Mailing Lists/Ubuntu/kernel-team', 'Canonical/Bugs', 'The Daily Bug Report for')
+move_mail_contain_subject(gmail_account, 'Mailing List/Ubuntu/kernel-team', 'Canonical/Bugs', 'The Daily Bug Report for')
 
 -- Move mails older than 60 days
 move_mail_is_older_recursive(gmail_account, '', '__Archive', 60)
