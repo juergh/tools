@@ -1,0 +1,8 @@
+# The following is supposed to work but doesn't (udev bug?)
+#ACTION=="add", KERNEL=="ttyUSB[0-9]*", SYMLINK+="usb-ports/tty-%{../busnum}-%s{../devpath}"
+
+ACTION=="add", KERNEL=="ttyUSB[0-9]*", PROGRAM="/bin/sh -c '\
+tmp=$devpath; \
+tmp=${tmp%:*}; \
+echo ${tmp##*/}; \
+'", SYMLINK+="usb-ports/tty-%c"
