@@ -5,6 +5,7 @@
 
 import argparse
 import os
+import re
 import sys
 import json
 
@@ -14,20 +15,20 @@ class colors:
     """
     Helper class for colored output
     """
-    ERR = '\033[31m'     # dark red
-    INFO = '\033[33m'    # dark yellow
-    GREEN = '\033[32m'   # dark green
-    END = '\033[0m'
+    ERR = "\033[31m"     # dark red
+    INFO = "\033[33m"    # dark yellow
+    GREEN = "\033[32m"   # dark green
+    END = "\033[0m"
 
 def run_cmd(cmd):
     """
     Run a command and return the exit status and stdout
     """
     proc = run(cmd, stdout=PIPE, universal_newlines=True)
-    stdout = proc.stdout.split('\n')[:-1]
+    stdout = proc.stdout.split("\n")[:-1]
     return proc.returncode, stdout
 
-def modify_msg(msg, acks=[], sobs=[], colored=False):
+def modify_msg(msg, acks, sobs, provenance, colored=False):
     """
     Modify a commit message
     """
@@ -42,6 +43,16 @@ def modify_msg(msg, acks=[], sobs=[], colored=False):
     else:
         col = ""
         end = ""
+
+    # Modify the last 'cherry picked/backported from' line
+    if provenance:
+        idx = 0
+        for i, m in enumerate(msg):
+            if (("cherry picked from commit" in m or
+                 "backported from commit" in m)):
+                idx = i
+        if re.search(r"[0-9a-h]{40}\)$", msg[idx]):
+            msg[idx] = col + "{} {})".format(msg[idx][:-1], provenance) + end
 
     # Add acked-by tags
     for ack in acks:
@@ -60,14 +71,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", "--force", action="store_true",
                         help="Really do run git filter-branch.")
-    parser.add_argument("--ack", metavar="nick[,nick,...]",
+    parser.add_argument("-a", "--ack", metavar="nick[,nick,...]",
                         help="IRC nickname of the person who ack'ed the "
                         "commit(s). Can be a comma separated list of "
                         "multiple nicknames.")
-    parser.add_argument("--sob", metavar="nick[,nick,...]",
+    parser.add_argument("-s", "--sob", metavar="nick[,nick,...]",
                         help="IRC nickname of the person who signed off on "
                         "commit(s). Can be a comma separated list of "
                         "multiple nicknames.")
+    parser.add_argument("-p", "--provenance", metavar="provenance",
+                        help="The name of the provenance for the commit(s). "
+                        "It will be appended to the last "
+                        "'cherry picked/backported from commit' line.")
     parser.add_argument("rev_list_opts", nargs="*", metavar="rev-list-options",
                         help="Arguments for git rev-list. All positive refs "
                         "included by these options are rewritten.")
@@ -102,30 +117,30 @@ def main():
                       colors.END)
                 return 1
 
-    # If the rev_list_opts argument not specified, we expect a commit message
-    # on stdin, so read it, modify it and write it back out to stdout. This
-    # is the case when we're being called by git-filter-branch.
+    # If the rev_list_opts argument is not specified, we expect a commit
+    # message on stdin, so read it, modify it and write it back out to stdout.
+    # This is the case when we're being called by git-filter-branch.
     if not args.rev_list_opts:
         # Read the commit message from stdin
         msg = []
         for line in sys.stdin:
-            msg.append(line.rstrip('\n'))
+            msg.append(line.rstrip("\n"))
 
         # Modify the message and print it
-        msg = modify_msg(msg, acks=acks, sobs=sobs)
-        print('\n'.join(msg))
+        msg = modify_msg(msg, acks, sobs, args.provenance)
+        print("\n".join(msg))
 
         return 0
 
     # Construct the message filter command
     mf_cmd = [sys.argv[0]]
     for key, val in vars(args).items():
-        if key in ("ack", "sob") and val:
+        if key in ("ack", "sob", "provenance") and val:
             mf_cmd.extend(["--" + key, val])
 
     # Construct the git-filter-branch command
     gfb_cmd = ["git", "filter-branch", "--force", "--msg-filter",
-               ' '.join(mf_cmd), "--"] + args.rev_list_opts
+               " ".join(mf_cmd), "--"] + args.rev_list_opts
 
     # Do run git-filter-branch
     if args.force:
@@ -139,29 +154,28 @@ def main():
     if rc != 0:
         return rc
 
-    # Get the commit message for each of the commits and modify them
+    # Modify the commit messages and print them
     for commit in commits:
-        # Get the commit message
+        # Print the commit header
+        _, header = run_cmd(["git", "log",
+                             "--format=commit %H%nAuthor: %an <%ae>%nDate:   %cD%n%n    %s",
+                             commit, "-1"])
+        print(colors.INFO + header[0] + colors.END)
+        print("\n".join(header[1:]))
+        print()
+
+        # Modify the commit message and print it
         _, msg = run_cmd(["git", "log", "--format=%b", commit, "-1"])
-
-        # Modify the commit message using colors so we can spot the changes
-        msg = modify_msg(msg, acks=acks, sobs=sobs, colored=True)
-
-        # Get the commit subject
-        _, subject = run_cmd(["git", "log", "--format=%s", commit, "-1"])
-
-        # Write the message to stdout
-        print(colors.INFO + "commit {}".format(commit) + colors.END)
-        print()
-        print(colors.INFO + "    {}".format(subject[0]) + colors.END)
-        print()
+        msg = modify_msg(msg, acks, sobs, args.provenance, colored=True)
         for m in msg:
             print("    {}".format(m))
         print()
 
     # Print the git-filter-branch command
-    print(colors.INFO + ' '.join(gfb_cmd) + colors.END)
+    print(colors.INFO + " ".join(gfb_cmd) + colors.END)
     print("Use -f,--force to really run the above command")
+
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())
