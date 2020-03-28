@@ -28,7 +28,7 @@ gpio4_pin_map = {
 parser = argparse.ArgumentParser()
 parser.add_argument("-4", "--gpio4", nargs=1, choices=('0', '1'))
 parser.add_argument("-n", "--no-reset", action="store_true")
-parser.add_argument("rpi", choices=("rpi-4b", "rpi-3b+", "rpi-3b", "rpi-3a+"
+parser.add_argument("rpi", choices=("rpi-4b", "rpi-3b+", "rpi-3b", "rpi-3a+",
                                     "rpi-2b", "rpi-cm3b+"))
 args = parser.parse_args()
 
