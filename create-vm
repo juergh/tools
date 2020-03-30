@@ -469,7 +469,7 @@ fi
 
 # Defaults
 IMAGES_DIR=/srv/cloud-images
-CONFIG_DIR=$(dirname "$(realpath -e "${0}")")/config
+CONFIG_DIR=$(dirname "$(readlink -e "${0}")")/config
 VCPU=1
 CPU=
 MEMORY=1024
@@ -522,10 +522,10 @@ fi
 # The vendor specific host architecture name
 case "${VENDOR}" in
 	fedora|centos)
-		HOST_ARCH=$(dpkg-architecture -q DEB_HOST_GNU_CPU)
+		HOST_ARCH=$(dpkg-architecture -qDEB_HOST_GNU_CPU)
 		;;
 	*)
-		HOST_ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
+		HOST_ARCH=$(dpkg-architecture -qDEB_HOST_ARCH)
 		;;
 esac
 
