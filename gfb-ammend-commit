@@ -11,14 +11,11 @@ import json
 
 from subprocess import run, PIPE
 
-class colors:
-    """
-    Helper class for colored output
-    """
-    ERR = "\033[31m"     # dark red
-    INFO = "\033[33m"    # dark yellow
-    GREEN = "\033[32m"   # dark green
-    END = "\033[0m"
+RED = ("\033[31m", "\033[0m")
+GREEN = ("\033[32m", "\033[0m")
+YELLOW = ("\033[33m", "\033[0m")
+NONE = ("", "")
+
 
 def run_cmd(cmd):
     """
@@ -28,41 +25,103 @@ def run_cmd(cmd):
     stdout = proc.stdout.split("\n")[:-1]
     return proc.returncode, stdout
 
-def modify_msg(msg, acks, sobs, provenance, colored=False):
+
+def modify_msg(msg, acks, sobs, provenance, bugs, color=NONE):
     """
     Modify a commit message
     """
-    # Remove trailing newlines
-    while msg[-1] == "":
+    subject = msg.pop(0)
+
+    # -------------------------------------------------------------------------
+    # Remove leading and trailing newlines
+
+    while len(msg) > 0 and msg[0] == "":
+        msg = msg[1:]
+
+    while len(msg) > 0 and msg[-1] == "":
         msg = msg[:-1]
 
-    # Set colors (for a dry run)
-    if colored:
-        col = colors.GREEN
-        end = colors.END
-    else:
-        col = ""
-        end = ""
+    # -------------------------------------------------------------------------
+    # Add Buglinks
 
-    # Modify the last 'cherry picked/backported from' line
+    if bugs:
+        # Extract existing BugLink lines into a tmp list
+        tmp_bug = []
+        tmp_msg = []
+        for m in msg:
+            if re.match(r"BugLink: http[s]://bugs.launchpad.net", m):
+                tmp_bug.append(color[0] + m + color[1])
+            else:
+                tmp_msg.append(m)
+
+        # Add new BugLink line(s)
+        for bug in bugs:
+            tmp_bug.append(color[0] +
+                           "BugLink: https://bugs.launchpad.net/bugs/{}".format(bug) +
+                           color[1])
+
+        # Prepend the sorted BugLinks to the message
+        msg = sorted(set(tmp_bug)) + [""] + tmp_msg
+
+    # -------------------------------------------------------------------------
+    # Add provenance
+
     if provenance:
+        # Get the index of the last 'cherry picked/backported from' line
         idx = 0
         for i, m in enumerate(msg):
             if (("cherry picked from commit" in m or
                  "backported from commit" in m)):
                 idx = i
+
+        # Add the provenance to the line
         if re.search(r"[0-9a-h]{40}\)$", msg[idx]):
-            msg[idx] = col + "{} {})".format(msg[idx][:-1], provenance) + end
+            msg[idx] = (color[0] + msg[idx][:-1] + " " + provenance + ")" +
+                        color[1])
+
+    # -------------------------------------------------------------------------
+    # Add acked-by and signed-off-by tags
 
     # Add acked-by tags
     for ack in acks:
-        msg.append(col + "Acked-by: {}".format(ack) + end)
+        msg.append(color[0] + "Acked-by: {}".format(ack) + color[1])
 
     # Add signed-off-by tags
     for sob in sobs:
-        msg.append(col + "Signed-off-by: {}".format(sob) + end)
+        msg.append(color[0] + "Signed-off-by: {}".format(sob) + color[1])
+
+    # -------------------------------------------------------------------------
+    # Insert an empty line before the last 'cherry picked/backported from' line
+
+    # Get the index of the last 'cherry picked/backported from' line
+    idx = 0
+    for i, m in enumerate(msg):
+        if (("cherry picked from commit" in m or
+             "backported from commit" in m)):
+            idx = i
+
+    if msg[idx - 1] != "":
+        msg.insert(idx, "")
+
+    # -------------------------------------------------------------------------
+    # Prepend the subject to the message
+
+    msg = [subject, ""] + msg
+
+    # -------------------------------------------------------------------------
+    # Squeeze multiple empty lines
+
+    tmp_msg = []
+    p = ""
+    for m in msg:
+        if m == "" and p == "":
+            continue
+        p = m
+        tmp_msg.append(m)
+    msg = tmp_msg
 
     return msg
+
 
 def main():
     """
@@ -83,6 +142,9 @@ def main():
                         help="The name of the provenance for the commit(s). "
                         "It will be appended to the last "
                         "'cherry picked/backported from commit' line.")
+    parser.add_argument("-b", "--bug", metavar="bug[,bug,...]",
+                        help="Launchpad bug number. Can be a comma separated "
+                        "list of multiple bug numbers.")
     parser.add_argument("rev_list_opts", nargs="*", metavar="rev-list-options",
                         help="Arguments for git rev-list. All positive refs "
                         "included by these options are rewritten.")
@@ -100,9 +162,9 @@ def main():
             try:
                 acks.append(kteam_rc["irc-aliases"][nick])
             except KeyError:
-                print(colors.ERR +
+                print(RED[0] +
                       "Nick '{}' not found in ~/.kteam.rc".format(nick) +
-                      colors.END)
+                      RED[1])
                 return 1
 
     # Assemble the signed-off-by list
@@ -112,10 +174,15 @@ def main():
             try:
                 sobs.append(kteam_rc["irc-aliases"][nick])
             except KeyError:
-                print(colors.ERR +
+                print(RED[0] +
                       "Nick '{}' not found in ~/.kteam.rc".format(nick) +
-                      colors.END)
+                      RED[1])
                 return 1
+
+    # Split the bugs
+    bugs = []
+    if args.bug:
+        bugs = args.bug.split(",")
 
     # If the rev_list_opts argument is not specified, we expect a commit
     # message on stdin, so read it, modify it and write it back out to stdout.
@@ -127,7 +194,7 @@ def main():
             msg.append(line.rstrip("\n"))
 
         # Modify the message and print it
-        msg = modify_msg(msg, acks, sobs, args.provenance)
+        msg = modify_msg(msg, acks, sobs, args.provenance, bugs)
         print("\n".join(msg))
 
         return 0
@@ -135,7 +202,7 @@ def main():
     # Construct the message filter command
     mf_cmd = [sys.argv[0]]
     for key, val in vars(args).items():
-        if key in ("ack", "sob", "provenance") and val:
+        if key in ("ack", "sob", "provenance", "bug") and val:
             mf_cmd.extend(["--" + key, val])
 
     # Construct the git-filter-branch command
@@ -158,21 +225,21 @@ def main():
     for commit in commits:
         # Print the commit header
         _, header = run_cmd(["git", "log",
-                             "--format=commit %H%nAuthor: %an <%ae>%nDate:   %cD%n%n    %s",
+                             "--format=commit %H%nAuthor: %an <%ae>%nDate:   %cD",
                              commit, "-1"])
-        print(colors.INFO + header[0] + colors.END)
+        print(YELLOW[0] + header[0] + YELLOW[1])
         print("\n".join(header[1:]))
         print()
 
         # Modify the commit message and print it
-        _, msg = run_cmd(["git", "log", "--format=%b", commit, "-1"])
-        msg = modify_msg(msg, acks, sobs, args.provenance, colored=True)
+        _, msg = run_cmd(["git", "log", "--format=%B", commit, "-1"])
+        msg = modify_msg(msg, acks, sobs, args.provenance, bugs, color=GREEN)
         for m in msg:
             print("    {}".format(m))
         print()
 
     # Print the git-filter-branch command
-    print(colors.INFO + " ".join(gfb_cmd) + colors.END)
+    print(YELLOW[0] + " ".join(gfb_cmd) + YELLOW[1])
     print("Use -f,--force to really run the above command")
 
     return 0
