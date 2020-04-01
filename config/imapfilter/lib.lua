@@ -37,8 +37,8 @@ function move_mail(account, messages, target_mailbox)
 end
 
 -------------------------------------------------------------------------------
--- Recursively move messages older than 'age' days from 'source_folder' to
--- 'target_root', preserving the folder hierarchy
+-- Recursively move messages older than 'age' days from 'source_folder'
+-- to 'target_root', preserving the folder hierarchy
 --
 function move_mail_is_older_recursive(account, source_folder, target_root, age)
    local _source_mailboxes, _source_subfolders, _target_mailbox
@@ -72,7 +72,7 @@ function move_mail_is_older_recursive(account, source_folder, target_root, age)
       print('    Target mailbox: ' .. _target_mailbox)
 
       -- Move the messages
-      move_mail_is_older(account, _source_mailbox, _target_mailbox, age, 1)
+      move_mail_is_older(account, _source_mailbox, _target_mailbox, age, true)
 
       ::continue1::
    end
@@ -85,8 +85,8 @@ function move_mail_is_older_recursive(account, source_folder, target_root, age)
 end
 
 -------------------------------------------------------------------------------
--- Move messages older than 'age' days from 'source_mailbox' to
--- 'target_mailbox'
+-- Move messages older than 'age' days from 'source_mailbox'
+-- to 'target_mailbox'
 --
 function move_mail_is_older(account, source_mailbox, target_mailbox, age,
 			    quiet)
@@ -121,5 +121,25 @@ function move_mail_contain_subject(account, source_mailbox, target_mailbox,
 
    -- Fetch the mails that contain 'text' in their subjects and move them
    _messages = account[source_mailbox]:contain_subject(text)
+   move_mail(account, _messages, target_mailbox)
+end
+
+-------------------------------------------------------------------------------
+-- Move messages  that contain 'body' in their body from 'source_mailbox'
+-- to 'target_mailbox'
+--
+function move_mail_contain_body(account, source_mailbox, target_mailbox,
+				body, quiet)
+   local _messages
+
+   if quiet == nil then
+      print('Move mail (contain_body)')
+      print('  Body:           ' .. body)
+      print('  Source mailbox: ' .. source_mailbox)
+      print('  Target mailbox: ' .. target_mailbox)
+   end
+
+   -- Fetch the mails that are from 'from' and move them
+   _messages = account[source_mailbox]:contain_body(body)
    move_mail(account, _messages, target_mailbox)
 end
