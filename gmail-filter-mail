@@ -56,9 +56,9 @@ __EOF__
 function usage()
 {
 	cat <<EOF
-Usage: gmail-move-mail [-d] [-h] [-q] USERNAME
+Usage: gmail-filter-mail [-d] [-h] [-q] USERNAME
 
-Move mails using imapfilter.
+Filter gmail mails using imapfilter.
 
 Positional arguments:
   USERNAME       The gmail username
