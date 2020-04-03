@@ -17,6 +17,42 @@ function out()
 	exit "${rc}"
 }
 
+function canonical_filter_mail()
+{
+	local lastrun=$1
+
+	touch "${lastrun}"
+
+	cat <<__EOF__
+-- Move '[ACTIVITY]' mails
+messages = account['Mailing List/Canonical/canonical-kernel-team']:contain_subject('[ACTIVITY]') *
+           account['Mailing List/Canonical/core-canonical-kernel-team']:contain_subject('[ACTIVITY]')
+move_messages(messages, account['Canonical/Activity'])
+
+-- Move 'The Daily Bug Report for ...' mails
+messages = account['Mailing List/Ubuntu/kernel-team']:contain_subject('The Daily Bug Report for')
+move_messages(messages, account['Canonical/Bugs'])
+
+-- Move '-proposed tracker' mails
+messages = account['Inbox']:contain_subject('-proposed tracker')
+move_messages(messages, account['Canonical/SRU'])
+
+-- Move Salesforce mails
+messages = account['Mailing List/Canonical/canonical-kernel-team']:contain_subject('SFDC')
+move_messages(messages, account['Canonical/SalesForce'])
+__EOF__
+
+	# Archive mails only once a day
+	today=$(date +'%Y-%m-%d')
+	lastrunday=$(awk '{print $1}' "${lastrun}")
+	if [ "${today}" != "${lastrunday}" ] ; then
+		cat <<__EOF__
+-- Archive mails older than 60 days
+archive_messages(account, 60)
+__EOF__
+	fi
+}
+
 function usage()
 {
 	cat <<EOF
@@ -96,28 +132,8 @@ account = IMAP {
 EOF
 
 if [ "${username%@canonical.com}" != "${username}" ] ; then
-	cat <<EOF >>"${CONFIG}"
-
--- Move '[ACTIVITY]' mails
-messages = account['Mailing List/Canonical/canonical-kernel-team']:contain_subject('[ACTIVITY]') *
-           account['Mailing List/Canonical/core-canonical-kernel-team']:contain_subject('[ACTIVITY]')
-move_messages(messages, account['Canonical/Activity'])
-
--- Move 'The Daily Bug Report for ...' mails
-messages = account['Mailing List/Ubuntu/kernel-team']:contain_subject('The Daily Bug Report for')
-move_messages(messages, account['Canonical/Bugs'])
-
--- Move '-proposed tracker' mails
-messages = account['Inbox']:contain_subject('-proposed tracker')
-move_messages(messages, account['Canonical/SRU'])
-
--- Move Salesforce mails
-messages = account['Mailing List/Canonical/canonical-kernel-team']:contain_subject('SFDC')
-move_messages(messages, account['Canonical/SalesForce'])
-
--- Archive mails older than 60 days
-archive_messages(account, 60)
-EOF
+	lastrun=~/.imapfilter/lastrun.canonical
+	canonical_filter_mail "${lastrun}" >> "${CONFIG}"
 fi
 
 if [ "${dry_run}" -eq 1 ] ; then
@@ -131,4 +147,4 @@ if [ "${quiet}" -eq 0 ] ; then
 fi
 
 imapfilter "${opts[@]}" -c "${CONFIG}"
-date --rfc-3339=seconds > ~/.imapfilter/lastrun
+date --rfc-3339=seconds > "${lastrun}"
