@@ -99,17 +99,24 @@ if [ "${username%@canonical.com}" != "${username}" ] ; then
 	cat <<EOF >>"${CONFIG}"
 
 -- Move '[ACTIVITY]' mails
-move_mail_contain_subject(account, 'Mailing List/Canonical/canonical-kernel-team', 'Canonical/Activity', '[ACTIVITY]')
-move_mail_contain_subject(account, 'Mailing List/Canonical/core-canonical-kernel-team', 'Canonical/Activity', '[ACTIVITY]')
+messages = account['Mailing List/Canonical/canonical-kernel-team']:contain_subject('[ACTIVITY]') *
+           account['Mailing List/Canonical/core-canonical-kernel-team']:contain_subject('[ACTIVITY]')
+move_messages(messages, account['Canonical/Activity'])
 
 -- Move 'The Daily Bug Report for ...' mails
-move_mail_contain_subject(account, 'Mailing List/Ubuntu/kernel-team', 'Canonical/Bugs', 'The Daily Bug Report for')
+messages = account['Mailing List/Ubuntu/kernel-team']:contain_subject('The Daily Bug Report for')
+move_messages(messages, account['Canonical/Bugs'])
 
--- Move bug mails
-move_mail_contain_body(account, 'Inbox', 'Canonical/Bugs', 'Launchpad-Notification-Type: bug')
+-- Move '-proposed tracker' mails
+messages = account['Inbox']:contain_subject('-proposed tracker')
+move_messages(messages, account['Canonical/SRU'])
 
--- Move mails older than 60 days
-move_mail_is_older_recursive(account, '', '__Archive', 60)
+-- Move Salesforce mails
+messages = account['Mailing List/Canonical/canonical-kernel-team']:contain_subject('SFDC')
+move_messages(messages, account['Canonical/SalesForce'])
+
+-- Archive mails older than 60 days
+archive_messages(account, 60)
 EOF
 fi
 
@@ -124,3 +131,4 @@ if [ "${quiet}" -eq 0 ] ; then
 fi
 
 imapfilter "${opts[@]}" -c "${CONFIG}"
+date --rfc-3339=seconds > ~/.imapfilter/lastrun

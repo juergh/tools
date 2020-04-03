@@ -4,9 +4,21 @@
 --
 
 -------------------------------------------------------------------------------
--- Return a password from the password store
+-- Check if a table contains a given value.
 --
-function show_pass(pass_name)
+local function has_value(tab, val)
+   for _, _val in ipairs(tab) do
+      if _val == val then
+	 return true
+      end
+   end
+   return false
+end
+
+-------------------------------------------------------------------------------
+-- Return a password from the password store.
+--
+local function show_pass(pass_name)
    local _, _output
 
    _, _output = pipe_from('pass show ' .. pass_name)  -- luacheck: ignore pipe_from
@@ -14,132 +26,76 @@ function show_pass(pass_name)
 end
 
 -------------------------------------------------------------------------------
--- Move 'messages' to 'target_mailbox'
+-- Move 'messages' to 'mailbox'. Create 'mailbox' first if necessary.
 --
-function move_mail(account, messages, target_mailbox)
-   local _, _target_messages
+local function move_messages(messages, mailbox)
+   local _, _messages
 
    -- Check if there are messages to move
    if messages[1] == nil then
-      print('Skipping (no mails to move)')
+      print('Skipping (no messages to move)')
       return
    end
 
    -- Create the target mailbox if necessary
-   _target_messages, _, _, _ = account[target_mailbox]:check_status()
-   if _target_messages == -1 then
-      print('Creating target mailbox')
-      account:create_mailbox(target_mailbox)
+   _messages, _, _, _ = mailbox:check_status()
+   if _messages == -1 then
+      print('Creating target mailbox ' .. mailbox._mailbox)
+      mailbox._account:create_mailbox(mailbox._mailbox)
    end
 
-   -- Move the mails
-   messages:move_messages(account[target_mailbox])
+   -- Move the messages
+   print('Moving messages to ' .. mailbox._mailbox)
+   messages:move_messages(mailbox)
 end
 
 -------------------------------------------------------------------------------
--- Recursively move messages older than 'age' days from 'source_folder'
--- to 'target_root', preserving the folder hierarchy
+-- Return the list of mailboxes in and underneath 'folder'
 --
-function move_mail_is_older_recursive(account, source_folder, target_root, age)
-   local _source_mailboxes, _source_subfolders, _target_mailbox
+local function list_all_recursive(account, folder, blacklist, mailboxes)
+   local _mailboxes, _subfolders
 
-   print('Move mail (is_older_recursive)')
-   print('  Age:    ' .. age)
-   print('  Folder: ' .. source_folder)
-
-   -- Skip folders that we don't want to process
-   if source_folder == target_root or source_folder == '[Gmail]' then
-      print('  Skipping folder (blacklisted)')
-      return
+   if mailboxes == nil then
+      mailboxes = {}
    end
 
-   -- Get all mailboxes and subfolders of the provided account and source
-   -- folder
-   _source_mailboxes, _source_subfolders = account:list_all(source_folder)
+   -- Get all mailboxes and subfolders
+   _mailboxes, _subfolders = account:list_all(folder)
 
-   -- Cycle through the mailboxes and move mails older than 'age'
-   for _, _source_mailbox in ipairs(_source_mailboxes) do
-      _target_mailbox = target_root .. '/' .. _source_mailbox
-      print('    Source mailbox: ' .. _source_mailbox)
-
-      -- Skip mailboxes that we don't want to archive
-      if (_source_mailbox == target_root or _source_mailbox == 'Drafts' or
-	  _source_mailbox == 'Trash') then
-	 print('    Skipping mailbox (blacklisted)')
-	 goto continue1
+   -- Cycle through all mailboxes and append them to the list
+   for _, _mailbox in ipairs(_mailboxes) do
+      if has_value(blacklist, _mailbox) then
+	 print('Skippping mailbox ' .. _mailbox .. ' (blacklisted)')
+      else
+	 table.insert(mailboxes, _mailbox)
       end
-
-      print('    Target mailbox: ' .. _target_mailbox)
-
-      -- Move the messages
-      move_mail_is_older(account, _source_mailbox, _target_mailbox, age, true)
-
-      ::continue1::
    end
 
-   -- Cycle through the source subfolders
-   for _, _source_subfolder in ipairs(_source_subfolders) do
-      move_mail_is_older_recursive(account, _source_subfolder, target_root,
-				   age)
+   -- Cycle through all subfolders recursively
+   for _, _subfolder in ipairs(_subfolders) do
+      if has_value(blacklist, _subfolder) then
+	 print('Skippping folder ' .. _subfolder .. ' (blacklisted)')
+      else
+	 list_all_recursive(account, _subfolder, blacklist, mailboxes)
+      end
    end
+
+   return mailboxes
 end
 
 -------------------------------------------------------------------------------
--- Move messages older than 'age' days from 'source_mailbox'
--- to 'target_mailbox'
+-- Archive all messages older than 'age' days
 --
-function move_mail_is_older(account, source_mailbox, target_mailbox, age,
-			    quiet)
-   local _messages
+local function archive_messages(account, age)
+   local _blacklist, _messages
 
-   if quiet == nil then
-      print('Move mail (is_older)')
-      print('  Age:            ' .. age)
-      print('  Source mailbox: ' .. source_mailbox)
-      print('  Target mailbox: ' .. target_mailbox)
+   -- List of mailboxes/folders to skip
+   _blacklist = {'Drafts', 'Queue', 'Trash', '__Archive', '[Gmail]'}
+
+   -- Cycle through all the mailboxes
+   for _, _mailbox in ipairs(list_all_recursive(account, '', _blacklist)) do
+      print('Archiving mailbox ' .. _mailbox)
+      _messages = account[_mailbox]:is_older(age)
+      move_messages(_messages, account['__Archive/' .. _mailbox])
    end
-
-   -- Fetch the mails that are older than 'age' days and move them
-   _messages = account[source_mailbox]:is_older(age)
-   move_mail(account, _messages, target_mailbox)
-end
-
--------------------------------------------------------------------------------
--- Move messages  that contain 'text' in their subjects from 'source_mailbox'
--- to 'target_mailbox'
---
-function move_mail_contain_subject(account, source_mailbox, target_mailbox,
-				   text, quiet)
-   local _messages
-
-   if quiet == nil then
-      print('Move mail (contain_subject)')
-      print('  Text:           ' .. text)
-      print('  Source mailbox: ' .. source_mailbox)
-      print('  Target mailbox: ' .. target_mailbox)
-   end
-
-   -- Fetch the mails that contain 'text' in their subjects and move them
-   _messages = account[source_mailbox]:contain_subject(text)
-   move_mail(account, _messages, target_mailbox)
-end
-
--------------------------------------------------------------------------------
--- Move messages  that contain 'body' in their body from 'source_mailbox'
--- to 'target_mailbox'
---
-function move_mail_contain_body(account, source_mailbox, target_mailbox,
-				body, quiet)
-   local _messages
-
-   if quiet == nil then
-      print('Move mail (contain_body)')
-      print('  Body:           ' .. body)
-      print('  Source mailbox: ' .. source_mailbox)
-      print('  Target mailbox: ' .. target_mailbox)
-   end
-
-   -- Fetch the mails that are from 'from' and move them
-   _messages = account[source_mailbox]:contain_body(body)
-   move_mail(account, _messages, target_mailbox)
 end
