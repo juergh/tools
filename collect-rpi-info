@@ -15,12 +15,8 @@ echo "${machine}"
 
 ksuffix=${krelease}_${kversion}_${machine}
 
-bname=${model#Raspberry Pi }
-bname=${bname%% Rev *}
-bname=${bname/Compute Module/cm}
-bname=${bname/Model /}
-bname=${bname// /-}
-bname=rpi-${bname,,}
+bname=${model// /-}
+bname=${bname,,}
 
 test -d "${bname}" || mkdir "${bname}"
 
