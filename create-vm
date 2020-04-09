@@ -63,7 +63,7 @@ function unmount_image()
 function download_image()
 {
 	local url=${1}
-	local tmpf tmpf2 image tmpd
+	local tmpf tmpf2 image_xyz image tmpd
 
 	tmpf=$(mktemp)
 	tmpf2=$(mktemp)
@@ -75,10 +75,15 @@ function download_image()
 		# Use the provided image
 		cp "${IMAGE}" "${tmpf}"
 	else
-		# Download a cloud image if necessary/requested
-		image=${IMAGES_DIR}/${url##*/}
+		# Download the image if necessary/requested
+		image_xyz=${IMAGES_DIR}/${url##*/}
+		image=${image_xyz%.xz}
 		if [ "${DOWNLOAD}" -eq 1 ] || ! [ -e "${image}" ] ; then
-			sudo wget -O "${image}" "${url}"
+			sudo wget -O "${image_xyz}" "${url}"
+			# Decompress it if necessary
+			if [ "${image_xyz}" != "${image}" ] ; then
+				sudo unxz "${image_xyz}"
+			fi
 		fi
 		cp "${image}" "${tmpf}"
 	fi
@@ -198,6 +203,16 @@ function download_ubuntu_image()
 
 	name=${RELEASE}-server-cloudimg-${ARCH}${suffix}.img
 	url=https://cloud-images.ubuntu.com/${RELEASE}/current/${name}
+
+	download_image "${url}"
+}
+
+function download_core_image()
+{
+	local name url
+
+	name=ubuntu-core-${RELEASE}-${ARCH}.img.xz
+	url=http://cdimage.ubuntu.com/ubuntu-core/${RELEASE}/current/${name}
 
 	download_image "${url}"
 }
@@ -329,20 +344,44 @@ function define_vm()
 "
 	fi
 
+	# Defaults
+	XML_OS_IMAGE_DISK_SATA_BEGIN="<!--"
+	XML_OS_IMAGE_DISK_SATA_END="-->"
+	XML_OS_IMAGE_DISK_VIRTIO_BEGIN="<!--"
+	XML_OS_IMAGE_DISK_VIRTIO_END="-->"
+	XML_CONFIG_DRIVE_DISK_BEGIN="<!--"
+	XML_CONFIG_DRIVE_DISK_END="-->"
+
+	XML_OS_IMAGE_PATH=$(virsh vol-path --pool default "${OS_IMAGE}")
+	if [ "${VENDOR}" = "core" ] ; then
+		XML_OS_IMAGE_DISK_SATA_BEGIN=
+		XML_OS_IMAGE_DISK_SATA_END=
+	else
+		XML_OS_IMAGE_DISK_VIRTIO_BEGIN=
+		XML_OS_IMAGE_DISK_VIRTIO_END=
+	fi
+
+	if [ -n "${CONFIG_DRIVE}" ] ; then
+		XML_CONFIG_DRIVE_PATH=$(virsh vol-path --pool default "${CONFIG_DRIVE}")
+		XML_CONFIG_DRIVE_DISK_BEGIN=
+		XML_CONFIG_DRIVE_DISK_END=
+	fi
+
 	XML_NAME=${NAME}
 	XML_UUID=$(uuidgen)
 	XML_MEMORY=${MEMORY}
 	XML_VCPU=${VCPU}
 	XML_CPU=${CPU}
-	XML_OS_IMAGE_PATH=$(virsh vol-path --pool default "${OS_IMAGE}")
-	XML_CONFIG_DRIVE_PATH=$(virsh vol-path --pool default "${CONFIG_DRIVE}")
 	XML_MAC_ADDRESS="52:54:00:${XML_UUID:0:2}:${XML_UUID:2:2}:${XML_UUID:4:2}"
 
 	# Export the variables for the domain XML
 	# shellcheck disable=SC2090
-	export XML_ARCH XML_UEFI XML_DIRECT_BOOT XML_NAME XML_UUID XML_MEMORY \
-		   XML_VCPU XML_CPU XML_OS_IMAGE_PATH XML_CONFIG_DRIVE_PATH \
-		   XML_MAC_ADDRESS
+	export XML_ARCH XML_UEFI XML_DIRECT_BOOT \
+		   XML_OS_IMAGE_DISK_SATA_BEGIN XML_OS_IMAGE_DISK_SATA_END \
+		   XML_OS_IMAGE_DISK_VIRTIO_BEGIN XML_OS_IMAGE_DISK_VIRTIO_END \
+		   XML_CONFIG_DRIVE_DISK_BEGIN XML_CONFIG_DRIVE_DISK_END \
+		   XML_OS_IMAGE_PATH XML_CONFIG_DRIVE_PATH \
+		   XML_NAME XML_UUID XML_MEMORY XML_VCPU XML_CPU XML_MAC_ADDRESS
 
 	# Create the domain XML and define the VM
 	envsubst < "${CONFIG_DIR}/create-vm/domain-${XML_ARCH}.xml" > \
@@ -507,6 +546,10 @@ case "${DIST}" in
 		VENDOR=debian
 		RELEASE=${DIST}
 		;;
+	core*)
+		VENDOR=core
+		RELEASE=${DIST#core}
+		;;
 	*)
 		VENDOR=ubuntu
 		RELEASE=${DIST}
@@ -554,17 +597,21 @@ if [ -z "${NAME}" ] ; then
 fi
 
 # The image filenames
-OS_IMAGE=${NAME}.qcow2
+OS_IMAGE=${NAME}.img
 CONFIG_DRIVE=${NAME}-config.iso
 KERNEL=${NAME}-kernel
 INITRD=${NAME}-initrd
 
-print_var NAME VCPU MEMORY ARCH FORCE VENDOR DIST RELEASE OS_IMAGE \
-		  CONFIG_DRIVE BOOT_MODE
-
-if [ "${BOOT_MODE}" = "db" ] ; then
-	print_var KERNEL INITRD
+if [ "${VENDOR}" = "core" ] ; then
+	CONFIG_DRIVE=
 fi
+if [ "${BOOT_MODE}" != "db" ] ; then
+	KERNEL=
+	INITRD=
+fi
+
+print_var NAME VCPU MEMORY ARCH FORCE VENDOR DIST RELEASE OS_IMAGE \
+		  CONFIG_DRIVE BOOT_MODE KERNEL INITRD
 
 echo
 
@@ -600,10 +647,12 @@ fi
 # -----------------------------------------------------------------------------
 # Create the config drive
 
-if virsh vol-info --pool default "${CONFIG_DRIVE}" >/dev/null 2>&1 ; then
-	pr_info "Config drive '${CONFIG_DRIVE}' exists already."
-else
-	create_config_drive
+if [ -n "${CONFIG_DRIVE}" ] ; then
+	if virsh vol-info --pool default "${CONFIG_DRIVE}" >/dev/null 2>&1 ; then
+		pr_info "Config drive '${CONFIG_DRIVE}' exists already."
+	else
+		create_config_drive
+	fi
 fi
 
 # -----------------------------------------------------------------------------
