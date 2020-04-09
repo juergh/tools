@@ -13,6 +13,25 @@ function pr_info()
 	echo -e "\033[33m${*}\033[0m"
 }
 
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+	rm -rf "${TMP_DIR}"
+
+	exit "${rc}"
+}
+
+function run()
+{
+	local rc
+	set +e
+	( set -e; "${@}" )
+	RC=$?
+	set -e
+}
+
 function print_var()
 {
 	local var val
@@ -63,41 +82,44 @@ function unmount_image()
 function download_image()
 {
 	local url=${1}
-	local tmpf tmpf2 image_xyz image tmpd
+	local tmp_img tmp_xml image suffix tmp_dir
 
-	tmpf=$(mktemp)
-	tmpf2=$(mktemp)
-	# shellcheck disable=SC2064
-	trap "rm -f ${tmpf} ${tmpf2}" EXIT INT TERM HUP
+	tmp_img=$(mktemp -p "${TMP_DIR}")
+	tmp_xml=$(mktemp -p "${TMP_DIR}")
 
 	# Select the image to use
 	if [ -n "${IMAGE}" ] ; then
 		# Use the provided image
-		cp "${IMAGE}" "${tmpf}"
+		cp "${IMAGE}" "${tmp_img}"
 	else
-		# Download the image if necessary/requested
-		image_xyz=${IMAGES_DIR}/${url##*/}
-		image=${image_xyz%.xz}
-		if [ "${DOWNLOAD}" -eq 1 ] || ! [ -e "${image}" ] ; then
-			sudo wget -O "${image_xyz}" "${url}"
-			# Decompress it if necessary
-			if [ "${image_xyz}" != "${image}" ] ; then
-				sudo unxz "${image_xyz}"
-			fi
+		image=${IMAGES_DIR}/${url##*/}
+		suffix=
+		if [ "${image%.xz}" != "${image}" ] ; then
+			image=${image%.xz}
+			suffix=.xz
 		fi
-		cp "${image}" "${tmpf}"
+		if [ -e "${image}" ] && [ "${DOWNLOAD}" -eq 0 ] ; then
+			# Used the cached image
+			cp "${image}" "${tmp_img}"
+		else
+			# Download the image, decompress it and copy it to the cache
+			wget -O "${tmp_img}${suffix}" "${url}"
+			if [ -n "${suffix}" ] ; then
+				unxz -f "${tmp_img}${suffix}"
+			fi
+			sudo cp "${tmp_img}" "${image}"
+			sudo chmod 644 "${image}"
+		fi
 	fi
 
 	# Extract the kernel and initrd from the image for direct boot
 	if [ "${BOOT_MODE}" = "db" ] ; then
-		tmpd=$(mktemp -d)
-		# shellcheck disable=SC2064
-		trap "rm -rf ${tmpf} ${tmpf2} ${tmpd}" EXIT INT TERM HUP
+		tmp_dir=$(mktemp -d -p "${TMP_DIR}")
 
-		mount_image "${tmpf}" "${tmpd}"
+		mount_image "${tmp_img}" "${tmp_dir}"
 
 		# Create the libvirt volume for the kernel
-		cat <<EOF >"${tmpf2}"
+		cat <<EOF >"${tmp_xml}"
 <volume type='file'>
   <name>${KERNEL}</name>
   <capacity unit='bytes'>0</capacity>
@@ -106,11 +128,11 @@ function download_image()
   </target>
 </volume>
 EOF
-		virsh vol-create --pool default "${tmpf2}"
-		virsh vol-upload --pool default "${KERNEL}" "${tmpd}/boot/vmlinuz"
+		virsh vol-create --pool default "${tmp_xml}"
+		virsh vol-upload --pool default "${KERNEL}" "${tmp_dir}/boot/vmlinuz"
 
 		# Create the libvirt volume for the initrd
-		cat <<EOF >"${tmpf2}"
+		cat <<EOF >"${tmp_xml}"
 <volume type='file'>
   <name>${INITRD}</name>
   <capacity unit='bytes'>0</capacity>
@@ -119,15 +141,14 @@ EOF
   </target>
 </volume>
 EOF
-		virsh vol-create --pool default "${tmpf2}"
-		virsh vol-upload --pool default "${INITRD}" "${tmpd}/boot/initrd.img"
+		virsh vol-create --pool default "${tmp_xml}"
+		virsh vol-upload --pool default "${INITRD}" "${tmp_dir}/boot/initrd.img"
 
-		unmount_image "${tmpd}"
-		rm -rf "${tmpd}"
+		unmount_image "${tmp_dir}"
 	fi
 
 	# Create the libvirt volume for the OS image
-	cat <<EOF >"${tmpf2}"
+	cat <<EOF >"${tmp_xml}"
 <volume type='file'>
   <name>${OS_IMAGE}</name>
   <capacity unit='bytes'>0</capacity>
@@ -136,12 +157,9 @@ EOF
   </target>
 </volume>
 EOF
-	virsh vol-create --pool default "${tmpf2}"
-	virsh vol-upload --pool default "${OS_IMAGE}" "${tmpf}"
+	virsh vol-create --pool default "${tmp_xml}"
+	virsh vol-upload --pool default "${OS_IMAGE}" "${tmp_img}"
 	virsh vol-resize --pool default "${OS_IMAGE}" "${SIZE}"G
-
-	rm -f "${tmpf}" "${tmpf2}"
-	trap - EXIT INT TERM HUP
 }
 
 function download_fedora_image()
@@ -175,7 +193,8 @@ function download_debian_image()
 	name=debian-${num}-openstack-${ARCH}.qcow2
 	url=https://cdimage.debian.org/cdimage/openstack/current-${num}/${name}
 
-	if download_image "${url}" ; then
+	run download_image "${url}"
+	if [ "${RC}" -eq 0 ] ; then
 		return
 	fi
 
@@ -209,32 +228,38 @@ function download_ubuntu_image()
 
 function download_core_image()
 {
-	local name url
+	local name build url
 
 	name=ubuntu-core-${RELEASE}-${ARCH}.img.xz
-	url=http://cdimage.ubuntu.com/ubuntu-core/${RELEASE}/current/${name}
+	for build in current pending ; do
+		url=http://cdimage.ubuntu.com/ubuntu-core/${RELEASE}/${build}/${name}
+		run download_image "${url}"
+		if [ "${RC}" -eq 0 ] ; then
+			return
+		fi
+	done
 
-	download_image "${url}"
+	pr_error "Failed to download core image: ${name}"
+	exit 1
 }
 
 function create_config_drive()
 {
-	local public_key tmpf tmpf2 tmpd
+	local public_key tmp_img tmp_xml tmp_dir
 
 	public_key=$(cat ~/.ssh/id_rsa.pub)
-	tmpf=$(mktemp)
-	tmpf2=$(mktemp)
-	tmpd=$(mktemp -d)
-	# shellcheck disable=SC2064
-	trap "rm -rf ${tmpf} ${tmpf2} ${tmpd}" EXIT INT TERM HUP
+
+	tmp_img=$(mktepm -p "${TMP_DIR}")
+	tmp_xml=$(mktepm -p "${TMP_DIR}")
+	tmp_dir=$(mktepm -d -p "${TMP_DIR}")
 
 	# meta data
-	cat <<EOF >"${tmpd}/meta-data"
+	cat <<EOF >"${tmp_dir}/meta-data"
 { instance-id: $(uuidgen) }
 EOF
 
 	# user data
-	cat <<EOF >"${tmpd}/user-data"
+	cat <<EOF >"${tmp_dir}/user-data"
 #cloud-config
 
 hostname: ${NAME}.localdomain
@@ -266,20 +291,20 @@ runcmd:
 EOF
 
 	# Copy the create-vm init script
-	cp "${CONFIG_DIR}"/create-vm/create-vm "${tmpd}"
-	sed -i -e "s,__REBOOT__,${REBOOT}," "${tmpd}"/create-vm
+	cp "${CONFIG_DIR}"/create-vm/create-vm "${tmp_dir}"
+	sed -i -e "s,__REBOOT__,${REBOOT}," "${tmp_dir}"/create-vm
 
 	# Copy the APT ESM sources list
 	if [ -e "${CONFIG_DIR}/${RELEASE}-esm-ppa.list" ] ; then
-		cp "${CONFIG_DIR}/${RELEASE}-esm-ppa.list" "${tmpd}"/esm-ppa.list
+		cp "${CONFIG_DIR}/${RELEASE}-esm-ppa.list" "${tmp_dir}"/esm-ppa.list
 	fi
 
 	# Create the config drive ISO image
 	genisoimage -ldots -allow-lowercase -allow-multidot -l -J -r \
-				-o "${tmpf}" -V cidata "${tmpd}"
+				-o "${tmp_img}" -V cidata "${tmp_dir}"
 
 	# Create the libvirt volume for the config drive
-	cat <<EOF >"${tmpf2}"
+	cat <<EOF >"${tmp_xml}"
 <volume type='file'>
   <name>${CONFIG_DRIVE}</name>
   <capacity unit='bytes'>0</capacity>
@@ -288,30 +313,35 @@ EOF
   </target>
 </volume>
 EOF
-	virsh vol-create --pool default "${tmpf2}"
-	virsh vol-upload --pool default "${CONFIG_DRIVE}" "${tmpf}"
-
-	rm -rf "${tmpf}" "${tmpf2}" "${tmpd}"
-	trap - EXIT INT TERM HUP
+	virsh vol-create --pool default "${tmp_xml}"
+	virsh vol-upload --pool default "${CONFIG_DRIVE}" "${tmp_img}"
 }
 
 function define_vm()
 {
-	local tmpf pflash
+	local tmp_xml
 
-	tmpf=$(mktemp)
-	# shellcheck disable=SC2064
-	trap "rm -f ${tmpf}" EXIT INT TERM HUP
+	tmp_xml=$(mktemp -p "${TMP_DIR}")
+
+	# Defaults
+	XML_UEFI_BEGIN="<!--"
+	XML_UEFI_END="-->"
+	XML_DIRECT_BOOT_BEGIN="<!--"
+	XML_DIRECT_BOOT_END="-->"
+	XML_OS_IMAGE_DISK_SATA_BEGIN="<!--"
+	XML_OS_IMAGE_DISK_SATA_END="-->"
+	XML_OS_IMAGE_DISK_VIRTIO_BEGIN="<!--"
+	XML_OS_IMAGE_DISK_VIRTIO_END="-->"
+	XML_CONFIG_DRIVE_DISK_BEGIN="<!--"
+	XML_CONFIG_DRIVE_DISK_END="-->"
 
 	# Arch-specific XML settings
 	case "${ARCH}" in
 		i386|i686)
 			XML_ARCH=i686
-			pflash=/usr/share/OVMF/OVMF_CODE.fd
 			;;
 		amd64|x86_64)
 			XML_ARCH=x86_64
-			pflash=/usr/share/OVMF/OVMF_CODE.fd
 			;;
 		s390x)
 			XML_ARCH=s390x
@@ -329,28 +359,16 @@ function define_vm()
 	esac
 
 	if [ "${BOOT_MODE}" = "uefi" ] ; then
-		# shellcheck disable=SC2089
-		XML_UEFI="
-<loader readonly='yes' type='pflash'>${pflash}</loader>
-<nvram>/var/lib/libvirt/qemu/nvram/${NAME}_VARS.fd</nvram>
-"
+		XML_UEFI_BEGIN=
+		XML_UEFI_END=
 	fi
 
 	if [ "${BOOT_MODE}" = "db" ] ; then
-		XML_DIRECT_BOOT="
-<kernel>$(virsh vol-path --pool default "${KERNEL}")</kernel>
-<initrd>$(virsh vol-path --pool default "${INITRD}")</initrd>
-<cmdline>root=LABEL=cloudimg-rootfs</cmdline>
-"
+		XML_KERNEL_PATH=$(virsh vol-path --pool default "${KERNEL}")
+		XML_INITRD_PATH=$(virsh vol-path --pool default "${INITRD}")
+		XML_DIRECT_BOOT_BEGIN=
+		XML_DIRECT_BOOT_END=
 	fi
-
-	# Defaults
-	XML_OS_IMAGE_DISK_SATA_BEGIN="<!--"
-	XML_OS_IMAGE_DISK_SATA_END="-->"
-	XML_OS_IMAGE_DISK_VIRTIO_BEGIN="<!--"
-	XML_OS_IMAGE_DISK_VIRTIO_END="-->"
-	XML_CONFIG_DRIVE_DISK_BEGIN="<!--"
-	XML_CONFIG_DRIVE_DISK_END="-->"
 
 	XML_OS_IMAGE_PATH=$(virsh vol-path --pool default "${OS_IMAGE}")
 	if [ "${VENDOR}" = "core" ] ; then
@@ -376,20 +394,21 @@ function define_vm()
 
 	# Export the variables for the domain XML
 	# shellcheck disable=SC2090
-	export XML_ARCH XML_UEFI XML_DIRECT_BOOT \
+	export XML_ARCH
+	export XML_UEFI_BEGIN XML_UEFI_END
+	export XML_KERNEL_PATH XML_INITRD_PATH \
+		   XML_DIRECT_BOOT_BEGIN XML_DIRECT_BOOT_END
+	export XML_OS_IMAGE_PATH \
 		   XML_OS_IMAGE_DISK_SATA_BEGIN XML_OS_IMAGE_DISK_SATA_END \
-		   XML_OS_IMAGE_DISK_VIRTIO_BEGIN XML_OS_IMAGE_DISK_VIRTIO_END \
-		   XML_CONFIG_DRIVE_DISK_BEGIN XML_CONFIG_DRIVE_DISK_END \
-		   XML_OS_IMAGE_PATH XML_CONFIG_DRIVE_PATH \
-		   XML_NAME XML_UUID XML_MEMORY XML_VCPU XML_CPU XML_MAC_ADDRESS
+		   XML_OS_IMAGE_DISK_VIRTIO_BEGIN XML_OS_IMAGE_DISK_VIRTIO_END
+	export XML_CONFIG_DRIVE_PATH \
+		   XML_CONFIG_DRIVE_DISK_BEGIN XML_CONFIG_DRIVE_DISK_END
+	export XML_NAME XML_UUID XML_MEMORY XML_VCPU XML_CPU XML_MAC_ADDRESS
 
 	# Create the domain XML and define the VM
 	envsubst < "${CONFIG_DIR}/create-vm/domain-${XML_ARCH}.xml" > \
-			 "${tmpf}"
-	virsh define "${tmpf}"
-
-	rm -f "${tmpf}"
-	trap - EXIT INT TERM HUP
+			 "${tmp_xml}"
+	virsh define "${tmp_xml}"
 }
 
 function usage()
@@ -604,6 +623,9 @@ INITRD=${NAME}-initrd
 
 if [ "${VENDOR}" = "core" ] ; then
 	CONFIG_DRIVE=
+	if [ "${RELEASE}" = "20" ] && [ "${SIZE}" -lt 12 ] ; then
+		SIZE=12
+	fi
 fi
 if [ "${BOOT_MODE}" != "db" ] ; then
 	KERNEL=
@@ -634,6 +656,12 @@ if virsh dumpxml "${NAME}" >/dev/null 2>&1 ; then
 	done
 	virsh undefine --nvram "${NAME}" || true
 fi
+
+# -----------------------------------------------------------------------------
+# Create a temporary working directory and install a cleanup handler
+
+TMP_DIR=$(mktemp -d)
+trap "out" EXIT INT TERM HUP
 
 # -----------------------------------------------------------------------------
 # Download and resize the cloud image
