@@ -249,9 +249,9 @@ function create_config_drive()
 
 	public_key=$(cat ~/.ssh/id_rsa.pub)
 
-	tmp_img=$(mktepm -p "${TMP_DIR}")
-	tmp_xml=$(mktepm -p "${TMP_DIR}")
-	tmp_dir=$(mktepm -d -p "${TMP_DIR}")
+	tmp_img=$(mktemp -p "${TMP_DIR}")
+	tmp_xml=$(mktemp -p "${TMP_DIR}")
+	tmp_dir=$(mktemp -d -p "${TMP_DIR}")
 
 	# meta data
 	cat <<EOF >"${tmp_dir}/meta-data"
