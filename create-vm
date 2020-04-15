@@ -87,29 +87,23 @@ function download_image()
 	tmp_img=$(mktemp -p "${TMP_DIR}")
 	tmp_xml=$(mktemp -p "${TMP_DIR}")
 
-	# Select the image to use
-	if [ -n "${IMAGE}" ] ; then
-		# Use the provided image
-		cp "${IMAGE}" "${tmp_img}"
+	image=${IMAGES_DIR}/${url##*/}
+	suffix=
+	if [ "${image%.xz}" != "${image}" ] ; then
+		image=${image%.xz}
+		suffix=.xz
+	fi
+	if [ -e "${image}" ] && [ "${DOWNLOAD}" -eq 0 ] ; then
+		# Used the cached image
+		cp "${image}" "${tmp_img}"
 	else
-		image=${IMAGES_DIR}/${url##*/}
-		suffix=
-		if [ "${image%.xz}" != "${image}" ] ; then
-			image=${image%.xz}
-			suffix=.xz
+		# Download the image, decompress it and copy it to the cache
+		wget -O "${tmp_img}${suffix}" "${url}"
+		if [ -n "${suffix}" ] ; then
+			unxz -f "${tmp_img}${suffix}"
 		fi
-		if [ -e "${image}" ] && [ "${DOWNLOAD}" -eq 0 ] ; then
-			# Used the cached image
-			cp "${image}" "${tmp_img}"
-		else
-			# Download the image, decompress it and copy it to the cache
-			wget -O "${tmp_img}${suffix}" "${url}"
-			if [ -n "${suffix}" ] ; then
-				unxz -f "${tmp_img}${suffix}"
-			fi
-			sudo cp "${tmp_img}" "${image}"
-			sudo chmod 644 "${image}"
-		fi
+		sudo cp "${tmp_img}" "${image}"
+		sudo chmod 644 "${image}"
 	fi
 
 	# Extract the kernel and initrd from the image for direct boot
@@ -417,7 +411,7 @@ function define_vm()
 function usage()
 {
 	cat <<EOF
-Usage: create-vm [-a ARCH] [-d] [-f] [-h] [-i IMAGE] [-o] [-r] [-s SIZE]
+Usage: create-vm [-a ARCH] [-d] [-f] [-h] [-o] [-r] [-s SIZE]
                  [-t TYPE] [-u] [-y] DIST [NAME]
 
 Create a libvirt guest VM.
@@ -433,7 +427,6 @@ Optional arguments:
   -d, --debug        Enable debugging (set -x).
   -f, --force        Force the recreation of an existing VM.
   -h, --help         Show this help text and exit.
-  -i, --image IMAGE  Use image <IMAGE> as the guest VM image.
   -o, --download     Download and use a new cloud image rather than using an
                      already cached image.
   -r, --reboot       Configure the VM to automatically reboot after the
@@ -451,7 +444,6 @@ EOF
 
 ARCH=
 FORCE=0
-IMAGE=
 DOWNLOAD=0
 REBOOT=0
 SIZE=8
@@ -477,10 +469,6 @@ while [ ${#} -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
-			;;
-		-i|--image)
-			shift
-			IMAGE=${1}
 			;;
 		-o|--download)
 			DOWNLOAD=1
