@@ -53,7 +53,7 @@ function mount_image()
 	kernel=$(find /boot/ -maxdepth 1 -name 'vmlinuz-*' | sort -V | tail -1)
 	test -r "${kernel}" || sudo chmod 644 "${kernel}"
 
-	guestmount --pid-file "${mountp}.pid" -a "${image}" -m /dev/sda1 --rw \
+	guestmount --pid-file "${mountp}.pid" -a "${image}" -m /dev/sda1 --ro \
 			   -o dev -o allow_root "${mountp}"
 }
 
@@ -82,78 +82,34 @@ function unmount_image()
 function download_image()
 {
 	local url=${1}
-	local tmp_img tmp_xml image suffix tmp_dir
+	local suffix tmp_img
 
-	tmp_img=$(mktemp -p "${TMP_DIR}")
-	tmp_xml=$(mktemp -p "${TMP_DIR}")
-
-	image=${IMAGES_DIR}/${url##*/}
+	IMAGE=${IMAGES_DIR}/${url##*/}
 	suffix=
 	if [ "${image%.xz}" != "${image}" ] ; then
-		image=${image%.xz}
+		IMAGE=${IMAGE%.xz}
 		suffix=.xz
 	fi
-	if [ -e "${image}" ] && [ "${DOWNLOAD}" -eq 0 ] ; then
-		# Used the cached image
-		cp "${image}" "${tmp_img}"
-	else
-		# Download the image, decompress it and copy it to the cache
-		wget -O "${tmp_img}${suffix}" "${url}"
-		if [ -n "${suffix}" ] ; then
+
+	print_var IMAGE
+
+	# Check if the image is already cached
+	if [ -e "${IMAGE}" ] && [ "${DOWNLOAD}" -eq 0 ] ; then
+		return
+	fi
+
+	# Download the image, decompress it and copy it to the cache
+	tmp_img=$(mktemp -p "${TMP_DIR}")
+	wget -O "${tmp_img}${suffix}" "${url}"
+
+	# Decompress the image
+	if [ -n "${suffix}" ] ; then
 			unxz -f "${tmp_img}${suffix}"
-		fi
-		sudo cp "${tmp_img}" "${image}"
-		sudo chmod 644 "${image}"
 	fi
 
-	# Extract the kernel and initrd from the image for direct boot
-	if [ "${BOOT_MODE}" = "db" ] ; then
-		tmp_dir=$(mktemp -d -p "${TMP_DIR}")
-
-		mount_image "${tmp_img}" "${tmp_dir}"
-
-		# Create the libvirt volume for the kernel
-		cat <<EOF >"${tmp_xml}"
-<volume type='file'>
-  <name>${KERNEL}</name>
-  <capacity unit='bytes'>0</capacity>
-  <target>
-    <format type='raw'/>
-  </target>
-</volume>
-EOF
-		virsh vol-create --pool default "${tmp_xml}"
-		virsh vol-upload --pool default "${KERNEL}" "${tmp_dir}/boot/vmlinuz"
-
-		# Create the libvirt volume for the initrd
-		cat <<EOF >"${tmp_xml}"
-<volume type='file'>
-  <name>${INITRD}</name>
-  <capacity unit='bytes'>0</capacity>
-  <target>
-    <format type='raw'/>
-  </target>
-</volume>
-EOF
-		virsh vol-create --pool default "${tmp_xml}"
-		virsh vol-upload --pool default "${INITRD}" "${tmp_dir}/boot/initrd.img"
-
-		unmount_image "${tmp_dir}"
-	fi
-
-	# Create the libvirt volume for the OS image
-	cat <<EOF >"${tmp_xml}"
-<volume type='file'>
-  <name>${OS_IMAGE}</name>
-  <capacity unit='bytes'>0</capacity>
-  <target>
-    <format type='qcow2'/>
-  </target>
-</volume>
-EOF
-	virsh vol-create --pool default "${tmp_xml}"
-	virsh vol-upload --pool default "${OS_IMAGE}" "${tmp_img}"
-	virsh vol-resize --pool default "${OS_IMAGE}" "${SIZE}"G
+	# Copy the image to the cache
+	sudo cp "${tmp_img}" "${IMAGE}"
+	sudo chmod 644 "${IMAGE}"
 }
 
 function download_fedora_image()
@@ -233,8 +189,64 @@ function download_core_image()
 		fi
 	done
 
-	pr_error "Failed to download core image: ${name}"
-	exit 1
+	# Download failed
+	false
+}
+
+function create_os_image()
+{
+	local tmp_xml tmp_dir
+
+	tmp_xml=$(mktemp -p "${TMP_DIR}")
+
+	# Extract the kernel and initrd from the image for direct boot
+	if [ "${BOOT_MODE}" = "db" ] ; then
+		tmp_dir=$(mktemp -d -p "${TMP_DIR}")
+
+		mount_image "${IMAGE}" "${tmp_dir}"
+
+		# Create the libvirt volume for the kernel
+		cat <<EOF >"${tmp_xml}"
+<volume type='file'>
+  <name>${KERNEL}</name>
+  <capacity unit='bytes'>0</capacity>
+  <target>
+    <format type='raw'/>
+  </target>
+</volume>
+EOF
+		virsh vol-create --pool default "${tmp_xml}"
+		virsh vol-upload --pool default "${KERNEL}" "${tmp_dir}/boot/vmlinuz"
+
+		# Create the libvirt volume for the initrd
+		cat <<EOF >"${tmp_xml}"
+<volume type='file'>
+  <name>${INITRD}</name>
+  <capacity unit='bytes'>0</capacity>
+  <target>
+    <format type='raw'/>
+  </target>
+</volume>
+EOF
+		virsh vol-create --pool default "${tmp_xml}"
+		virsh vol-upload --pool default "${INITRD}" "${tmp_dir}/boot/initrd.img"
+
+		unmount_image "${tmp_dir}"
+	fi
+
+	# Create the libvirt volume for the OS image
+	cat <<EOF >"${tmp_xml}"
+<volume type='file'>
+  <name>${OS_IMAGE}</name>
+  <capacity unit='bytes'>0</capacity>
+  <target>
+    <format type='qcow2'/>
+  </target>
+</volume>
+EOF
+	virsh vol-create --pool default "${tmp_xml}"
+	virsh vol-upload --pool default "${OS_IMAGE}" "${IMAGE}"
+	virsh vol-resize --pool default "${OS_IMAGE}" "${SIZE}"G
 }
 
 function create_config_drive()
@@ -663,12 +675,17 @@ TMP_DIR=$(mktemp -d)
 trap "out" EXIT INT TERM HUP
 
 # -----------------------------------------------------------------------------
-# Download and resize the cloud image
+# Download the cloud image
+
+download_"${VENDOR}"_image
+
+# -----------------------------------------------------------------------------
+# Create the OS image
 
 if virsh vol-info --pool default "${OS_IMAGE}" >/dev/null 2>&1 ; then
 	pr_info "Image '${OS_IMAGE}' exists already."
 else
-	download_"${VENDOR}"_image
+	create_os_image
 fi
 
 # -----------------------------------------------------------------------------
