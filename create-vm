@@ -20,6 +20,10 @@ function out()
 	trap - EXIT INT TERM HUP
 	rm -rf "${TMP_DIR}"
 
+	if [ "${rc}" -ne 0 ] ; then
+		pr_error "Script failed"
+	fi
+
 	exit "${rc}"
 }
 
@@ -84,22 +88,21 @@ function download_image()
 	local url=${1}
 	local suffix tmp_img
 
-	IMAGE=${IMAGES_DIR}/${url##*/}
-	suffix=
-	if [ "${image%.xz}" != "${image}" ] ; then
-		IMAGE=${IMAGE%.xz}
-		suffix=.xz
-	fi
+	pr_info "Downloading image ${url}"
 
-	print_var IMAGE
+	tmp_img=${TMP_DIR}/base-img
 
-	# Check if the image is already cached
-	if [ -e "${IMAGE}" ] && [ "${DOWNLOAD}" -eq 0 ] ; then
-		return
-	fi
+	# Is it a compressed image?
+	case "${url}" in
+		*.xz)
+			suffix=.xz
+			;;
+		*)
+			suffix=
+			;;
+	esac
 
 	# Download the image, decompress it and copy it to the cache
-	tmp_img=$(mktemp -p "${TMP_DIR}")
 	wget -O "${tmp_img}${suffix}" "${url}"
 
 	# Decompress the image
@@ -107,9 +110,9 @@ function download_image()
 			unxz -f "${tmp_img}${suffix}"
 	fi
 
-	# Copy the image to the cache
-	sudo cp "${tmp_img}" "${IMAGE}"
-	sudo chmod 644 "${IMAGE}"
+	# Move the image to the cache
+	sudo mv "${tmp_img}" "${BASE_IMAGE}"
+	sudo chmod 644 "${BASE_IMAGE}"
 }
 
 function download_fedora_image()
@@ -178,11 +181,13 @@ function download_ubuntu_image()
 
 function download_core_image()
 {
-	local name build url
+	local num name build url
 
-	name=ubuntu-core-${RELEASE}-${ARCH}.img.xz
+	num=${RELEASE#core}
+
+	name=ubuntu-core-${num}-${ARCH}.img.xz
 	for build in current pending ; do
-		url=http://cdimage.ubuntu.com/ubuntu-core/${RELEASE}/${build}/${name}
+		url=http://cdimage.ubuntu.com/ubuntu-core/${num}/${build}/${name}
 		run download_image "${url}"
 		if [ "${RC}" -eq 0 ] ; then
 			return
@@ -193,17 +198,42 @@ function download_core_image()
 	false
 }
 
+function download_base_image()
+{
+	# Check if the image is already cached
+	if [ -e "${BASE_IMAGE}" ] && [ "${DOWNLOAD}" -eq 0 ] ; then
+		pr_info "Using cached base image"
+		return
+	fi
+
+	# Download the image
+	case "${RELEASE}" in
+		core*)
+			download_core_image
+			;;
+		*)
+			download_"${VENDOR}"_image
+	esac
+}
+
 function create_os_image()
 {
-	local tmp_xml tmp_dir
+	local tmp_xml tmp_mnt
 
-	tmp_xml=$(mktemp -p "${TMP_DIR}")
+	if virsh vol-info --pool default "${OS_IMAGE}" >/dev/null 2>&1 ; then
+		pr_info "OS image exists already"
+		return
+	fi
+
+	tmp_xml=${TMP_DIR}/os-image-xml
+	tmp_mnt=${TMP_DIR}/os-image-mnt
 
 	# Extract the kernel and initrd from the image for direct boot
 	if [ "${BOOT_MODE}" = "db" ] ; then
-		tmp_dir=$(mktemp -d -p "${TMP_DIR}")
+		pr_info "Extracting kernel and initrd from base image"
 
-		mount_image "${IMAGE}" "${tmp_dir}"
+		mkdir -p "${tmp_mnt}"
+		mount_image "${BASE_IMAGE}" "${tmp_mnt}"
 
 		# Create the libvirt volume for the kernel
 		cat <<EOF >"${tmp_xml}"
@@ -216,7 +246,7 @@ function create_os_image()
 </volume>
 EOF
 		virsh vol-create --pool default "${tmp_xml}"
-		virsh vol-upload --pool default "${KERNEL}" "${tmp_dir}/boot/vmlinuz"
+		virsh vol-upload --pool default "${KERNEL}" "${tmp_mnt}/boot/vmlinuz"
 
 		# Create the libvirt volume for the initrd
 		cat <<EOF >"${tmp_xml}"
@@ -229,10 +259,12 @@ EOF
 </volume>
 EOF
 		virsh vol-create --pool default "${tmp_xml}"
-		virsh vol-upload --pool default "${INITRD}" "${tmp_dir}/boot/initrd.img"
+		virsh vol-upload --pool default "${INITRD}" "${tmp_mnt}/boot/initrd.img"
 
-		unmount_image "${tmp_dir}"
+		unmount_image "${tmp_mnt}"
 	fi
+
+	pr_info "Creating OS image"
 
 	# Create the libvirt volume for the OS image
 	cat <<EOF >"${tmp_xml}"
@@ -245,7 +277,7 @@ EOF
 </volume>
 EOF
 	virsh vol-create --pool default "${tmp_xml}"
-	virsh vol-upload --pool default "${OS_IMAGE}" "${IMAGE}"
+	virsh vol-upload --pool default "${OS_IMAGE}" "${BASE_IMAGE}"
 	virsh vol-resize --pool default "${OS_IMAGE}" "${SIZE}"G
 }
 
@@ -253,11 +285,24 @@ function create_config_drive()
 {
 	local public_key tmp_img tmp_xml tmp_dir
 
+	if [ -z "${CONFIG_DRIVE}" ] ; then
+		pr_info "No config drive required"
+		return
+	fi
+
+	if virsh vol-info --pool default "${CONFIG_DRIVE}" >/dev/null 2>&1 ; then
+		pr_info "Config drive exists already"
+		return
+	fi
+
+	pf_info "Creating config drive"
+
 	public_key=$(cat ~/.ssh/id_rsa.pub)
 
-	tmp_img=$(mktemp -p "${TMP_DIR}")
-	tmp_xml=$(mktemp -p "${TMP_DIR}")
-	tmp_dir=$(mktemp -d -p "${TMP_DIR}")
+	tmp_img=${TMP_DIR}/config-drive-img
+	tmp_xml=${TMP_DIR}/config-drive-xml
+	tmp_dir=${TMP_DIR}/config-drive-dir
+	mkdir -p "${tmp_dir}"
 
 	# meta data
 	cat <<EOF >"${tmp_dir}/meta-data"
@@ -327,7 +372,9 @@ function define_vm()
 {
 	local tmp_xml
 
-	tmp_xml=$(mktemp -p "${TMP_DIR}")
+	pr_info "Defining VM"
+
+	tmp_xml=${TMP_DIR}/vm-xml
 
 	# Defaults
 	XML_UEFI_BEGIN="<!--"
@@ -574,10 +621,6 @@ case "${DIST}" in
 		VENDOR=debian
 		RELEASE=${DIST}
 		;;
-	core*)
-		VENDOR=core
-		RELEASE=${DIST#core}
-		;;
 	*)
 		VENDOR=ubuntu
 		RELEASE=${DIST}
@@ -610,7 +653,7 @@ if [ "${RELEASE}" = "xenial" ] && [ "${ARCH}" = "arm64" ] ; then
 	BOOT_MODE="uefi"
 elif [ "${ARCH}" = "armhf" ] ; then
 	BOOT_MODE="db"
-elif [ "${DIST}" = "core20" ] ; then
+elif [ "${RELEASE}" = "core20" ] ; then
 	BOOT_MODE="uefi"
 fi
 
@@ -632,9 +675,9 @@ CONFIG_DRIVE=${NAME}-config.iso
 KERNEL=${NAME}-kernel
 INITRD=${NAME}-initrd
 
-if [ "${VENDOR}" = "core" ] ; then
+if [ "${RELEASE#core}" != "${RELEASE}" ] ; then
 	CONFIG_DRIVE=
-	if [ "${RELEASE}" = "20" ] && [ "${SIZE}" -lt 12 ] ; then
+	if [ "${RELEASE}" = "core20" ] && [ "${SIZE}" -lt 12 ] ; then
 		SIZE=12
 	fi
 fi
@@ -643,19 +686,21 @@ if [ "${BOOT_MODE}" != "db" ] ; then
 	INITRD=
 fi
 
+# The full path of the base image
+BASE_IMAGE=${IMAGES_DIR}/${VENDOR}-${RELEASE}-${ARCH}.img
+
 print_var NAME VCPU MEMORY ARCH FORCE VENDOR DIST RELEASE OS_IMAGE \
-		  CONFIG_DRIVE BOOT_MODE KERNEL INITRD
+		  CONFIG_DRIVE BOOT_MODE KERNEL INITRD BASE_IMAGE
 
 echo
 
+# Check if this is a dry run
 if [ "${DRY_RUN}" -eq 1 ] ; then
 	echo "(dry-run) Exiting..."
 	exit
 fi
 
-# -----------------------------------------------------------------------------
 # Purge existing VM
-
 if virsh dumpxml "${NAME}" >/dev/null 2>&1 ; then
 	if [ "${FORCE}" -eq 0 ] ; then
 		pr_error "VM '${NAME}' exists already. Use -f, --force to recreate it."
@@ -668,38 +713,18 @@ if virsh dumpxml "${NAME}" >/dev/null 2>&1 ; then
 	virsh undefine --nvram "${NAME}" || true
 fi
 
-# -----------------------------------------------------------------------------
 # Create a temporary working directory and install a cleanup handler
-
 TMP_DIR=$(mktemp -d)
 trap "out" EXIT INT TERM HUP
 
-# -----------------------------------------------------------------------------
 # Download the cloud image
+download_base_image
 
-download_"${VENDOR}"_image
-
-# -----------------------------------------------------------------------------
 # Create the OS image
+create_os_image
 
-if virsh vol-info --pool default "${OS_IMAGE}" >/dev/null 2>&1 ; then
-	pr_info "Image '${OS_IMAGE}' exists already."
-else
-	create_os_image
-fi
-
-# -----------------------------------------------------------------------------
 # Create the config drive
+create_config_drive
 
-if [ -n "${CONFIG_DRIVE}" ] ; then
-	if virsh vol-info --pool default "${CONFIG_DRIVE}" >/dev/null 2>&1 ; then
-		pr_info "Config drive '${CONFIG_DRIVE}' exists already."
-	else
-		create_config_drive
-	fi
-fi
-
-# -----------------------------------------------------------------------------
 # Define the VM
-
 define_vm
