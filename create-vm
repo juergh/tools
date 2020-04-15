@@ -352,8 +352,11 @@ function define_vm()
 		armhf)
 			XML_ARCH=armv7l
 			;;
+		ppc64el)
+			XML_ARCH=ppc64le
+			;;
 		*)
-			echo "Unsupported architecture: ${ARCH}" >&2
+			pr_error "Unsupported architecture: ${ARCH}"
 			exit 1
 			;;
 	esac
