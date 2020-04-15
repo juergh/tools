@@ -610,6 +610,8 @@ if [ "${RELEASE}" = "xenial" ] && [ "${ARCH}" = "arm64" ] ; then
 	BOOT_MODE="uefi"
 elif [ "${ARCH}" = "armhf" ] ; then
 	BOOT_MODE="db"
+elif [ "${DIST}" = "core20" ] ; then
+	BOOT_MODE="uefi"
 fi
 
 # The name of the VM
