@@ -295,7 +295,7 @@ function create_config_drive()
 		return
 	fi
 
-	pf_info "Creating config drive"
+	pr_info "Creating config drive"
 
 	public_key=$(cat ~/.ssh/id_rsa.pub)
 
