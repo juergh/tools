@@ -1,0 +1,27 @@
+#!/bin/bash -eu
+#
+# Build a Debian source package in a schroot
+#
+
+if [ -n "$(git status --porcelain)" ] ; then
+	echo "Repo is unclean"
+	exit 1
+fi
+
+release=$(dpkg-parsechangelog -SDistribution)
+if [ "${release}" = "UNRELEASED" ] ; then
+	echo "Release is UNRELEASED"
+	exit 1
+fi
+
+run-chroot "${release}" -- fakeroot ./debian/rules clean
+
+opts=(
+	"-S"   # Build sources
+	"-i"   # Exclude revision control files and directories (diff)
+	"-I"   # Exclude revision control files and directories (tarball)
+	"-uc"  # Don't sign .buildinfo and .changes files
+	"-us"  # Don't sign the source package
+	"-d"   # Don't check build dependencies
+)
+run-chroot "${release}" -- dpkg-buildpackage "${opts[@]}"
