@@ -26,7 +26,7 @@ def run_cmd(cmd):
     return proc.returncode, stdout
 
 
-def modify_msg(msg, acks, sobs, provenance, bugs, color=NONE):
+def modify_msg(msg, acks, sobs, provenance, bugs, cves, color=NONE):
     """
     Modify a commit message
     """
@@ -62,6 +62,29 @@ def modify_msg(msg, acks, sobs, provenance, bugs, color=NONE):
 
         # Prepend the sorted BugLinks to the message
         msg = sorted(set(tmp_bug)) + [""] + tmp_msg
+
+    # -------------------------------------------------------------------------
+    # Add CVE tags
+
+    if cves:
+        # Extract existing CVE lines into a tmp list
+        tmp_cve = []
+        tmp_msg = []
+        for m in msg:
+            if re.match(r"CVE-[0-9]{4}-[0-9]{1,}", m):
+                tmp_cve.append(color[0] + m + color[1])
+            else:
+                tmp_msg.append(m)
+
+        # Add new CVE tag(s)
+        for cve in cves:
+            cve = cve.upper()
+            if cve.startswith("CVE-"):
+                cve = cve[4:]
+            tmp_cve.append(color[0] + "CVE-{}".format(cve) + color[1])
+
+        # Prepend the sorted CVE tags to the message
+        msg = sorted(set(tmp_cve)) + [""] + tmp_msg
 
     # -------------------------------------------------------------------------
     # Add provenance
@@ -145,6 +168,9 @@ def main():
     parser.add_argument("-b", "--bug", metavar="bug[,bug,...]",
                         help="Launchpad bug number. Can be a comma separated "
                         "list of multiple bug numbers.")
+    parser.add_argument("-c", "--cve", metavar="cve[,cve,...]",
+                        help="CVE number. Can be a comma separated list of "
+                        "multiple cve numbers.")
     parser.add_argument("rev_list_opts", nargs="*", metavar="rev-list-options",
                         help="Arguments for git rev-list. All positive refs "
                         "included by these options are rewritten.")
@@ -184,6 +210,11 @@ def main():
     if args.bug:
         bugs = args.bug.split(",")
 
+    # Split the CVEs
+    cves = []
+    if args.cve:
+        cves = args.cve.split(",")
+
     # If the rev_list_opts argument is not specified, we expect a commit
     # message on stdin, so read it, modify it and write it back out to stdout.
     # This is the case when we're being called by git-filter-branch.
@@ -194,7 +225,7 @@ def main():
             msg.append(line.rstrip("\n"))
 
         # Modify the message and print it
-        msg = modify_msg(msg, acks, sobs, args.provenance, bugs)
+        msg = modify_msg(msg, acks, sobs, args.provenance, bugs, cves)
         print("\n".join(msg))
 
         return 0
@@ -202,7 +233,7 @@ def main():
     # Construct the message filter command
     mf_cmd = [sys.argv[0]]
     for key, val in vars(args).items():
-        if key in ("ack", "sob", "provenance", "bug") and val:
+        if key in ("ack", "sob", "provenance", "bug", "cve") and val:
             mf_cmd.extend(["--" + key, val])
 
     # Construct the git-filter-branch command
@@ -233,7 +264,8 @@ def main():
 
         # Modify the commit message and print it
         _, msg = run_cmd(["git", "log", "--format=%B", commit, "-1"])
-        msg = modify_msg(msg, acks, sobs, args.provenance, bugs, color=GREEN)
+        msg = modify_msg(msg, acks, sobs, args.provenance, bugs, cves,
+                         color=GREEN)
         for m in msg:
             print("    {}".format(m))
         print()
