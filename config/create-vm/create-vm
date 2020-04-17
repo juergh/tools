@@ -12,7 +12,7 @@ function fix_grub()
 	fi
 
 	# Figure out the serial console
-	for serial in ttyAMA0 ttyS0 ; do
+	for serial in hvc0 ttyAMA0 ttyS0 ; do
 		if [ -e "/dev/${serial}" ] ; then
 			break
 		fi
