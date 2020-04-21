@@ -488,7 +488,7 @@ Optional arguments:
   -h, --help         Show this help text and exit.
   -o, --download     Download and use a new cloud image rather than using an
                      already cached image.
-  -r, --reboot       Configure the VM to automatically reboot after the
+  -r, --no-reboot    Configure the VM to *not* automatically reboot after the
                      first boot initialization is done.
   -s, --size SIZE    Image size in GB. If not specified, defaults to 8(GB).
   -t, --type TYPE    Create a VM of type <TYPE>. Valid types are:
@@ -504,7 +504,7 @@ EOF
 ARCH=
 FORCE=0
 DOWNLOAD=0
-REBOOT=0
+REBOOT=1
 SIZE=8
 TYPE=
 BOOT_MODE=
@@ -532,8 +532,8 @@ while [ ${#} -gt 0 ] ; do
 		-o|--download)
 			DOWNLOAD=1
 			;;
-		-r|--reboot)
-			REBOOT=1
+		-r|--no-reboot)
+			REBOOT=0
 			;;
 		-s|--size)
 			SIZE=${2}
