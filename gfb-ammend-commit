@@ -26,7 +26,7 @@ def run_cmd(cmd):
     return proc.returncode, stdout
 
 
-def modify_msg(msg, acks, sobs, provenance, bugs, cves, color=NONE):
+def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, color=NONE):
     """
     Modify a commit message
     """
@@ -56,9 +56,14 @@ def modify_msg(msg, acks, sobs, provenance, bugs, cves, color=NONE):
 
         # Add new BugLink line(s)
         for bug in bugs:
-            tmp_bug.append(color[0] +
-                           "BugLink: https://bugs.launchpad.net/bugs/{}".format(bug) +
-                           color[1])
+            if bug.startswith('http'):
+                tmp_bug.append(color[0] +
+                               "BugLink: {}".format(bug) +
+                               color[1])
+            else:
+                tmp_bug.append(color[0] +
+                               "BugLink: https://bugs.launchpad.net/bugs/{}".format(bug) +
+                               color[1])
 
         # Prepend the sorted BugLinks to the message
         msg = sorted(set(tmp_bug)) + [""] + tmp_msg
@@ -103,7 +108,11 @@ def modify_msg(msg, acks, sobs, provenance, bugs, cves, color=NONE):
                         color[1])
 
     # -------------------------------------------------------------------------
-    # Add acked-by and signed-off-by tags
+    # Add <foo>-by tags
+
+    # Add requested-by tags
+    for req in reqs:
+        msg.append(color[0] + "Requested-by: {}".format(req) + color[1])
 
     # Add acked-by tags
     for ack in acks:
@@ -146,6 +155,22 @@ def modify_msg(msg, acks, sobs, provenance, bugs, cves, color=NONE):
     return msg
 
 
+def resolve_nicks(kteam_rc, nicks):
+    if not nicks:
+        return []
+
+    result = []
+    for nick in nicks.split(","):
+        try:
+            result.append(kteam_rc["irc-aliases"][nick])
+        except KeyError:
+            print(RED[0] +
+                  "Nick '{}' not found in ~/.kteam.rc".format(nick) +
+                  RED[1])
+            return 1
+    return result
+
+
 def main():
     """
     Main entry point
@@ -153,6 +178,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", "--force", action="store_true",
                         help="Really do run git filter-branch.")
+    parser.add_argument("-r", "--req", metavar="nick[,nick,...]",
+                        help="IRC nickname of the person who requested the "
+                        "commit(s). Can be a comma separated list of "
+                        "multiple nicknames.")
     parser.add_argument("-a", "--ack", metavar="nick[,nick,...]",
                         help="IRC nickname of the person who ack'ed the "
                         "commit(s). Can be a comma separated list of "
@@ -181,29 +210,10 @@ def main():
     with open(os.path.expanduser(os.path.join("~", ".kteam.rc"))) as fh:
         kteam_rc = json.load(fh)
 
-    # Assemble the acked-by list
-    acks = []
-    if args.ack:
-        for nick in args.ack.split(","):
-            try:
-                acks.append(kteam_rc["irc-aliases"][nick])
-            except KeyError:
-                print(RED[0] +
-                      "Nick '{}' not found in ~/.kteam.rc".format(nick) +
-                      RED[1])
-                return 1
-
-    # Assemble the signed-off-by list
-    sobs = []
-    if args.sob:
-        for nick in args.sob.split(","):
-            try:
-                sobs.append(kteam_rc["irc-aliases"][nick])
-            except KeyError:
-                print(RED[0] +
-                      "Nick '{}' not found in ~/.kteam.rc".format(nick) +
-                      RED[1])
-                return 1
+    # Assemble the <foo>-by lists
+    reqs = resolve_nicks(kteam_rc, args.req)
+    acks = resolve_nicks(kteam_rc, args.ack)
+    sobs = resolve_nicks(kteam_rc, args.sob)
 
     # Split the bugs
     bugs = []
@@ -225,7 +235,7 @@ def main():
             msg.append(line.rstrip("\n"))
 
         # Modify the message and print it
-        msg = modify_msg(msg, acks, sobs, args.provenance, bugs, cves)
+        msg = modify_msg(msg, reqs, acks, sobs, args.provenance, bugs, cves)
         print("\n".join(msg))
 
         return 0
@@ -233,8 +243,8 @@ def main():
     # Construct the message filter command
     mf_cmd = [sys.argv[0]]
     for key, val in vars(args).items():
-        if key in ("ack", "sob", "provenance", "bug", "cve") and val:
-            mf_cmd.extend(["--" + key, val])
+        if key in ("req", "ack", "sob", "provenance", "bug", "cve") and val:
+            mf_cmd.extend(["--" + key, "'" + val + "'"])
 
     # Construct the git-filter-branch command
     gfb_cmd = ["git", "filter-branch", "--force", "--msg-filter",
@@ -264,7 +274,7 @@ def main():
 
         # Modify the commit message and print it
         _, msg = run_cmd(["git", "log", "--format=%B", commit, "-1"])
-        msg = modify_msg(msg, acks, sobs, args.provenance, bugs, cves,
+        msg = modify_msg(msg, reqs, acks, sobs, args.provenance, bugs, cves,
                          color=GREEN)
         for m in msg:
             print("    {}".format(m))
