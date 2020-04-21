@@ -427,7 +427,8 @@ function define_vm()
 	fi
 
 	XML_OS_IMAGE_PATH=$(virsh vol-path --pool default "${OS_IMAGE}")
-	if [ "${VENDOR}" = "core" ] ; then
+	if [ "${RELEASE#core}" != "${RELEASE}" ] ; then
+		# Ubuntu core is special :-(
 		XML_OS_IMAGE_DISK_SATA_BEGIN=
 		XML_OS_IMAGE_DISK_SATA_END=
 	else
@@ -676,8 +677,10 @@ KERNEL=${NAME}-kernel
 INITRD=${NAME}-initrd
 
 if [ "${RELEASE#core}" != "${RELEASE}" ] ; then
+	# Ubuntu core doesn't need a config drive
 	CONFIG_DRIVE=
 	if [ "${RELEASE}" = "core20" ] && [ "${SIZE}" -lt 12 ] ; then
+		# Ubuntu core20 is big :-(
 		SIZE=12
 	fi
 fi
