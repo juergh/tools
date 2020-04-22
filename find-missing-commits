@@ -1,0 +1,139 @@
+#!/bin/bash -eu
+#
+# Find commits on the given branch that are not on the current branch
+#
+
+function do_patch_id()
+{
+	while IFS= read -r commit ; do
+		patch_id=$(git show "${commit}" | git patch-id)
+		subject=$(git log --format=%s "${commit}" -1)
+		fuzzy=$(echo "${subject,,}" | tr -c -d '[:alnum:]')
+		echo "__MARK__${patch_id%% *}__MARK__${commit}__MARK__${subject}__MARK__${fuzzy}__MARK__"
+	done < <(git log --format=%h "${@}")
+}
+
+function do_find()
+{
+	local pattern=$1 infile=$2
+	local commit
+
+	commit=$(grep -m 1 -F "${pattern}" "${infile}")
+	commit=${commit#*__MARK__}
+	commit=${commit#*__MARK__}
+	commit=${commit%%__MARK__*}
+
+	echo "${commit}"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: find-missing-commits [-h] BRANCH
+
+Find commits on the given branch BRANCH that are not on the current branch.
+
+Positional arguments:
+  BRANCH      The branch to use as a reference.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+branch=
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${branch}" ] ; then
+				usage
+				exit 2
+			fi
+			branch=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${branch}" ] ; then
+	usage
+	exit 2
+fi
+
+
+mb=$(git merge-base HEAD "${branch}")
+mb_text=$(git log --format='%h ("%s")' "${mb}" -1 )
+
+echo "Checking current branch for missing commits since: ${mb_text}"
+
+echo "Processing current branch"
+do_patch_id "${mb}..HEAD" > .head
+
+echo "Processing ${branch} branch"
+do_patch_id "${mb}..${branch}" > .branch
+
+cat <<EOF
+
+  N: Not found on the current branch
+  S: Found by subject match
+  U: Found by UBUNTU SAUCE subject match
+  F: Found by fuzzy subject match
+  Z: Found by UBUNTU SAUCE fuzzy subject match
+/  Commit hash on ${branch} branch
+| /             Commit hash on current branch
+| |            /             Subject
+| |            |            /
+| |            |            |
+-------------------------------------------------------------------------------
+EOF
+
+while IFS= read -r line ; do
+	# shellcheck disable=SC2001
+	readarray -t tokens < <(echo "${line}" | sed -e 's,__MARK__,\n,g')
+	patch_id=${tokens[1]}
+	commit=${tokens[2]}
+	subject=${tokens[3]}
+	fuzzy=${tokens[4]}
+
+	# Check for a matching patch ID
+	found=$(do_find "__MARK__${patch_id}__MARK__" .head)
+	if [ -n "${found}" ] ; then
+		continue
+	fi
+
+	# Check for a matching subject
+	found=$(do_find "__MARK__${subject}__MARK__" .head)
+	if [ -n "${found}" ] ; then
+		echo "S ${found} ${commit} ${subject}"
+		continue
+	fi
+
+	# Check for a matching UBUNTU SAUCE subject
+	found=$(do_find "__MARK__UBUNTU: SAUCE: ${subject}__MARK__" .head)
+	if [ -n "${found}" ] ; then
+		echo "U ${found} ${commit} ${subject}"
+		continue
+	fi
+
+	# Check for a matching fuzzy subject
+	found=$(do_find "__MARK__${fuzzy}__MARK__" .head)
+	if [ -n "${found}" ] ; then
+		echo "F ${found} ${commit} ${subject}"
+		continue
+	fi
+
+	# Check for a matching UBUNTU SAUCE fuzzy subject
+	found=$(do_find "__MARK__ubuntusauce${fuzzy}__MARK__" .head)
+	if [ -n "${found}" ] ; then
+		echo "Z ${found} ${commit} ${subject}"
+		continue
+	fi
+
+	# Not found
+	echo "N              ${commit} ${subject//__MARK__/}"
+done < <(cat .branch)
