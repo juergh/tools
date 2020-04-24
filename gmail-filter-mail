@@ -19,44 +19,26 @@ function out()
 
 function canonical_filter_mail()
 {
-	local lastrun=$1
-
-	touch "${lastrun}"
-
 	cat <<__EOF__
--- Move '[ACTIVITY]' mails
+print('-- Move \'[ACTIVITY]\' mails')
 messages = account['Mailing List/Canonical/canonical-kernel-team']:contain_subject('[ACTIVITY]') *
            account['Mailing List/Canonical/core-canonical-kernel-team']:contain_subject('[ACTIVITY]')
 move_messages(messages, account['Canonical/Activity'])
 
--- Move 'The Daily Bug Report for ...' mails
+print('-- Move \'The Daily Bug Report for ...\' mails')
 messages = account['Mailing List/Ubuntu/kernel-team']:contain_subject('The Daily Bug Report for')
 move_messages(messages, account['Canonical/Bugs'])
 
--- Move '-proposed tracker' mails
-messages = account['Inbox']:contain_subject('-proposed tracker')
-move_messages(messages, account['Canonical/SRU'])
-
--- Move Salesforce mails
+print('-- Move Salesforce mails')
 messages = account['Mailing List/Canonical/canonical-kernel-team']:contain_subject('SFDC')
 move_messages(messages, account['Canonical/SalesForce'])
 __EOF__
-
-	# Archive mails only once a day
-	today=$(date +'%Y-%m-%d')
-	lastrunday=$(awk '{print $1}' "${lastrun}")
-	if [ "${today}" != "${lastrunday}" ] ; then
-		cat <<__EOF__
--- Archive mails older than 60 days
-archive_messages(account, 60)
-__EOF__
-	fi
 }
 
 function usage()
 {
 	cat <<EOF
-Usage: gmail-filter-mail [-d] [-h] [-q] USERNAME
+Usage: gmail-filter-mail [-a] [-d] [-h] [-q] USERNAME
 
 Filter gmail mails using imapfilter.
 
@@ -64,6 +46,7 @@ Positional arguments:
   USERNAME       The gmail username
 
 Optional arguments:
+  -a, --archive  Archive mails.
   -d, --dry-run  Dump the imapfilter config file but do not run it.
   -h, --help     Show this help text and exit.
   -q, --quiet    Run imapfilter in non-verbose mode.
@@ -71,11 +54,15 @@ EOF
 }
 
 username=
+archive=0
 dry_run=0
 quiet=0
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
+		-a|--archive)
+			archive=1
+			;;
 		-d|--dry-run)
 			dry_run=1
 			;;
@@ -106,6 +93,16 @@ if [ -z "${username}" ] ; then
 	exit 2
 fi
 
+case "${username}" in
+	*@canonical.com)
+		filter=canonical_filter_mail
+		;;
+	*)
+		echo "Invalid username: ${username}" >&2
+		exit 1
+		;;
+esac
+
 CONFIG=
 trap out EXIT INT TERM HUP
 
@@ -115,6 +112,7 @@ CONFIG=$(mktemp)
 # Pull in the library
 cat "${cwd}/config/imapfilter/lib.lua" > "${CONFIG}"
 
+# Common/global options
 cat <<EOF >>"${CONFIG}"
 
 options.timeout = 120
@@ -131,11 +129,19 @@ account = IMAP {
 }
 EOF
 
-if [ "${username%@canonical.com}" != "${username}" ] ; then
-	lastrun=~/.imapfilter/lastrun.canonical
-	canonical_filter_mail "${lastrun}" >> "${CONFIG}"
+# Per-account config options
+"${filter}" >> "${CONFIG}"
+
+# Archive emails?
+if [ "${archive}" -eq 1 ] ; then
+	cat <<__EOF__
+
+print('-- Archive mails')
+archive_messages(account, 60)
+__EOF__
 fi
 
+# Is this a dry-run?
 if [ "${dry_run}" -eq 1 ] ; then
 	cat "${CONFIG}"
 	exit
@@ -147,4 +153,3 @@ if [ "${quiet}" -eq 0 ] ; then
 fi
 
 imapfilter "${opts[@]}" -c "${CONFIG}"
-date --rfc-3339=seconds > "${lastrun}"
