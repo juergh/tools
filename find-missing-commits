@@ -84,8 +84,8 @@ cat <<EOF
   U: Found by UBUNTU SAUCE subject match
   F: Found by fuzzy subject match
   Z: Found by UBUNTU SAUCE fuzzy subject match
-/  Commit hash on ${branch} branch
-| /             Commit hash on current branch
+/  Commit hash on current branch
+| /             Commit hash on ${branch} branch
 | |            /             Subject
 | |            |            /
 | |            |            |
