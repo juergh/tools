@@ -1,0 +1,96 @@
+#!/bin/bash -eu
+
+function out()
+{
+	local rc=$?
+
+	trap - INT TERM EXIT HUP
+
+	if [ "${MOUNTED}" -eq 1 ] ; then
+		partumount "${TMP_DIR}"
+	fi
+	rmdir "${TMP_DIR}"
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+image=$1
+
+MOUNTED=0
+TMP_DIR=$(mktemp -d)
+trap out INT TERM EXIT HUP
+
+partmount "${image}" 2 "${TMP_DIR}"
+MOUNTED=1
+
+sudo cp "$(which collect-rpi-data)" "${TMP_DIR}/usr/local/bin/"
+
+cat <<EOF | sudo tee "${TMP_DIR}/usr/local/bin/prepare-rpi-image" >/dev/null
+#!/bin/bash
+
+function do_set_hostname()
+{
+	model=\$(cat /proc/device-tree/model | tr '\0' '\n')
+	serial=\$(cat /proc/cpuinfo | awk '/^Serial/ { print \$3 }')
+
+	hostname=\${model#Raspberry Pi }
+	hostname=\${hostname/ Rev / rev}
+	hostname=\${hostname/ Compute Module / cm }
+	hostname=\${hostname/ Model /}
+	hostname=\${hostname// /-}
+	hostname=\${hostname//./d}
+	hostname=rpi-\${hostname,,}-\${serial: -4}
+
+	echo "\${hostname}" > /etc/hostname
+}
+
+function do_flash_kernel()
+{
+	cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.orig
+	sed -i -e 's, console=[0-9a-zA-Z,]*,,g' /boot/firmware/cmdline.txt
+
+	cat <<__EOF__ >/etc/default/flash-kernel
+LINUX_KERNEL_CMDLINE="console=tty1 console=ttyS0,115200"
+LINUX_KERNEL_CMDLINE_DEFAULTS=
+__EOF__
+
+	flash-kernel
+}
+
+function do_prepare()
+{
+	echo "-- Installing and removing packages"
+	apt purge -y unattended-upgrades
+	apt install -y net-tools
+
+	echo "-- Setting password"
+	echo "ubuntu:ubuntu" | chpasswd
+
+	echo "-- Setting hostname"
+	do_set_hostname
+
+	echo "-- Configuring and running flash-kernel"
+	do_flash_kernel
+
+	echo "-- Rebooting"
+	reboot
+}
+
+do_prepare 2>&1 | tee /etc/cloud/prepare-rpi-image.log
+EOF
+sudo chmod 755 "${TMP_DIR}/usr/local/bin/prepare-rpi-image"
+
+cat <<EOF | sudo tee "${TMP_DIR}/etc/cloud/cloud.cfg.d/99-prepare-rpi-image.cfg" >/dev/null
+ssh_authorized_keys: [ $(cat ~/.ssh/id_rsa.pub) ]
+ssh_pwauth: true
+
+runcmd:
+  - prepare-rpi-image
+EOF
+
+partumount "${TMP_DIR}"
+MOUNTED=0
