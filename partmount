@@ -27,15 +27,17 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: partmount [-b] [-h] DEVICE PARTITION [MOUNTPOINT]
+Usage: partmount [-b] [-h] [-v] DEVICE PARTITION [MOUNTPOINT]
 
 Optional arguments:
-  -b, --brief  Only print the mountpoint.
-  -h, --help   Show this help text and exit.
+  -b, --brief    Only print the mountpoint.
+  -h, --help     Show this help text and exit.
+  -v, --verbose  Enable verbose output.
 EOF
 }
 
 brief=0
+verbose=0
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -45,6 +47,9 @@ while [ $# -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-v|--verbose)
+			verbose=1
 			;;
 		*)
 			break
@@ -113,16 +118,26 @@ if [ -n "${NBD_DEVICE}" ] ; then
 		exit 1
 	fi
 else
-	# Get the starting sector of the specified partition
-	offset=$(partx -g -n "${partnum}" -o START "${image}")
-	if [ -z "${offset}" ] ; then
-		echo "Failed to find offset of partition: ${partnum}" >&2
+	# Get the start and size of the specified partition
+	IFS=" " read -r start sectors < <(partx -o START,SECTORS -g \
+											-n "${partnum}" "${image}")
+	if [ -z "${start}" ] || [ -z "${sectors}" ] ; then
+		echo "Failed to determine start and/or size of partition: ${partnum}" >&2
 		exit 1
 	fi
 
+	start_bytes=$((start * 512))
+	sectors_bytes=$((sectors * 512))
+
+	if [ "${verbose}" -eq 1 ] ; then
+		echo "Partition: ${partnum}"
+		echo "Start:     ${start} (${start_bytes} bytes)"
+		echo "Sectors:   ${sectors} (${sectors_bytes} bytes)"
+	fi
+
 	# Mount the partition
-	if ! sudo mount -o loop,offset=$(("${offset}" * 512)) "${image}" \
-		 "${MOUNTPOINT}" ; then
+	if ! sudo mount -o loop,offset="${start_bytes}",sizelimit="${sectors_bytes}" \
+		 "${image}" "${MOUNTPOINT}" ; then
 		echo "Failed to mount partition: ${partnum}" >&2
 		exit 1
 	fi
