@@ -52,30 +52,27 @@ function setup_esm_repo()
 
 function do_init()
 {
-	# Timestamp
-	date -R
+	echo "-- Waiting for cloud-init to finish"
+	while ! [ -e /var/lib/cloud/instance/boot-finished ] ; do
+		sleep 1
+	done
 
+	echo "-- Fixing grub"
 	fix_grub
+
+	echo "-- Setting up ESM repo"
 	setup_esm_repo
 
-	# Timestamp
-	date -R
+	# shellcheck disable=SC2170,SC2050
+	if [ __REBOOT__ -eq 1 ] ; then
+		echo "-- Rebooting"
+		reboot
+	fi
 }
 
 # -----------------------------------------------------------------------------
 # Main entry point
 
-# Wait until cloud-init is finished
-while ! [ -e /var/lib/cloud/instance/boot-finished ] ; do
-	sleep 1
-done
-
-# Do the initialization
-do_init 2>&1 | tee /etc/cloud/create-vm.log
-date -R > /etc/cloud/create-vm.done
-
-# Reboot
-# shellcheck disable=SC2170,SC2050
-if [ __REBOOT__ -eq 1 ] ; then
-	reboot
-fi
+do_init 2>&1 | \
+	awk '{ print strftime("%Y-%m-%d %H:%M:%S -"), $0 }' | \
+	tee -a /var/log/create-vm.log
