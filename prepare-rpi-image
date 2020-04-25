@@ -24,6 +24,12 @@ MOUNTED=0
 TMP_DIR=$(mktemp -d)
 trap out INT TERM EXIT HUP
 
+# Get the wifi SSID and passphrase
+wifi_ssid=$(pass show local/wifi | grep '^ssid: ')
+wifi_ssid=${wifi_ssid#* }
+wifi_passphrase=$(pass show local/wifi | grep '^passphrase: ')
+wifi_passphrase=${wifi_passphrase#* }
+
 partmount "${image}" 2 "${TMP_DIR}"
 MOUNTED=1
 
@@ -48,6 +54,22 @@ function do_set_hostname()
 	echo "\${hostname}" > /etc/hostname
 }
 
+function do_configure_wifi()
+{
+	cat <<__EOF__ >/etc/netplan/99-prepare-rpi-image.yaml
+network:
+    wifis:
+        dhcp4: true
+        optional: true
+        wlan0:
+            access-points:
+                "${wifi_ssid}":
+                    password: "${wifi_passphrase}"
+__EOF__
+
+	netplan apply
+}
+
 function do_flash_kernel()
 {
 	cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.orig
@@ -63,6 +85,10 @@ __EOF__
 
 function do_prepare()
 {
+
+	echo "-- Configuring WiFi"
+	do_configure_wifi
+
 	echo "-- Installing and removing packages"
 	apt purge -y unattended-upgrades
 	apt install -y net-tools
