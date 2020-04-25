@@ -83,8 +83,12 @@ __EOF__
 	flash-kernel
 }
 
-function do_prepare()
+function do_init()
 {
+	echo "-- Waiting for cloud-init to finish"
+	while ! [ -e /var/lib/cloud/instance/boot-finished ] ; do
+		sleep 1
+	done
 
 	echo "-- Configuring WiFi"
 	do_configure_wifi
@@ -106,7 +110,9 @@ function do_prepare()
 	reboot
 }
 
-do_prepare 2>&1 | tee /etc/cloud/prepare-rpi-image.log
+do_init 2>&1 | \
+	awk '{ print strftime("%Y-%m-%d %H:%M:%S -"), $0 }' | \
+	tee -a /var/log/prepare-rpi-image.log
 EOF
 sudo chmod 755 "${TMP_DIR}/usr/local/bin/prepare-rpi-image"
 
