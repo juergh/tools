@@ -20,6 +20,9 @@ function out()
 
 image=$1
 
+cp "${image}" "${image}.prepd"
+image=${image}.prepd
+
 MOUNTED=0
 TMP_DIR=$(mktemp -d)
 trap out INT TERM EXIT HUP
