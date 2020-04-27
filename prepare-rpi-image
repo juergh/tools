@@ -62,9 +62,9 @@ function do_configure_wifi()
 	cat <<__EOF__ >/etc/netplan/99-prepare-rpi-image.yaml
 network:
     wifis:
-        dhcp4: true
-        optional: true
         wlan0:
+            dhcp4: true
+            optional: true
             access-points:
                 "${wifi_ssid}":
                     password: "${wifi_passphrase}"
