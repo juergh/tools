@@ -114,7 +114,7 @@ function do_init()
 }
 
 do_init 2>&1 | \
-	awk '{ print strftime("%Y-%m-%d %H:%M:%S -"), $0 }' | \
+	awk '{ print strftime("%Y-%m-%d %H:%M:%S -"), \$0 }' | \
 	tee -a /var/log/prepare-rpi-image.log
 EOF
 sudo chmod 755 "${TMP_DIR}/usr/local/bin/prepare-rpi-image"
@@ -124,7 +124,7 @@ ssh_authorized_keys: [ $(cat ~/.ssh/id_rsa.pub) ]
 ssh_pwauth: true
 
 runcmd:
-  - prepare-rpi-image
+  - prepare-rpi-image &
 EOF
 
 partumount "${TMP_DIR}"
