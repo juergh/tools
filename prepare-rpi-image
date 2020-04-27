@@ -69,8 +69,6 @@ network:
                 "${wifi_ssid}":
                     password: "${wifi_passphrase}"
 __EOF__
-
-	netplan apply
 }
 
 function do_flash_kernel()
