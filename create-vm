@@ -670,20 +670,13 @@ if [ -z "${NAME}" ] ; then
 	NAME=${NAME}${NAME_SUFFIX}
 fi
 
-# The image filenames
+# The OS and config drive image names
 OS_IMAGE=${NAME}.img
 CONFIG_DRIVE=${NAME}-config.iso
 KERNEL=${NAME}-kernel
 INITRD=${NAME}-initrd
 
-if [ "${RELEASE#core}" != "${RELEASE}" ] ; then
-	# Ubuntu core doesn't need a config drive
-	CONFIG_DRIVE=
-	if [ "${RELEASE}" = "core20" ] && [ "${SIZE}" -lt 12 ] ; then
-		# Ubuntu core20 is big :-(
-		SIZE=12
-	fi
-fi
+# Kernel and initrd images are only needed for direct boot
 if [ "${BOOT_MODE}" != "db" ] ; then
 	KERNEL=
 	INITRD=
@@ -691,6 +684,22 @@ fi
 
 # The full path of the base image
 BASE_IMAGE=${IMAGES_DIR}/${VENDOR}-${RELEASE}-${ARCH}.img
+
+# Ubuntu core special handling
+if [ "${RELEASE#core}" != "${RELEASE}" ] ; then
+	# Ubuntu core doesn't need a config drive
+	CONFIG_DRIVE=
+	if [ "${RELEASE}" = "core20" ] ; then
+		if [ "${SIZE}" -lt 12 ] ; then
+			# Ubuntu core20 is big :-(
+			SIZE=12
+		fi
+		if [ "${MEMORY}" -lt 2048 ] ; then
+			# 1GB is not enough for grub to loopmount the kernel snap
+			MEMORY=2048
+		fi
+	fi
+fi
 
 print_var NAME VCPU MEMORY ARCH FORCE VENDOR DIST RELEASE OS_IMAGE \
 		  CONFIG_DRIVE BOOT_MODE KERNEL INITRD BASE_IMAGE
