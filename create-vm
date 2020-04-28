@@ -471,15 +471,16 @@ function define_vm()
 function usage()
 {
 	cat <<EOF
-Usage: create-vm [-a ARCH] [-d] [-f] [-h] [-o] [-r] [-s SIZE]
+Usage: create-vm [-a ARCH] [-d] [-f] [-h] [-m SIZE ] [-o] [-r] [-s SIZE]
                  [-t TYPE] [-u] [-y] DIST [NAME]
 
 Create a libvirt guest VM.
 
 Positional arguments:
-  DIST  A recognized distrbution, like bionic, stretch, fedora-26, ...
-  NAME  The libvirt domain name. If not specified, defaults to
-        <DIST>[-uefi][-<ARCH>].
+  DIST               A recognized distribution, like bionic, stretch,
+                     fedora-26, ...
+  NAME               The libvirt domain name. If not specified, defaults to
+                     <DIST>[-<ARCH>][-uefi].
 
 Optional arguments:
   -a, --arch ARCH    Architecture of the VM. If not specified, defaults to the
@@ -487,6 +488,7 @@ Optional arguments:
   -d, --debug        Enable debugging (set -x).
   -f, --force        Force the recreation of an existing VM.
   -h, --help         Show this help text and exit.
+  -m, --memory SIZE  Memory size in KB. If not specified, defaults to 1024(KB).
   -o, --download     Download and use a new cloud image rather than using an
                      already cached image.
   -r, --no-reboot    Configure the VM to *not* automatically reboot after the
@@ -512,12 +514,13 @@ BOOT_MODE=
 DIST=
 NAME=
 DRY_RUN=0
+MEMORY=1024
 
 while [ ${#} -gt 0 ] ; do
 	case ${1} in
 		-a|--arch)
-			ARCH=${2}
 			shift
+			ARCH=${1}
 			;;
 		-d|--debug)
 			export LIBGUESTFS_DEBUG=1
@@ -530,6 +533,10 @@ while [ ${#} -gt 0 ] ; do
 			usage
 			exit
 			;;
+		-m|--memory)
+			shift
+			MEMORY=${1}
+			;;
 		-o|--download)
 			DOWNLOAD=1
 			;;
@@ -537,8 +544,8 @@ while [ ${#} -gt 0 ] ; do
 			REBOOT=0
 			;;
 		-s|--size)
-			SIZE=${2}
 			shift
+			SIZE=${1}
 			;;
 		-t|--type)
 			shift
@@ -587,7 +594,6 @@ fi
 CONFIG_DIR=$(dirname "$(readlink -e "${0}")")/config
 VCPU=1
 CPU=
-MEMORY=1024
 NAME_SUFFIX=
 
 # Set type specific variables
