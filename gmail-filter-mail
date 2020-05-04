@@ -21,7 +21,7 @@ function canonical_filter_mail()
 {
 	cat <<__EOF__
 print('-- Move \'[ACTIVITY]\' mails')
-messages = account['Mailing List/Canonical/canonical-kernel-team']:contain_subject('[ACTIVITY]') *
+messages = account['Mailing List/Canonical/canonical-kernel-team']:contain_subject('[ACTIVITY]') +
            account['Mailing List/Canonical/core-canonical-kernel-team']:contain_subject('[ACTIVITY]')
 move_messages(messages, account['Canonical/Activity'])
 
