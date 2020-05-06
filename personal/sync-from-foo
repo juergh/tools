@@ -13,13 +13,13 @@ USER_FILES=(
 	${HOME}/.emacs
 	${HOME}/.emacs.d/
 	${HOME}/.emacs.el/
-	${HOME}/.fritz
 	${HOME}/.gnupg/
 	${HOME}/.gitconfig
 	${HOME}/.imapfilter/
 	${HOME}/.password-store/
 	${HOME}/.sesame/
 	${HOME}/.ssh/
+	${HOME}/Mail/
 )
 
 ROOT_FILES=(
