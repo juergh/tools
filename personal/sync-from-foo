@@ -10,6 +10,7 @@ USER_FILES=(
 	${HOME}/.claws-mail/
 	${HOME}/.config/gtk-3.0/gtk.css
 	${HOME}/.config/hexchat/servlist.conf
+	${HOME}/.cranky
 	${HOME}/.emacs
 	${HOME}/.emacs.d/
 	${HOME}/.emacs.el/
