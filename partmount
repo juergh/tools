@@ -94,6 +94,19 @@ if file "${image}" | grep -q QCOW2 ; then
 
 	sudo qemu-nbd -n -c "/dev/nbd${num}" -f qcow2 "${image}"
 	NBD_DEVICE=/dev/nbd${num}
+
+	# Wait 2 seconds for the partition to show up
+	# shellcheck disable=SC2034
+	for i in $(seq 20) ; do
+		if [ -b "${NBD_DEVICE}p${partnum}" ] ; then
+			break
+		fi
+		sleep 0.1
+	done
+	if ! [ -b "${NBD_DEVICE}p${partnum}" ] ; then
+		echo "No such partition: ${partnum}" >&2
+		exit 1
+	fi
 fi
 
 # Create the mount point if necessary
