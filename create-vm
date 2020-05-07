@@ -324,10 +324,6 @@ ssh_pwauth: true
 # Datasource timeout
 max_wait: 2
 
-# Set the hostname early on first boot
-bootcmd:
-  - [ cloud-init-per, once, hostname, hostname, ${NAME} ]
-
 # Copy the content of the config drive and run the create-vm init script
 runcmd:
   - |
