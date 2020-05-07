@@ -280,32 +280,36 @@ function add_apt_repos()
 
 function install_packages()
 {
-	local virtual kernel debs
+	local pkgs pkg initrds initrd debs
 
-	if [ "${RELEASE}" = "precise" ] ; then
-		pr_info "Install additional packages for Precise"
+	chroot "${MOUNTP}" apt-get update
 
-		readarray -t virtual < <(chroot "${MOUNTP}" dpkg -l | \
-									 awk '$2 ~ /^linux-.*virtual$/ { print $2 }')
+	# Purge unwanted packages
+	pkgs=(
+		linux-virtual
+		linux-image-virtual
+		linux-headers-virtual
+		unattended-upgrades
+	)
+	for pkg in "${pkgs[@]}" ; do
+		chroot "${MOUNTP}" apt-get purge --yes "${pkg}" || true
+	done
+	chroot "${MOUNTP}" apt-get autoremove --yes --purge
 
-		# For Precise we need to install lvm2 and dkms and replace
-		# linux-virtual with linux-generic
-		chroot "${MOUNTP}" apt-get update
-		chroot "${MOUNTP}" apt-get install -y lvm2 linux-generic dkms
-		chroot "${MOUNTP}" apt-get purge -y "${virtual[@]}"
-		chroot "${MOUNTP}" apt-get autoremove -y --purge
+	# Install wanted packages
+	pkgs=(
+		linux-image-generic
+		linux-headers-generic
+		lvm2
+		dkms)
+	chroot "${MOUNTP}" apt-get install --yes "${pkgs[@]}"
 
-	elif [ "${RELEASE}" = "trusty" ] ; then
-		pr_info "Install additional packages for Trusty"
-
-		# For Trusty we need to install linux-modules-extra
-		# shellcheck disable=SC2012
-		kernel=$(ls -1 "${MOUNTP}"/boot/initrd.img-* | sort -V | tail -1 | \
-					 sed 's,.*/initrd.img-,,')
-
-		chroot "${MOUNTP}" apt update
-		chroot "${MOUNTP}" apt install -y lvm2 "linux-modules-extra-${kernel}"
-	fi
+	# Install linux-modules-extra-*-generic
+	readarray -t initrds < <(ls -1 "${MOUNTP}"/boot/initrd.img-*-generic)
+	for initrd in "${initrds[@]}" ; do
+		pkg="linux-modules-extra-${initrd#*/initrd.img-}"
+		chroot "${MOUNTP}" apt-get install --yes "${pkg}" || true
+	done
 
 	# Install local packages
 	readarray -t debs < <(find "${CONFIG_DIR}"/ -type f -name '*.deb')
@@ -315,9 +319,6 @@ function install_packages()
 		cp "${debs[@]}" "${MOUNTP}"/var/tmp/
 		chroot "${MOUNTP}" bash -c 'dpkg -i /var/tmp/*.deb'
 	fi
-
-	# Purge unwanted packages
-	chroot "${MOUNTP}" apt-get purge -y unattended-upgrades
 }
 
 function usage()
