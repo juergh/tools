@@ -57,6 +57,9 @@ function do_init()
 		sleep 1
 	done
 
+	echo "-- Purging packages"
+	apt-get --yes purge unattended-upgrades
+
 	echo "-- Fixing grub"
 	fix_grub
 
