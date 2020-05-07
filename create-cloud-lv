@@ -315,6 +315,9 @@ function install_packages()
 		cp "${debs[@]}" "${MOUNTP}"/var/tmp/
 		chroot "${MOUNTP}" bash -c 'dpkg -i /var/tmp/*.deb'
 	fi
+
+	# Purge unwanted packages
+	chroot "${MOUNTP}" apt-get purge -y unattended-upgrades
 }
 
 function usage()
