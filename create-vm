@@ -488,6 +488,7 @@ Optional arguments:
   -d, --debug        Enable debugging (set -x).
   -f, --force        Force the recreation of an existing VM.
   -h, --help         Show this help text and exit.
+  -i, --image IMAGE  Use the image IMAGE as the base image.
   -m, --memory SIZE  Memory size in KB. If not specified, defaults to 1024(KB).
   -o, --download     Download and use a new cloud image rather than using an
                      already cached image.
@@ -515,6 +516,7 @@ DIST=
 NAME=
 DRY_RUN=0
 MEMORY=1024
+BASE_IMAGE=
 
 while [ ${#} -gt 0 ] ; do
 	case ${1} in
@@ -532,6 +534,10 @@ while [ ${#} -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-i|--image)
+			shift
+			BASE_IMAGE=${1}
 			;;
 		-m|--memory)
 			shift
@@ -578,6 +584,11 @@ done
 if [ -z "${DIST}" ] ; then
 	usage
 	exit 2
+fi
+
+if [ -n "${BASE_IMAGE}" ] && ! [ -e "${BASE_IMAGE}" ] ; then
+	pr_error "No such image file: ${BASE_IMAGE}"
+	exit 1
 fi
 
 # -----------------------------------------------------------------------------
@@ -688,8 +699,10 @@ if [ "${BOOT_MODE}" != "db" ] ; then
 	INITRD=
 fi
 
-# The full path of the base image
-BASE_IMAGE=${IMAGES_DIR}/${VENDOR}-${RELEASE}-${ARCH}.img
+# The full path of the (cached) base image
+if [ -z "${BASE_IMAGE}" ] ; then
+	BASE_IMAGE=${IMAGES_DIR}/${VENDOR}-${RELEASE}-${ARCH}.img
+fi
 
 # Ubuntu core special handling
 if [ "${RELEASE#core}" != "${RELEASE}" ] ; then
