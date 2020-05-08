@@ -167,7 +167,7 @@ def resolve_nicks(kteam_rc, nicks):
             print(RED[0] +
                   "Nick '{}' not found in ~/.kteam.rc".format(nick) +
                   RED[1])
-            return 1
+            exit(1)
     return result
 
 
