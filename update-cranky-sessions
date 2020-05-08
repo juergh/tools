@@ -1,0 +1,9 @@
+#!/bin/bash
+#
+# Update all active cranky sessions
+#
+
+while IFS= read -r session ; do
+	schroot -r -c "${session}" -u root -- apt-get update
+	schroot -r -c "${session}" -u root -- apt-get --yes upgrade
+done < <(schroot -l --all-sessions | grep '^session:cranky-')
