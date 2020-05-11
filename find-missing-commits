@@ -3,6 +3,9 @@
 # Find commits on the given branch that are not on the current branch
 #
 
+LINUX_REPO=/srv/git/linux.git
+STABLE_REPO=/srv/git/linux-stable.git
+
 function do_patch_id()
 {
 	while IFS= read -r commit ; do
@@ -78,17 +81,21 @@ echo "Processing ${branch} branch"
 do_patch_id "${mb}..${branch}" > .branch
 
 cat <<EOF
-
-  N: Not found on the current branch
-  S: Found by subject match
-  U: Found by UBUNTU SAUCE subject match
-  F: Found by fuzzy subject match
-  Z: Found by UBUNTU SAUCE fuzzy subject match
-/  Commit hash on current branch
-| /             Commit hash on ${branch} branch
-| |            /             Subject
-| |            |            /
-| |            |            |
+ Status
+ N: Not found on the current branch
+ S: Found by subject match
+ U: Found by UBUNTU SAUCE subject match
+ F: Found by fuzzy subject match
+ Z: Found by UBUNTU SAUCE fuzzy subject match
+/  Provenance
+|  L: Upstream linux
+|  S: Upstream stable
+|  U: Unknonwn
+| /  Commit hash on current branch
+| | /             Commit hash on ${branch} branch
+| | |            /             Subject
+| | |            |            /
+| | |            |            |
 -------------------------------------------------------------------------------
 EOF
 
@@ -100,6 +107,15 @@ while IFS= read -r line ; do
 	subject=${tokens[3]}
 	fuzzy=${tokens[4]}
 
+	# Check the provenance of the commit
+	if git -C "${LINUX_REPO}" cat-file -e "${commit}^{commit}" 2>/dev/null ; then
+		prov=L
+	elif git -C "${STABLE_REPO}" cat-file -e "${commit}^{commit}" 2>/dev/null ; then
+		prov=S
+	else
+		prov=U
+	fi
+
 	# Check for a matching patch ID
 	found=$(do_find "__MARK__${patch_id}__MARK__" .head)
 	if [ -n "${found}" ] ; then
@@ -109,31 +125,31 @@ while IFS= read -r line ; do
 	# Check for a matching subject
 	found=$(do_find "__MARK__${subject}__MARK__" .head)
 	if [ -n "${found}" ] ; then
-		echo "S ${found} ${commit} ${subject}"
+		echo "S ${prov} ${found} ${commit} ${subject}"
 		continue
 	fi
 
 	# Check for a matching UBUNTU SAUCE subject
 	found=$(do_find "__MARK__UBUNTU: SAUCE: ${subject}__MARK__" .head)
 	if [ -n "${found}" ] ; then
-		echo "U ${found} ${commit} ${subject}"
+		echo "U ${prov} ${found} ${commit} ${subject}"
 		continue
 	fi
 
 	# Check for a matching fuzzy subject
 	found=$(do_find "__MARK__${fuzzy}__MARK__" .head)
 	if [ -n "${found}" ] ; then
-		echo "F ${found} ${commit} ${subject}"
+		echo "F ${prov} ${found} ${commit} ${subject}"
 		continue
 	fi
 
 	# Check for a matching UBUNTU SAUCE fuzzy subject
 	found=$(do_find "__MARK__ubuntusauce${fuzzy}__MARK__" .head)
 	if [ -n "${found}" ] ; then
-		echo "Z ${found} ${commit} ${subject}"
+		echo "Z ${prov} ${found} ${commit} ${subject}"
 		continue
 	fi
 
 	# Not found
-	echo "N              ${commit} ${subject//__MARK__/}"
+	echo "N ${prov}              ${commit} ${subject//__MARK__/}"
 done < <(cat .branch)
