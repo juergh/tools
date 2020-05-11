@@ -1,0 +1,83 @@
+#!/bin/bash -eu
+#
+# Diff two comits or patches and colorize the results
+#
+
+function out()
+{
+	local rc=$?
+
+	trap - INT TERM EXIT HUP
+
+	rm -f "${TMP1}" "${TMP2}"
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function usage()
+{
+cat <<EOF
+Usage: diff-commits [-h] [-w NUM] COMMIT1 COMMIT2
+
+Show the differences between the two commits COMMIT1 and COMMIT2 side-by-side
+and color-highlight the differences.
+
+Positional arguments:
+  COMMIT           A git commit hash or a patch file.
+
+Optional arguments:
+  -h, --help       Show this help text and exit.
+  -w, --width NUM  Output at most NUM print columns. If not specified, uses the
+                   width of the current terminal (tput cols).
+EOF
+}
+
+width=$(tput cols)
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-w|--width)
+			width=${2}
+			shift
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
+
+if [ $# -lt 2 ] ; then
+	usage
+	exit 1
+fi
+
+TMP1=
+TMP2=
+trap out EXIT INT TERM HUP
+
+if [ -e "${1}" ] ; then
+	patch1=${1}
+else
+	TMP1=$(mktemp)
+	git show "${1}" > "${TMP1}"
+	patch1=${TMP1}
+fi
+
+if [ -e "${2}" ] ; then
+	patch2=${2}
+else
+	TMP2=$(mktemp)
+	git show "${2}" > "${TMP2}"
+	patch2=${TMP2}
+fi
+
+colordiff -y -W "${width}" "${patch1}" "${patch2}"
