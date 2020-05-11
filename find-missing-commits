@@ -32,18 +32,20 @@ function do_find()
 function usage()
 {
 	cat <<EOF
-Usage: find-missing-commits [-h] BRANCH
+Usage: find-missing-commits [-h] [-r] BRANCH
 
-Find commits on the given branch BRANCH that are not on the current branch.
+Find commits on the provded branch BRANCH that are not on the current branch.
 
 Positional arguments:
-  BRANCH      The branch to use as a reference.
+  BRANCH       The branch to use as a reference.
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -h, --help   Show this help text and exit.
+  -r, --rerun  Rerun without processing the branches and regenerating the data.
 EOF
 }
 
+rerun=0
 branch=
 
 while [ $# -gt 0 ] ; do
@@ -51,6 +53,9 @@ while [ $# -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-r|--rerun)
+			rerun=1
 			;;
 		*)
 			if [ -n "${branch}" ] ; then
@@ -74,11 +79,13 @@ mb_text=$(git log --format='%h ("%s")' "${mb}" -1 )
 
 echo "Checking current branch for missing commits since: ${mb_text}"
 
-echo "Processing current branch"
-do_patch_id "${mb}..HEAD" > .head
+if [ "${rerun}" -eq 0 ] ; then
+	echo "Processing current branch"
+	do_patch_id "${mb}..HEAD" > .head
 
-echo "Processing ${branch} branch"
-do_patch_id "${mb}..${branch}" > .branch
+	echo "Processing ${branch} branch"
+	do_patch_id "${mb}..${branch}" > .branch
+fi
 
 cat <<EOF
  Status
