@@ -28,7 +28,7 @@ function pr_warn()
 
 function set_globals()
 {
-	local remote repo derivative
+	local remote repo
 
 	remote=$(git remote get-url origin)
 	repo=${remote##*/}
@@ -39,21 +39,18 @@ function set_globals()
 		SUBJECT_PREFIX=
 
 		# Determine the release name
-		if [ -z "${RELEASE}" ] && [ -e debian/debian.env ] ; then
-			# shellcheck disable=SC1091
-			. debian/debian.env
+		if [ -z "${RELEASE}" ] ; then
+			if [ -e debian/debian.env ] ; then
+				# shellcheck disable=SC1091
+				. debian/debian.env
+			else
+				DEBIAN=debian
+			fi
 			RELEASE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
 										  -S Distribution)
-			RELEASE=${RELEASE^}
-
-			# Add the derivative name
-			derivative=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
-											 -S Source)
-			derivative=${derivative#linux}
-			derivative=${derivative#-}
-			if [ -n "${derivative}" ] ; then
-				RELEASE=${RELEASE}/${derivative}
-			fi
+			SOURCE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
+										 -S Source)
+			RELEASE=${RELEASE}/${SOURCE}
 		fi
 
 		# [SRU]
