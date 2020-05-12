@@ -173,8 +173,76 @@ function do_format_patch()
 
 function do_send_patch()
 {
-	do_format_patch -1
+	local commit=${1:-HEAD}
+
+	do_format_patch "${commit}" -1
 	send_patch
+}
+
+function do_request_pull()
+{
+	local refs_heads start commit branch remote ref _remote _branch \
+		  remote name email subject
+
+	# Get the start commit for this pull request
+	readarray -t refs_heads < <(git for-each-ref --format="%(objectname)" \
+									refs/heads)
+	start=
+	while IFS= read -r commit ; do
+		if printf "%s\n" "${refs_heads[@]}" | grep -q "${commit}" ; then
+			start=${commit}
+			break
+		fi
+	done < <(git log --format="%H" -1000 HEAD~1)
+	if [ -z "${start}" ] ; then
+		pr_error "Start commit for pull request not found"
+		exit 1
+	fi
+
+	# Get the remote where we pushed this branch to
+	branch=$(git rev-parse --abbrev-ref HEAD)
+	remote=
+	while IFS= read -r ref ; do
+		_remote=${ref#*refs/remotes/}
+		_remote=${_remote%%/*}
+		_branch=${ref#*${_remote}/}
+		if [ "${_branch}" = "${branch}" ] ; then
+			if [ -n "${remote}" ] ; then
+				pr_error "Error: Multiple remotes found that contain a" \
+						 "branch with the same name"
+				exit 1
+			fi
+			remote=${_remote}
+		fi
+	done < <(git for-each-ref refs/remotes)
+	if [ -z "${remote}" ] ; then
+		pr_error "Remote of branch '${branch}' not found"
+		exit 1
+	fi
+
+	name=$(git config user.name)
+	email=$(git config user.email)
+	subject=$(git log --format=%s -1)
+	subject=${subject#UBUNTU: }
+	subject=${subject#raspi: }
+
+	cat <<EOF
+From $(git log --format=%H -1) Mon Sep 17 00:00:00 2001
+From: ${name} <${email}>
+Date: $(date -R)
+Subject: [${SUBJECT_PREFIX/PATCH/PULL}] ${subject}
+
+EOF
+	git log --format=%b "${start}".. | grep '^BugLink: ' | sort -r -u
+	cat <<EOF
+
+Signed-off-by: ${name} <${email}>
+
+--------
+
+EOF
+	git request-pull "${start}" "$(git config "remote.${remote}.url")" \
+		"${branch}" | sed -e 's,git+ssh://.*@git,git://git,'
 }
 
 function usage()
@@ -185,8 +253,10 @@ Usage: git-deb [-c] [-d] [-h] [-i MSG_ID] [-r RELEASE] [-v NUM] COMMAND [ARGS]
 Helper script for managing Ubuntu package git repos.
 
 Supported commands:
-  format-patch  Create patch (series).
-  send-patch    Send a single commit as a patch email.
+  format-patch         Create a patch (series).
+  send-patch [COMMIT]  Send the commit COMMIT as a patch email. If COMMIT is
+                       not provided, defaults to HEAD.
+  request-pull         Create a pull request.
 
 Optional arguments:
   -c, --cover-letter        Add a cover letter.
@@ -253,7 +323,7 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			VERSION=${1}
 			;;
-		format-patch|send-patch)
+		format-patch|send-patch|request-pull)
 			cmd=${1//-/_}
 			;;
 		*)
