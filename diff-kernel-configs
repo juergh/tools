@@ -1,0 +1,30 @@
+#!/bin/bash -eu
+#
+# Diff two kernel config files
+#
+
+while IFS= read -r line ; do
+	config=${line%=*}
+	val_1=${line##*=}
+
+	val_2=$(grep -m1 "^${config}=" "${2}")
+	val_2=${val_2#${config}=}
+	if [ -z "$val_2" ] ; then
+		val_2=n
+	fi
+
+	if [ "${val_1}" = "${val_2}" ] ; then
+		continue
+	fi
+
+	if [ "${val_1}${val_2}" = "ym" ] ||  [ "${val_1}${val_2}" = "my" ] ; then
+		color="\e[32m"   # green
+	elif  [ "${val_1}${val_2}" = "yn" ] ||  [ "${val_1}${val_2}" = "mn" ] ; then
+		color="\e[31m"   # red
+	else
+		color="\e[33m"   # orange
+	fi
+
+	echo -e "${color}${val_1} -> ${val_2} : ${config}\e[0m"
+
+done < <(grep ^CONFIG "${1}")
