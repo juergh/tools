@@ -186,7 +186,7 @@ function download_core_image()
 	num=${RELEASE#core}
 
 	name=ubuntu-core-${num}-${ARCH}.img.xz
-	for build in current pending ; do
+	for build in current pending beta/pending ; do
 		url=http://cdimage.ubuntu.com/ubuntu-core/${num}/${build}/${name}
 		run download_image "${url}"
 		if [ "${RC}" -eq 0 ] ; then
