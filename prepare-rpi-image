@@ -131,8 +131,8 @@ function do_init()
 	echo "-- Enabling set-hostname.service"
 	systemctl enable set-hostname.service
 
-	echo "-- Configuring and running flash-kernel"
-	do_flash_kernel
+	echo "-- Running flash-kernel"
+	flash-kernel
 
 	echo "-- Rebooting"
 	reboot
