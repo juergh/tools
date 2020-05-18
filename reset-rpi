@@ -56,6 +56,6 @@ if not args.no_reset:
 # Wait long enough for the firmware to sample the state of gpio4 pin and
 # then release it again
 if gpio4_val is not None:
-    sleep(10)
+    sleep(20)
     print("Releasing gpio4 pin")
     gpio.setup(gpio4_pin, gpio.IN)
