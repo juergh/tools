@@ -28,19 +28,19 @@ TMP_DIR=$(mktemp -d)
 INITRD_DIR=$(mktemp -d)
 trap out INT TERM EXIT HUP
 
-# -------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Mount the image
 
 partmount "${image}" 2 "${TMP_DIR}"
 partmount "${image}" 1 "${TMP_DIR}/boot/firmware"
 
-# -------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Copy collect-rpi-data
 
 # shellcheck disable=SC2230
 sudo cp "$(which collect-rpi-data)" "${TMP_DIR}/usr/local/bin/"
 
-# -------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Create the set-hostname script and service unit file
 
 cat <<EOF | sudo tee "${TMP_DIR}/usr/local/bin/set-hostname" >/dev/null
@@ -61,7 +61,8 @@ hostnamectl set-hostname "\${hostname}"
 EOF
 sudo chmod 755 "${TMP_DIR}/usr/local/bin/set-hostname"
 
-cat <<EOF | sudo tee "${TMP_DIR}/etc/systemd/system/set-hostname.service" >/dev/null
+cat <<EOF | \
+	sudo tee "${TMP_DIR}/etc/systemd/system/set-hostname.service" >/dev/null
 # prepare-rpi-image: Set the hostname
 
 [Unit]
@@ -80,7 +81,7 @@ ExecStart=/usr/local/bin/set-hostname
 WantedBy=multi-user.target
 EOF
 
-# -------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Create the wifi netplan config file
 
 wifi_ssid=$(pass show local/wifi | grep '^ssid: ')
@@ -89,7 +90,8 @@ wifi_ssid=${wifi_ssid#* }
 wifi_passphrase=$(pass show local/wifi | grep '^passphrase: ')
 wifi_passphrase=${wifi_passphrase#* }
 
-cat <<EOF | sudo tee "${TMP_DIR}/etc/netplan/99-prepare-rpi-image.yaml" >/dev/null
+cat <<EOF | \
+	sudo tee "${TMP_DIR}/etc/netplan/99-prepare-rpi-image.yaml" >/dev/null
 network:
     wifis:
         wlan0:
@@ -100,20 +102,23 @@ network:
                     password: "${wifi_passphrase}"
 EOF
 
-# -------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Modify the kernel commandline
 
-sudo sed -i -e 's, console=[0-9a-zA-Z,]*,,g' "${TMP_DIR}/boot/firmware/cmdline.txt"
+sudo sed -i -e 's, console=[0-9a-zA-Z,]*,,g' \
+	 "${TMP_DIR}/boot/firmware/cmdline.txt"
 
 cat <<EOF | sudo tee "${TMP_DIR}/etc/default/flash-kernel" >/dev/null
 LINUX_KERNEL_CMDLINE="console=tty1 console=ttyS0,115200"
 LINUX_KERNEL_CMDLINE_DEFAULTS=
 EOF
 
-# -------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Modify flash-kernel to support booting an installer kernel/initrd via GPIO
 
-cat <<EOF | sudo tee "${TMP_DIR}/etc/flash-kernel/bootscript/bootscr.rpi.new" >/dev/null
+cat <<EOF | \
+	sudo tee "${TMP_DIR}/etc/flash-kernel/bootscript/bootscr.rpi.new" \
+		 >/dev/null
 # Inserted by prepare-rpi-image
 if gpio input 4; then
   setenv kernel_img installz
@@ -130,8 +135,10 @@ sudo mv "${TMP_DIR}/etc/flash-kernel/bootscript/bootscr.rpi.new" \
 	 "${TMP_DIR}/etc/flash-kernel/bootscript/bootscr.rpi"
 
 # Use the original kernel/initrd for the installer
-sudo cp "${TMP_DIR}/boot/firmware/vmlinuz" "${TMP_DIR}/boot/firmware/installz"
-sudo cp "${TMP_DIR}/boot/firmware/initrd.img" "${TMP_DIR}/boot/firmware/install.img"
+sudo cp "${TMP_DIR}/boot/firmware/vmlinuz" \
+	 "${TMP_DIR}/boot/firmware/installz"
+sudo cp "${TMP_DIR}/boot/firmware/initrd.img" \
+	 "${TMP_DIR}/boot/firmware/install.img"
 
 # Modify the installer initrd
 (
@@ -165,7 +172,7 @@ EOF
 		sudo tee "${TMP_DIR}/boot/firmware/install.img" >/dev/null
 )
 
-# -------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Create the prepare-rpi-image script
 
 cat <<EOF | sudo tee "${TMP_DIR}/usr/local/bin/prepare-rpi-image" >/dev/null
@@ -201,10 +208,12 @@ do_init 2>&1 | \
 EOF
 sudo chmod 755 "${TMP_DIR}/usr/local/bin/prepare-rpi-image"
 
-# -------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Create the cloud-config config snippet
 
-cat <<EOF | sudo tee "${TMP_DIR}/etc/cloud/cloud.cfg.d/99-prepare-rpi-image.cfg" >/dev/null
+cat <<EOF | \
+	sudo tee "${TMP_DIR}/etc/cloud/cloud.cfg.d/99-prepare-rpi-image.cfg" \
+		 >/dev/null
 ssh_authorized_keys: [ $(cat ~/.ssh/id_rsa.pub) ]
 ssh_pwauth: true
 
