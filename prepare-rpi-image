@@ -19,10 +19,8 @@ function out()
 	exit "${rc}"
 }
 
-image=$1
-
-cp "${image}" "${image}.prepd"
-image=${image}.prepd
+image=${1/.img/+prep.img}
+cp "${1}" "${image}"
 
 TMP_DIR=$(mktemp -d)
 INITRD_DIR=$(mktemp -d)
@@ -134,43 +132,8 @@ EOF
 sudo mv "${TMP_DIR}/etc/flash-kernel/bootscript/bootscr.rpi.new" \
 	 "${TMP_DIR}/etc/flash-kernel/bootscript/bootscr.rpi"
 
-# Use the original kernel/initrd for the installer
-sudo cp "${TMP_DIR}/boot/firmware/vmlinuz" \
-	 "${TMP_DIR}/boot/firmware/installz"
-sudo cp "${TMP_DIR}/boot/firmware/initrd.img" \
-	 "${TMP_DIR}/boot/firmware/install.img"
-
-# Modify the installer initrd
-(
-	cd "${INITRD_DIR}" || exit
-
-	lz4cat "${TMP_DIR}/boot/firmware/install.img" | cpio -i
-
-    cat <<EOF > init
-#!/bin/sh
-
-echo "--- Loading installer initrd ..."
-
-[ -d /dev ] || mkdir -m 0755 /dev
-[ -d /root ] || mkdir -m 0700 /root
-[ -d /sys ] || mkdir /sys
-[ -d /proc ] || mkdir /proc
-[ -d /tmp ] || mkdir /tmp
-mkdir -p /var/lock
-mount -t sysfs -o nodev,noexec,nosuid sysfs /sys
-mount -t proc -o nodev,noexec,nosuid proc /proc
-
-mount -t devtmpfs -o nosuid,mode=0755 udev /dev
-mkdir /dev/pts
-mount -t devpts -o noexec,nosuid,gid=5,mode=0620 devpts /dev/pts || true
-
-/bin/sh
-EOF
-	chmod 755 init
-
-	find . | cpio -H newc -o | gzip -9 | \
-		sudo tee "${TMP_DIR}/boot/firmware/install.img" >/dev/null
-)
+# Inject the installer kernel and initrd
+sudo cp installz install.img "${TMP_DIR}/boot/firmware/"
 
 # -----------------------------------------------------------------------------
 # Create the prepare-rpi-image script
