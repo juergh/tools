@@ -1,0 +1,123 @@
+#!/bin/bash -eu
+#
+# Create an installer kernel and initrd for Raspberry Pi
+#
+
+function out()
+{
+	local rc=$?
+
+	trap - INT EXIT TERM HUP
+
+	partumount "${TMP_DIR}/boot/firmware" || true
+	partumount "${TMP_DIR}" || true
+
+	rm -rf "${TMP_DIR}"
+	rm -rf "${INITRD_DIR}"
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: create-rpi-installer [-h] IMAGE [OUTPUT_DIR]
+
+Create a Raspberry Pi installer kernel and initrd.
+
+Positional arguments:
+  IMAGE       The image from which to extract the kernel and initrd to use as
+              the base for the installer.
+  OUTPUT_DIR  The directory where to write the installer kernel and initrd to.
+              If not provided, defaults to the current working directory.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+image=
+out_dir=$(pwd)
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -z "${image}" ]; then
+				image=${1}
+			elif [ -z "${out_dir}" ] ; then
+				out_dir=${1}
+			else
+				usage
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${image}" ] ; then
+	usage
+	exit 2
+fi
+
+if ! [ -e "${image}" ] ; then
+	echo "No such image file: ${image}" >&2
+	exit 1
+fi
+
+if ! [ -d "${out_dir}" ] ; then
+	mkdir -p "${out_dir}"
+fi
+
+TMP_DIR=$(mktemp -d)
+INITRD_DIR=$(mktemp -d)
+trap out INT TERM EXIT HUP
+
+# Mount the image
+partmount "${image}" 2 "${TMP_DIR}"
+partmount "${image}" 1 "${TMP_DIR}/boot/firmware"
+
+cd "${INITRD_DIR}"
+
+# Extract the initrd
+lz4cat "${TMP_DIR}/boot/firmware/initrd.img" | cpio -i
+
+# Inject the installer init script
+cat <<EOF > init
+#!/bin/sh
+
+echo "--- Loading installer initrd ..."
+
+[ -d /dev ] || mkdir -m 0755 /dev
+[ -d /root ] || mkdir -m 0700 /root
+[ -d /sys ] || mkdir /sys
+[ -d /proc ] || mkdir /proc
+[ -d /tmp ] || mkdir /tmp
+mkdir -p /var/lock
+mount -t sysfs -o nodev,noexec,nosuid sysfs /sys
+mount -t proc -o nodev,noexec,nosuid proc /proc
+
+mount -t devtmpfs -o nosuid,mode=0755 udev /dev
+mkdir /dev/pts
+mount -t devpts -o noexec,nosuid,gid=5,mode=0620 devpts /dev/pts || true
+
+dhclient
+
+/bin/sh
+EOF
+chmod 755 init
+
+# Copy necessary tools into the initrd
+cp /usr/bin/unxz usr/bin/
+
+# Recreate the initrd and copy the kernel
+find . | cpio -H newc -o | lz4 > "${out_dir}/install.img"
+cp "${TMP_DIR}/boot/firmware/vmlinuz" "${out_dir}/installz"
