@@ -156,6 +156,11 @@ function do_init()
 		sleep 1
 	done
 
+	echo "-- Waiting for apt lock"
+	while fuser /var/lib/dpkg/lock >/dev/null 2>&1 ; do
+		sleep 1
+	done
+
 	echo "-- Installing and removing packages"
 	apt purge -y unattended-upgrades
 	apt install -y net-tools
