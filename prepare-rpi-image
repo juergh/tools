@@ -34,6 +34,7 @@ function copy_tools()
 
 function set_hostname()
 {
+	# The script that determines the hostname dynamically
 	cat <<EOF | write_to "${TMP_DIR}"/usr/local/bin/set-hostname
 #!/bin/bash
 
@@ -52,6 +53,7 @@ hostnamectl set-hostname "\${hostname}"
 EOF
 	sudo chmod 755 "${TMP_DIR}"/usr/local/bin/set-hostname
 
+	# Systemd service file
 	cat <<EOF | write_to "${TMP_DIR}"/etc/systemd/system/set-hostname.service
 # prepare-rpi-image: Set the hostname
 
@@ -70,6 +72,10 @@ ExecStart=/usr/local/bin/set-hostname
 [Install]
 WantedBy=multi-user.target
 EOF
+
+	# Enable the service
+	sudo ln -s /etc/systemd/system/set-hostname.service \
+		 "${TMP_DIR}"/etc/systemd/system/multi-user.target.wants/set-hostname.service
 }
 
 function enable_wifi()
@@ -158,15 +164,6 @@ function do_init()
 
 	echo "-- Setting password"
 	echo "ubuntu:ubuntu" | chpasswd
-
-	echo "-- Enabling set-hostname.service"
-	systemctl enable set-hostname.service
-
-	echo "-- Running flash-kernel"
-	flash-kernel
-
-	echo "-- Rebooting"
-	reboot
 }
 
 do_init 2>&1 | \
