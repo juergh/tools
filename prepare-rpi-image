@@ -8,9 +8,7 @@ function out()
 
 	partumount "${TMP_DIR}"/boot/firmware || true
 	partumount "${TMP_DIR}" || true
-
-	rm -rf "${TMP_DIR}"
-	rm -rf "${INITRD_DIR}"
+	rmdir "${TMP_DIR}" || true
 
 	if [ "${rc}" -ne 0 ] ; then
 		echo "Script failed" >&2
@@ -26,6 +24,168 @@ function write_to()
 	else
 		sudo tee "${1}" >/dev/null
 	fi
+}
+
+function copy_tools()
+{
+	# shellcheck disable=SC2230
+	sudo cp "$(which collect-rpi-data)" "${TMP_DIR}"/usr/local/bin/
+}
+
+function set_hostname()
+{
+	cat <<EOF | write_to "${TMP_DIR}"/usr/local/bin/set-hostname
+#!/bin/bash
+
+model=\$(cat /proc/device-tree/model | tr '\0' '\n')
+serial=\$(cat /proc/cpuinfo | awk '/^Serial/ { print \$3 }')
+
+hostname=\${model#Raspberry Pi }
+hostname=\${hostname/ Rev / rev}
+hostname=\${hostname/ Compute Module / cm }
+hostname=\${hostname/ Model /}
+hostname=\${hostname// /-}
+hostname=\${hostname//./d}
+hostname=rpi-\${hostname,,}-\${serial: -4}
+
+hostnamectl set-hostname "\${hostname}"
+EOF
+	sudo chmod 755 "${TMP_DIR}"/usr/local/bin/set-hostname
+
+	cat <<EOF | write_to "${TMP_DIR}"/etc/systemd/system/set-hostname.service
+# prepare-rpi-image: Set the hostname
+
+[Unit]
+Description=Set the hostname
+DefaultDependencies=no
+After=dbus.service
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/set-hostname
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+function enable_wifi()
+{
+	local wifi_ssid wifi_passphrase
+
+	wifi_ssid=$(pass show local/wifi | grep '^ssid: ')
+	wifi_ssid=${wifi_ssid#* }
+
+	wifi_passphrase=$(pass show local/wifi | grep '^passphrase: ')
+	wifi_passphrase=${wifi_passphrase#* }
+
+	cat <<EOF | write_to "${TMP_DIR}"/etc/netplan/99-prepare-rpi-image.yaml
+network:
+    wifis:
+        wlan0:
+            dhcp4: true
+            optional: true
+            access-points:
+                "${wifi_ssid}":
+                    password: "${wifi_passphrase}"
+EOF
+}
+
+function set_kernel_cmdline()
+{
+	local cmdline opts opt
+
+	cmdline=()
+	readarray -t opts < <(head -1 "${TMP_DIR}"/boot/firmware/cmdline.txt | \
+							  tr ' ' '\n')
+	for opt in "${opts[@]}" ; do
+		if [ "${opt#console=}" = "${opt}" ] ; then
+			cmdline+=("${opt}")
+		fi
+	done
+	cmdline+=("console=tty1" "console=ttyS0,115200")
+	echo "${cmdline[*]}" | write_to "${TMP_DIR}"/boot/firmware/cmdline.txt
+
+	cat <<EOF | write_to "${TMP_DIR}"/etc/default/flash-kernel
+LINUX_KERNEL_CMDLINE=
+LINUX_KERNEL_CMDLINE_DEFAULTS=
+EOF
+}
+
+function install_installer()
+{
+	local installer_tgz
+
+	cat <<EOF | write_to -a "${TMP_DIR}"/boot/firmware/config.txt
+
+[all]
+[gpio4=0]
+os_prefix=install/
+kernel=vmlinuz
+initramfs initrd.img 0
+EOF
+
+	# Inject the installer
+	installer_tgz=$(pwd)/installer.tgz
+	sudo mkdir -p "${TMP_DIR}"/boot/firmware/install/
+	sudo tar -C "${TMP_DIR}"/boot/firmware/install/ --no-same-owner -xaf \
+		 "${installer_tgz}"
+}
+
+function create_prep_script()
+{
+	cat <<EOF | write_to "${TMP_DIR}"/usr/local/bin/prepare-rpi-image
+#!/bin/bash
+
+function do_init()
+{
+	echo "-- Waiting for cloud-init to finish"
+	while ! [ -e /var/lib/cloud/instance/boot-finished ] ; do
+		sleep 1
+	done
+
+	echo "-- Waiting for apt lock"
+	while fuser /var/lib/dpkg/lock >/dev/null 2>&1 ; do
+		sleep 1
+	done
+
+	echo "-- Installing and removing packages"
+	apt purge -y unattended-upgrades
+	apt install -y net-tools
+
+	echo "-- Setting password"
+	echo "ubuntu:ubuntu" | chpasswd
+
+	echo "-- Enabling set-hostname.service"
+	systemctl enable set-hostname.service
+
+	echo "-- Running flash-kernel"
+	flash-kernel
+
+	echo "-- Rebooting"
+	reboot
+}
+
+do_init 2>&1 | \
+	awk '{ print strftime("%Y-%m-%d %H:%M:%S -"), \$0 }' | \
+	tee -a /var/log/prepare-rpi-image.log
+EOF
+	sudo chmod 755 "${TMP_DIR}"/usr/local/bin/prepare-rpi-image
+}
+
+function create_cloud_init_config()
+{
+	cat <<EOF | \
+		write_to "${TMP_DIR}"/etc/cloud/cloud.cfg.d/99-prepare-rpi-image.cfg
+ssh_authorized_keys: [ $(cat ~/.ssh/id_rsa.pub) ]
+ssh_pwauth: true
+
+runcmd:
+  - prepare-rpi-image &
+EOF
 }
 
 function usage()
@@ -78,166 +238,15 @@ image_prep=${image/.img/+prep.img}
 cp "${image}" "${image_prep}"
 
 TMP_DIR=$(mktemp -d)
-INITRD_DIR=$(mktemp -d)
 trap out INT TERM EXIT HUP
-
-# -----------------------------------------------------------------------------
-# Mount the image
 
 partmount "${image_prep}" 2 "${TMP_DIR}"
 partmount "${image_prep}" 1 "${TMP_DIR}"/boot/firmware
 
-# -----------------------------------------------------------------------------
-# Copy collect-rpi-data
-
-# shellcheck disable=SC2230
-sudo cp "$(which collect-rpi-data)" "${TMP_DIR}"/usr/local/bin/
-
-# -----------------------------------------------------------------------------
-# Create the set-hostname script and service unit file
-
-cat <<EOF | write_to "${TMP_DIR}"/usr/local/bin/set-hostname
-#!/bin/bash
-
-model=\$(cat /proc/device-tree/model | tr '\0' '\n')
-serial=\$(cat /proc/cpuinfo | awk '/^Serial/ { print \$3 }')
-
-hostname=\${model#Raspberry Pi }
-hostname=\${hostname/ Rev / rev}
-hostname=\${hostname/ Compute Module / cm }
-hostname=\${hostname/ Model /}
-hostname=\${hostname// /-}
-hostname=\${hostname//./d}
-hostname=rpi-\${hostname,,}-\${serial: -4}
-
-hostnamectl set-hostname "\${hostname}"
-EOF
-sudo chmod 755 "${TMP_DIR}"/usr/local/bin/set-hostname
-
-cat <<EOF | write_to "${TMP_DIR}"/etc/systemd/system/set-hostname.service
-# prepare-rpi-image: Set the hostname
-
-[Unit]
-Description=Set the hostname
-DefaultDependencies=no
-After=dbus.service
-Before=network-pre.target
-Wants=network-pre.target
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/bin/set-hostname
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# -----------------------------------------------------------------------------
-# Create the wifi netplan config file
-
-wifi_ssid=$(pass show local/wifi | grep '^ssid: ')
-wifi_ssid=${wifi_ssid#* }
-
-wifi_passphrase=$(pass show local/wifi | grep '^passphrase: ')
-wifi_passphrase=${wifi_passphrase#* }
-
-cat <<EOF | write_to "${TMP_DIR}"/etc/netplan/99-prepare-rpi-image.yaml
-network:
-    wifis:
-        wlan0:
-            dhcp4: true
-            optional: true
-            access-points:
-                "${wifi_ssid}":
-                    password: "${wifi_passphrase}"
-EOF
-
-# -----------------------------------------------------------------------------
-# Modify the kernel commandline
-
-cmdline=()
-readarray -t opts < <(head -1 "${TMP_DIR}"/boot/firmware/cmdline.txt | \
-						  tr ' ' '\n')
-for opt in "${opts[@]}" ; do
-	if [ "${opt#console=}" = "${opt}" ] ; then
-		cmdline+=("${opt}")
-	fi
-done
-cmdline+=("console=tty1" "console=ttyS0,115200")
-echo "${cmdline[*]}" | write_to "${TMP_DIR}"/boot/firmware/cmdline.txt
-
-cat <<EOF | write_to "${TMP_DIR}"/etc/default/flash-kernel
-LINUX_KERNEL_CMDLINE=
-LINUX_KERNEL_CMDLINE_DEFAULTS=
-EOF
-
-# -----------------------------------------------------------------------------
-# Modify config.txt to support booting an installer kernel/initrd via GPIO
-
-cat <<EOF | write_to -a "${TMP_DIR}"/boot/firmware/config.txt
-
-[all]
-[gpio4=0]
-os_prefix=install/
-kernel=vmlinuz
-initramfs initrd.img 0
-EOF
-
-# Inject the installer
-installer_tgz=$(pwd)/installer.tgz
-sudo mkdir -p "${TMP_DIR}"/boot/firmware/install/
-sudo tar -C "${TMP_DIR}"/boot/firmware/install/ --no-same-owner -xaf \
-	 "${installer_tgz}"
-
-# -----------------------------------------------------------------------------
-# Create the prepare-rpi-image script
-
-cat <<EOF | write_to "${TMP_DIR}"/usr/local/bin/prepare-rpi-image
-#!/bin/bash
-
-function do_init()
-{
-	echo "-- Waiting for cloud-init to finish"
-	while ! [ -e /var/lib/cloud/instance/boot-finished ] ; do
-		sleep 1
-	done
-
-	echo "-- Waiting for apt lock"
-	while fuser /var/lib/dpkg/lock >/dev/null 2>&1 ; do
-		sleep 1
-	done
-
-	echo "-- Installing and removing packages"
-	apt purge -y unattended-upgrades
-	apt install -y net-tools
-
-	echo "-- Setting password"
-	echo "ubuntu:ubuntu" | chpasswd
-
-	echo "-- Enabling set-hostname.service"
-	systemctl enable set-hostname.service
-
-	echo "-- Running flash-kernel"
-	flash-kernel
-
-	echo "-- Rebooting"
-	reboot
-}
-
-do_init 2>&1 | \
-	awk '{ print strftime("%Y-%m-%d %H:%M:%S -"), \$0 }' | \
-	tee -a /var/log/prepare-rpi-image.log
-EOF
-sudo chmod 755 "${TMP_DIR}"/usr/local/bin/prepare-rpi-image
-
-# -----------------------------------------------------------------------------
-# Create the cloud-config config snippet
-
-cat <<EOF | write_to "${TMP_DIR}"/etc/cloud/cloud.cfg.d/99-prepare-rpi-image.cfg
-ssh_authorized_keys: [ $(cat ~/.ssh/id_rsa.pub) ]
-ssh_pwauth: true
-
-runcmd:
-  - prepare-rpi-image &
-EOF
+copy_tools
+set_hostname
+enable_wifi
+set_kernel_cmdline
+install_installer
+create_prep_script
+create_cloud_init_config
