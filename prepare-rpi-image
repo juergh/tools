@@ -19,6 +19,11 @@ function out()
 	exit "${rc}"
 }
 
+function write_to()
+{
+	sudo tee "${1}" >/dev/null
+}
+
 image=${1/.img/+prep.img}
 cp "${1}" "${image}"
 
@@ -41,7 +46,7 @@ sudo cp "$(which collect-rpi-data)" "${TMP_DIR}/usr/local/bin/"
 # -----------------------------------------------------------------------------
 # Create the set-hostname script and service unit file
 
-cat <<EOF | sudo tee "${TMP_DIR}/usr/local/bin/set-hostname" >/dev/null
+cat <<EOF | write_to "${TMP_DIR}/usr/local/bin/set-hostname"
 #!/bin/bash
 
 model=\$(cat /proc/device-tree/model | tr '\0' '\n')
@@ -59,8 +64,7 @@ hostnamectl set-hostname "\${hostname}"
 EOF
 sudo chmod 755 "${TMP_DIR}/usr/local/bin/set-hostname"
 
-cat <<EOF | \
-	sudo tee "${TMP_DIR}/etc/systemd/system/set-hostname.service" >/dev/null
+cat <<EOF | write_to "${TMP_DIR}/etc/systemd/system/set-hostname.service"
 # prepare-rpi-image: Set the hostname
 
 [Unit]
@@ -88,8 +92,7 @@ wifi_ssid=${wifi_ssid#* }
 wifi_passphrase=$(pass show local/wifi | grep '^passphrase: ')
 wifi_passphrase=${wifi_passphrase#* }
 
-cat <<EOF | \
-	sudo tee "${TMP_DIR}/etc/netplan/99-prepare-rpi-image.yaml" >/dev/null
+cat <<EOF | write_to "${TMP_DIR}/etc/netplan/99-prepare-rpi-image.yaml"
 network:
     wifis:
         wlan0:
@@ -103,20 +106,25 @@ EOF
 # -----------------------------------------------------------------------------
 # Modify the kernel commandline
 
-sudo sed -i -e 's, console=[0-9a-zA-Z,]*,,g' \
-	 "${TMP_DIR}/boot/firmware/cmdline.txt"
+cmdline=()
+readarray -t opts < <(head -1 "${TMP_DIR}/boot/firmware/cmdline.txt")
+for opt in "${opts[@]}" ; do
+	if [ "${opt#console=}" != "${opt}" ] ; then
+		cmdline+=("${opt}")
+	fi
+done
+cmdline+=("console=tty1" "console=ttyS0,115200")
+echo "${cmdline[*]}" | write_to "${TMP_DIR}/boot/firmware/cmdline.txt"
 
-cat <<EOF | sudo tee "${TMP_DIR}/etc/default/flash-kernel" >/dev/null
-LINUX_KERNEL_CMDLINE="console=tty1 console=ttyS0,115200"
+cat <<EOF | write_to "${TMP_DIR}/etc/default/flash-kernel"
+LINUX_KERNEL_CMDLINE=
 LINUX_KERNEL_CMDLINE_DEFAULTS=
 EOF
 
 # -----------------------------------------------------------------------------
 # Modify flash-kernel to support booting an installer kernel/initrd via GPIO
 
-cat <<EOF | \
-	sudo tee "${TMP_DIR}/etc/flash-kernel/bootscript/bootscr.rpi.new" \
-		 >/dev/null
+cat <<EOF | write_to "${TMP_DIR}/etc/flash-kernel/bootscript/bootscr.rpi.new"
 # Inserted by prepare-rpi-image
 if gpio input 4; then
   setenv kernel_img installz
@@ -138,7 +146,7 @@ sudo cp installz install.img "${TMP_DIR}/boot/firmware/"
 # -----------------------------------------------------------------------------
 # Create the prepare-rpi-image script
 
-cat <<EOF | sudo tee "${TMP_DIR}/usr/local/bin/prepare-rpi-image" >/dev/null
+cat <<EOF | write_to "${TMP_DIR}/usr/local/bin/prepare-rpi-image"
 #!/bin/bash
 
 function do_init()
@@ -174,9 +182,7 @@ sudo chmod 755 "${TMP_DIR}/usr/local/bin/prepare-rpi-image"
 # -----------------------------------------------------------------------------
 # Create the cloud-config config snippet
 
-cat <<EOF | \
-	sudo tee "${TMP_DIR}/etc/cloud/cloud.cfg.d/99-prepare-rpi-image.cfg" \
-		 >/dev/null
+cat <<EOF | write_to "${TMP_DIR}/etc/cloud/cloud.cfg.d/99-prepare-rpi-image.cfg"
 ssh_authorized_keys: [ $(cat ~/.ssh/id_rsa.pub) ]
 ssh_pwauth: true
 
