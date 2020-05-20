@@ -6,7 +6,7 @@ function out()
 
 	trap - INT TERM EXIT HUP
 
-	partumount "${TMP_DIR}/boot/firmware" || true
+	partumount "${TMP_DIR}"/boot/firmware || true
 	partumount "${TMP_DIR}" || true
 
 	rm -rf "${TMP_DIR}"
@@ -21,11 +21,61 @@ function out()
 
 function write_to()
 {
-	sudo tee "${1}" >/dev/null
+	if [ "${1}" = "-a" ] ; then
+		sudo tee -a "${2}" >/dev/null
+	else
+		sudo tee "${1}" >/dev/null
+	fi
 }
 
-image=${1/.img/+prep.img}
-cp "${1}" "${image}"
+function usage()
+{
+	cat <<EOF
+Usage: prepare-rpi-image [-h] IMAGE
+
+Prepare an Ubuntu Raspberry Pi image.
+
+Positional arguments:
+  IMAGE       The image to prepare.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+image=
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -z "${image}" ]; then
+				image=${1}
+			else
+				usage
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${image}" ] ; then
+	usage
+	exit 2
+fi
+
+if ! [ -e "${image}" ] ; then
+	echo "No such image file: ${image}" >&2
+	exit 1
+fi
+
+echo "Copy image"
+image_prep=${image/.img/+prep.img}
+cp "${image}" "${image_prep}"
 
 TMP_DIR=$(mktemp -d)
 INITRD_DIR=$(mktemp -d)
@@ -34,19 +84,19 @@ trap out INT TERM EXIT HUP
 # -----------------------------------------------------------------------------
 # Mount the image
 
-partmount "${image}" 2 "${TMP_DIR}"
-partmount "${image}" 1 "${TMP_DIR}/boot/firmware"
+partmount "${image_prep}" 2 "${TMP_DIR}"
+partmount "${image_prep}" 1 "${TMP_DIR}"/boot/firmware
 
 # -----------------------------------------------------------------------------
 # Copy collect-rpi-data
 
 # shellcheck disable=SC2230
-sudo cp "$(which collect-rpi-data)" "${TMP_DIR}/usr/local/bin/"
+sudo cp "$(which collect-rpi-data)" "${TMP_DIR}"/usr/local/bin/
 
 # -----------------------------------------------------------------------------
 # Create the set-hostname script and service unit file
 
-cat <<EOF | write_to "${TMP_DIR}/usr/local/bin/set-hostname"
+cat <<EOF | write_to "${TMP_DIR}"/usr/local/bin/set-hostname
 #!/bin/bash
 
 model=\$(cat /proc/device-tree/model | tr '\0' '\n')
@@ -62,9 +112,9 @@ hostname=rpi-\${hostname,,}-\${serial: -4}
 
 hostnamectl set-hostname "\${hostname}"
 EOF
-sudo chmod 755 "${TMP_DIR}/usr/local/bin/set-hostname"
+sudo chmod 755 "${TMP_DIR}"/usr/local/bin/set-hostname
 
-cat <<EOF | write_to "${TMP_DIR}/etc/systemd/system/set-hostname.service"
+cat <<EOF | write_to "${TMP_DIR}"/etc/systemd/system/set-hostname.service
 # prepare-rpi-image: Set the hostname
 
 [Unit]
@@ -92,7 +142,7 @@ wifi_ssid=${wifi_ssid#* }
 wifi_passphrase=$(pass show local/wifi | grep '^passphrase: ')
 wifi_passphrase=${wifi_passphrase#* }
 
-cat <<EOF | write_to "${TMP_DIR}/etc/netplan/99-prepare-rpi-image.yaml"
+cat <<EOF | write_to "${TMP_DIR}"/etc/netplan/99-prepare-rpi-image.yaml
 network:
     wifis:
         wlan0:
@@ -107,46 +157,43 @@ EOF
 # Modify the kernel commandline
 
 cmdline=()
-readarray -t opts < <(head -1 "${TMP_DIR}/boot/firmware/cmdline.txt")
+readarray -t opts < <(head -1 "${TMP_DIR}"/boot/firmware/cmdline.txt | \
+						  tr ' ' '\n')
 for opt in "${opts[@]}" ; do
-	if [ "${opt#console=}" != "${opt}" ] ; then
+	if [ "${opt#console=}" = "${opt}" ] ; then
 		cmdline+=("${opt}")
 	fi
 done
 cmdline+=("console=tty1" "console=ttyS0,115200")
-echo "${cmdline[*]}" | write_to "${TMP_DIR}/boot/firmware/cmdline.txt"
+echo "${cmdline[*]}" | write_to "${TMP_DIR}"/boot/firmware/cmdline.txt
 
-cat <<EOF | write_to "${TMP_DIR}/etc/default/flash-kernel"
+cat <<EOF | write_to "${TMP_DIR}"/etc/default/flash-kernel
 LINUX_KERNEL_CMDLINE=
 LINUX_KERNEL_CMDLINE_DEFAULTS=
 EOF
 
 # -----------------------------------------------------------------------------
-# Modify flash-kernel to support booting an installer kernel/initrd via GPIO
+# Modify config.txt to support booting an installer kernel/initrd via GPIO
 
-cat <<EOF | write_to "${TMP_DIR}/etc/flash-kernel/bootscript/bootscr.rpi.new"
-# Inserted by prepare-rpi-image
-if gpio input 4; then
-  setenv kernel_img installz
-  setenv initrd_img install.img
-else
-  setenv kernel_img vmlinuz
-  setenv initrd_img initrd.img
-fi
+cat <<EOF | write_to -a "${TMP_DIR}"/boot/firmware/config.txt
 
-$(sed -e "s,vmlinuz,\${kernel_img}," -e "s,initrd.img,\${initrd_img}," \
-	 "${TMP_DIR}/etc/flash-kernel/bootscript/bootscr.rpi")
+[all]
+[gpio4=0]
+os_prefix=install/
+kernel=vmlinuz
+initramfs initrd.img 0
 EOF
-sudo mv "${TMP_DIR}/etc/flash-kernel/bootscript/bootscr.rpi.new" \
-	 "${TMP_DIR}/etc/flash-kernel/bootscript/bootscr.rpi"
 
-# Inject the installer kernel and initrd
-sudo cp installz install.img "${TMP_DIR}/boot/firmware/"
+# Inject the installer
+installer_tgz=$(pwd)/installer.tgz
+sudo mkdir -p "${TMP_DIR}"/boot/firmware/install/
+sudo tar -C "${TMP_DIR}"/boot/firmware/install/ --no-same-owner -xaf \
+	 "${installer_tgz}"
 
 # -----------------------------------------------------------------------------
 # Create the prepare-rpi-image script
 
-cat <<EOF | write_to "${TMP_DIR}/usr/local/bin/prepare-rpi-image"
+cat <<EOF | write_to "${TMP_DIR}"/usr/local/bin/prepare-rpi-image
 #!/bin/bash
 
 function do_init()
@@ -182,12 +229,12 @@ do_init 2>&1 | \
 	awk '{ print strftime("%Y-%m-%d %H:%M:%S -"), \$0 }' | \
 	tee -a /var/log/prepare-rpi-image.log
 EOF
-sudo chmod 755 "${TMP_DIR}/usr/local/bin/prepare-rpi-image"
+sudo chmod 755 "${TMP_DIR}"/usr/local/bin/prepare-rpi-image
 
 # -----------------------------------------------------------------------------
 # Create the cloud-config config snippet
 
-cat <<EOF | write_to "${TMP_DIR}/etc/cloud/cloud.cfg.d/99-prepare-rpi-image.cfg"
+cat <<EOF | write_to "${TMP_DIR}"/etc/cloud/cloud.cfg.d/99-prepare-rpi-image.cfg
 ssh_authorized_keys: [ $(cat ~/.ssh/id_rsa.pub) ]
 ssh_pwauth: true
 
