@@ -102,55 +102,20 @@ mount -t devtmpfs -o nosuid,mode=0755 udev /dev
 mkdir /dev/pts
 mount -t devpts -o noexec,nosuid,gid=5,mode=0620 devpts /dev/pts || true
 
+# Get an IP
 dhclient
 
-while true ; do
-    cat <<__EOF__
+# The location of the installer and images
+server=192.168.99.11/~juergh
 
-Select an image to install:
-  1)  Focal arm64
-  2)  Focal armhf
-  3)  Bionic arm64
-  4)  Bionic armhf
-  99) Run a shell
-__EOF__
+# Download and run the installer
+wget \${server}/install-rpi-image && \
+    /bin/sh ./install-rpi-image \${server} && \
+    reboot -f && \
+    exit 0
 
-    echo -n "Choice: "
-    read -r tmp
-
-    case "\${tmp}" in
-        1)
-            series=focal
-            arch=arm64
-            ;;
-        2)
-            series=focal
-            arch=armhf
-            ;;
-        3)
-            series=bionic
-            arch=arm64
-            ;;
-        4)
-            series=bionic
-            arch=armhf
-            ;;
-        99)
-            /bin/sh
-            ;;
-        *)
-            series=
-            arch=
-            ;;
-    esac
-
-    if [ -n "\${series}" ] ; then
-        image=\${series}-preinstalled-server-\${arch}+raspi+prep.img.gz
-        echo "Installing \${image} ..."
-        wget -O - 192.168.99.11/~juergh/\${image} | gunzip -c > \
-            /dev/mmcblk0 && sync && reboot -f
-    fi
-done
+# Fall-back
+/bin/sh
 EOF
 chmod 755 init
 
