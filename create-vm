@@ -202,10 +202,13 @@ function download_opensuse_image()
 {
 	local release name url
 
-	release=${RELEASE^}
-
-	name=openSUSE-${release}-OpenStack.x86_64.qcow2
-	url=https://download.opensuse.org/repositories/Cloud:/Images:/${release/-/_}/images/${name}
+	if [ "${RELEASE}" = "tumbleweed" ] ; then
+		url=https://download.opensuse.org/tumbleweed/appliances/openSUSE-Tumbleweed-JeOS.x86_64-OpenStack-Cloud.qcow2
+	else
+		release=${RELEASE^}
+		name=openSUSE-${release}-OpenStack.x86_64.qcow2
+		url=https://download.opensuse.org/repositories/Cloud:/Images:/${release/-/_}/images/${name}
+	fi
 
 	download_image "${url}"
 }
@@ -639,7 +642,7 @@ esac
 
 # The image vendor and release
 case "${DIST}" in
-	leap-*)
+	leap-*|tumbleweed)
 		VENDOR=opensuse
 		RELEASE=${DIST}
 		;;
