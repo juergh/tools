@@ -198,6 +198,18 @@ function download_core_image()
 	false
 }
 
+function download_opensuse_image()
+{
+	local release name url
+
+	release=${RELEASE^}
+
+	name=openSUSE-${release}-OpenStack.x86_64.qcow2
+	url=https://download.opensuse.org/repositories/Cloud:/Images:/${release/-/_}/images/${name}
+
+	download_image "${url}"
+}
+
 function download_base_image()
 {
 	# Check if the image is already cached
@@ -627,6 +639,10 @@ esac
 
 # The image vendor and release
 case "${DIST}" in
+	leap-*)
+		VENDOR=opensuse
+		RELEASE=${DIST}
+		;;
 	*-*)
 		VENDOR=${DIST%-*}
 		RELEASE=${DIST#*-}
@@ -713,6 +729,13 @@ if [ "${RELEASE#core}" != "${RELEASE}" ] ; then
 			# 1GB is not enough for grub to loopmount the kernel snap
 			MEMORY=2048
 		fi
+	fi
+fi
+
+# OpenSUSE special handling
+if [ "${VENDOR}" = "opensuse" ] ; then
+	if [ "${SIZE}" -lt 12 ] ; then
+		SIZE=12
 	fi
 fi
 
