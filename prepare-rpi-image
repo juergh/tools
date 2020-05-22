@@ -49,7 +49,8 @@ hostname=\${hostname// /-}
 hostname=\${hostname//./d}
 hostname=rpi-\${hostname,,}-\${serial: -4}
 
-hostnamectl set-hostname "\${hostname}"
+echo "\${hostname}" > /etc/hostname
+hostname "\${hostname}"
 EOF
 	sudo chmod 755 "${TMP_DIR}"/usr/local/bin/set-hostname
 
