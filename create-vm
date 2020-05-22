@@ -457,7 +457,7 @@ function define_vm()
 	XML_UUID=$(uuidgen)
 	XML_MEMORY=${MEMORY}
 	XML_VCPU=${VCPU}
-	XML_CPU=${CPU}
+	XML_VCPU_THREADS=${VCPU_THREADS}
 	XML_MAC_ADDRESS="52:54:00:${XML_UUID:0:2}:${XML_UUID:2:2}:${XML_UUID:4:2}"
 
 	# Export the variables for the domain XML
@@ -471,7 +471,8 @@ function define_vm()
 		   XML_OS_IMAGE_DISK_VIRTIO_BEGIN XML_OS_IMAGE_DISK_VIRTIO_END
 	export XML_CONFIG_DRIVE_PATH \
 		   XML_CONFIG_DRIVE_DISK_BEGIN XML_CONFIG_DRIVE_DISK_END
-	export XML_NAME XML_UUID XML_MEMORY XML_VCPU XML_CPU XML_MAC_ADDRESS
+	export XML_NAME XML_UUID XML_MEMORY XML_VCPU XML_VCPU_THREADS \
+		   XML_MAC_ADDRESS
 
 	# Create the domain XML and define the VM
 	envsubst < "${CONFIG_DIR}/create-vm/domain-${XML_ARCH}.xml" > \
@@ -528,6 +529,8 @@ NAME=
 DRY_RUN=0
 MEMORY=1024
 BASE_IMAGE=
+VCPU=1
+VCPU_THREADS=1
 
 while [ ${#} -gt 0 ] ; do
 	case ${1} in
@@ -597,6 +600,15 @@ if [ -z "${DIST}" ] ; then
 	exit 2
 fi
 
+case "${TYPE}" in
+	""|dep8)
+	;;
+	*)
+		pr_error "Invalid type: ${TYPE}"
+		exit 1
+		;;
+esac
+
 if [ -n "${BASE_IMAGE}" ] && ! [ -e "${BASE_IMAGE}" ] ; then
 	pr_error "No such image file: ${BASE_IMAGE}"
 	exit 1
@@ -604,41 +616,6 @@ fi
 
 # -----------------------------------------------------------------------------
 # Set global variables
-
-# Defaults
-IMAGES_DIR=/srv/cloud-images
-if ! [ -d "${IMAGES_DIR}" ] ; then
-	IMAGES_DIR=~/.cache/cloud-images
-	if ! [ -d "${IMAGES_DIR}" ] ; then
-		mkdir -p "${IMAGES_DIR}"
-	fi
-fi
-CONFIG_DIR=$(dirname "$(readlink -e "${0}")")/config
-VCPU=1
-CPU=
-NAME_SUFFIX=
-
-# Set type specific variables
-case "${TYPE}" in
-	dep8)
-		VCPU=2
-		CPU="
-<cpu mode='host-model' check='partial'>
-  <model fallback='allow'/>
-  <topology sockets='1' cores='1' threads='2'/>
-</cpu>
-"
-		MEMORY=2048
-		NAME_SUFFIX="-dep8"
-		REBOOT=1
-		;;
-	"")
-		;;
-	*)
-		pr_error "Invalid type: ${TYPE}"
-		exit 1
-		;;
-esac
 
 # The image vendor and release
 case "${DIST}" in
@@ -660,69 +637,64 @@ case "${DIST}" in
 		;;
 esac
 
-# Sanity check
-if [ "${RELEASE}" = "precise" ] && [ "${BOOT_MODE}" = "uefi" ] ; then
-	pr_error "Precise does not support boot from UEFI"
-	exit 1
-fi
-
 # The vendor specific host architecture name
 case "${VENDOR}" in
-	fedora|centos)
-		HOST_ARCH=$(dpkg-architecture -qDEB_HOST_GNU_CPU)
+	fedora|centos|opensuse)
+		host_arch=$(dpkg-architecture -qDEB_HOST_GNU_CPU)
 		;;
 	*)
-		HOST_ARCH=$(dpkg-architecture -qDEB_HOST_ARCH)
+		host_arch=$(dpkg-architecture -qDEB_HOST_ARCH)
 		;;
 esac
 
 # Set the image architecture if not specified
 if [ -z "${ARCH}" ] ; then
-	ARCH=${HOST_ARCH}
+	ARCH=${host_arch}
 fi
 
 # Set the boot mode
-if [ "${RELEASE}" = "xenial" ] && [ "${ARCH}" = "arm64" ] ; then
-	BOOT_MODE="uefi"
-elif [ "${ARCH}" = "armhf" ] ; then
-	BOOT_MODE="db"
-elif [ "${RELEASE}" = "core20" ] ; then
-	BOOT_MODE="uefi"
-fi
+case "${RELEASE}/${ARCH}/${BOOT_MODE}" in
+	precise/*/uefi)
+		pr_error "Precise does not support boot from UEFI"
+		exit 1
+		;;
+	xenial/arm64/*)
+		BOOT_MODE="uefi"
+		;;
+	*/armhf/*)
+		BOOT_MODE="db"
+		;;
+	core20/*)
+		BOOT_MODE="uefi"
+		;;
+esac
 
 # The name of the VM
 if [ -z "${NAME}" ] ; then
 	NAME=${VENDOR}-${RELEASE}
-	if [ "${ARCH}" != "${HOST_ARCH}" ] ; then
+	if [ "${ARCH}" != "${host_arch}" ] ; then
 		NAME=${NAME}-${ARCH}
 	fi
 	if [ -n "${BOOT_MODE}" ] ; then
 		NAME=${NAME}-${BOOT_MODE}
 	fi
-	NAME=${NAME}${NAME_SUFFIX}
+	if [ -n "${TYPE}" ] ; then
+		NAME=${NAME}-${TYPE}
+	fi
 fi
 
-# The OS and config drive image names
-OS_IMAGE=${NAME}.img
-CONFIG_DRIVE=${NAME}-config.iso
-KERNEL=${NAME}-kernel
-INITRD=${NAME}-initrd
-
-# Kernel and initrd images are only needed for direct boot
-if [ "${BOOT_MODE}" != "db" ] ; then
-	KERNEL=
-	INITRD=
-fi
-
-# The full path of the (cached) base image
-if [ -z "${BASE_IMAGE}" ] ; then
-	BASE_IMAGE=${IMAGES_DIR}/${VENDOR}-${RELEASE}-${ARCH}.img
+# Type-specific special handling
+if [ "${TYPE}" = "dep8" ] ; then
+	VCPU=2
+	VCPU_THREADS=2
+	MEMORY=2048
 fi
 
 # Ubuntu core special handling
+config_drive=1
 if [ "${RELEASE#core}" != "${RELEASE}" ] ; then
 	# Ubuntu core doesn't need a config drive
-	CONFIG_DRIVE=
+	config_drive=0
 	if [ "${RELEASE}" = "core20" ] ; then
 		if [ "${SIZE}" -lt 12 ] ; then
 			# Ubuntu core20 is big :-(
@@ -742,8 +714,40 @@ if [ "${VENDOR}" = "opensuse" ] ; then
 	fi
 fi
 
-print_var NAME VCPU MEMORY ARCH FORCE VENDOR DIST RELEASE OS_IMAGE \
-		  CONFIG_DRIVE BOOT_MODE KERNEL INITRD BASE_IMAGE
+# Image and config directories
+IMAGES_DIR=/srv/cloud-images
+if ! [ -d "${IMAGES_DIR}" ] ; then
+	IMAGES_DIR=~/.cache/cloud-images
+	if ! [ -d "${IMAGES_DIR}" ] ; then
+		mkdir -p "${IMAGES_DIR}"
+	fi
+fi
+CONFIG_DIR=$(dirname "$(readlink -e "${0}")")/config
+
+# The full path of the (cached) base image
+if [ -z "${BASE_IMAGE}" ] ; then
+	BASE_IMAGE=${IMAGES_DIR}/${VENDOR}-${RELEASE}-${ARCH}.img
+fi
+
+# The OS and config drive image names
+OS_IMAGE=${NAME}.img
+if [ "${config_drive}" -eq 1 ] ; then
+	CONFIG_DRIVE=${NAME}-config.iso
+else
+	CONFIG_DRIVE=
+fi
+
+# The kernel and initrd images for direct boot
+if [ "${BOOT_MODE}" = "db" ] ; then
+	KERNEL=${NAME}-kernel
+	INITRD=${NAME}-initrd
+else
+	KERNEL=
+	INITRD=
+fi
+
+print_var NAME VCPU VCPU_THREADS MEMORY ARCH VENDOR DIST RELEASE \
+		  OS_IMAGE CONFIG_DRIVE BOOT_MODE KERNEL INITRD BASE_IMAGE
 
 echo
 
