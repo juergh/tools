@@ -119,10 +119,23 @@ wget \${server}/install-rpi-image && \
 EOF
 chmod 755 init
 
-# Recreate the initrd and copy the kernel and dtbs
-find . | cpio -H newc -o | gzip -9 > "${OUT_DIR}"/initrd.img
+mkdir -p "${OUT_DIR}"/install
+
+# Recreate the initrd and copy the dtbs and other files required by the
+# Raspberry Pi firmware
+find . | cpio -H newc -o | gzip -9 > "${OUT_DIR}"/install/initrd.img
 cp "${TMP_DIR}"/boot/firmware/vmlinuz "${TMP_DIR}"/boot/firmware/*.dtb \
-   "${OUT_DIR}"/
+   "${TMP_DIR}"/boot/firmware/README "${TMP_DIR}"/boot/firmware/cmdline.txt \
+   "${OUT_DIR}"/install
+
+# Create the installer config snippet
+cat <<EOF >"${OUT_DIR}"/installcfg.txt
+[all]
+[gpio4=0]
+os_prefix=install/
+kernel=vmlinuz
+initramfs initrd.img
+EOF
 
 cd "${OUT_DIR}"
 tar -czvf "${here}"/installer.tgz .
