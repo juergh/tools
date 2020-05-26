@@ -128,17 +128,13 @@ function install_rpi_installer()
 
 	cat <<EOF | write_to -a "${TMP_DIR}"/boot/firmware/config.txt
 
-[all]
-[gpio4=0]
-os_prefix=install/
-kernel=vmlinuz
-initramfs initrd.img 0
+# prepare-rpi-image
+include installcfg.txt
 EOF
 
 	# Inject the installer
 	installer_tgz=$(pwd)/rpi-installer.tgz
-	sudo mkdir -p "${TMP_DIR}"/boot/firmware/install/
-	sudo tar -C "${TMP_DIR}"/boot/firmware/install/ --no-same-owner -xaf \
+	sudo tar -C "${TMP_DIR}"/boot/firmware/ --no-same-owner -xaf \
 		 "${installer_tgz}"
 }
 
