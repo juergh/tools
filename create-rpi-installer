@@ -138,4 +138,4 @@ initramfs initrd.img
 EOF
 
 cd "${OUT_DIR}"
-tar -czvf "${here}"/installer.tgz .
+tar -czvf "${here}"/rpi-installer.tgz .

@@ -122,7 +122,7 @@ LINUX_KERNEL_CMDLINE_DEFAULTS=
 EOF
 }
 
-function install_installer()
+function install_rpi_installer()
 {
 	local installer_tgz
 
@@ -136,7 +136,7 @@ initramfs initrd.img 0
 EOF
 
 	# Inject the installer
-	installer_tgz=$(pwd)/installer.tgz
+	installer_tgz=$(pwd)/rpi-installer.tgz
 	sudo mkdir -p "${TMP_DIR}"/boot/firmware/install/
 	sudo tar -C "${TMP_DIR}"/boot/firmware/install/ --no-same-owner -xaf \
 		 "${installer_tgz}"
@@ -245,6 +245,6 @@ copy_tools
 set_hostname
 enable_wifi
 set_kernel_cmdline
-install_installer
+install_rpi_installer
 create_prep_script
 create_cloud_init_config
