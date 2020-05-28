@@ -1,0 +1,42 @@
+#!/bin/bash -eu
+
+function out()
+{
+	local rc=$?
+
+	trap - INT EXIT TERM HUP
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "Error: Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+trap out EXIT INT TERM HUP
+
+# shellcheck disable=SC1091
+. debian/debian.env
+changelog=${DEBIAN}/changelog
+
+distro=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
+if [ "${distro}" = "UNKNOWN" ] ; then
+	echo "Distribution is UNKNOWN"
+	exit 1
+fi
+
+suffix=$(date +%Y%m%d).git$(git log --abbrev=8 --format=%h -1)
+branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "${branch}" != "HEAD" ] ; then
+	suffix=${suffix}.${branch}
+fi
+
+version=$(dpkg-parsechangelog -l "${changelog}" -S Version)
+test_version="${version}+${suffix}"
+
+# Create a commit with the updated test version
+sed -i "1 s,${version},${test_version}," "${changelog}"
+git commit -s -m "UBUNTU: Test Build ${test_version}" -- "${changelog}"
+
+echo "Original version: ${version}"
+echo "Test version:     ${test_version}"
