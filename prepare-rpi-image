@@ -28,15 +28,23 @@ function write_to()
 
 function copy_tools()
 {
+	echo "--- Copy tools"
+
 	# shellcheck disable=SC2230
 	sudo cp "$(which collect-rpi-data)" "${TMP_DIR}"/usr/local/bin/
 }
 
 function set_hostname()
 {
+	echo "--- Set hostname"
+
 	# The script that determines the hostname dynamically
 	cat <<EOF | write_to "${TMP_DIR}"/usr/local/bin/set-hostname
 #!/bin/bash
+
+if ! [ -e /proc/device-tree/model ] ; then
+    exit
+fi
 
 model=\$(cat /proc/device-tree/model | tr '\0' '\n')
 serial=\$(cat /proc/cpuinfo | awk '/^Serial/ { print \$3 }')
@@ -83,6 +91,12 @@ function enable_wifi()
 {
 	local wifi_ssid wifi_passphrase
 
+	if [ "${WIFI}" -eq 0 ] ; then
+		return
+	fi
+
+	echo "--- Enable wifi"
+
 	wifi_ssid=$(pass show local/wifi | grep '^ssid: ')
 	wifi_ssid=${wifi_ssid#* }
 
@@ -105,6 +119,8 @@ function set_kernel_cmdline()
 {
 	local cmdline opts opt
 
+	echo "--- Set kernel cmdline"
+
 	cmdline=()
 	readarray -t opts < <(head -1 "${TMP_DIR}"/boot/firmware/cmdline.txt | \
 							  tr ' ' '\n')
@@ -126,6 +142,8 @@ function install_rpi_installer()
 {
 	local installer_tgz
 
+	echo "--- Install rpi installer"
+
 	cat <<EOF | write_to -a "${TMP_DIR}"/boot/firmware/config.txt
 
 # prepare-rpi-image
@@ -140,64 +158,77 @@ EOF
 
 function create_prep_script()
 {
+	echo "--- Create prep script"
+
 	cat <<EOF | write_to "${TMP_DIR}"/usr/local/bin/prepare-rpi-image
 #!/bin/bash
 
-function do_init()
-{
-	echo "-- Waiting for cloud-init to finish"
-	while ! [ -e /var/lib/cloud/instance/boot-finished ] ; do
-		sleep 1
-	done
+echo "--- Waiting for cloud-init to finish"
+while ! [ -e /var/lib/cloud/instance/boot-finished ] ; do
+    sleep 1
+done
 
-	echo "-- Waiting for apt lock"
-	while fuser /var/lib/dpkg/lock >/dev/null 2>&1 ; do
-		sleep 1
-	done
-
-	echo "-- Installing and removing packages"
-	apt purge -y unattended-upgrades
-	apt install -y net-tools
-
-	echo "-- Setting password"
-	echo "ubuntu:ubuntu" | chpasswd
-}
-
-do_init 2>&1 | \
-	awk '{ print strftime("%Y-%m-%d %H:%M:%S -"), \$0 }' | \
-	tee -a /var/log/prepare-rpi-image.log
+echo "--- Setting password"
+echo "ubuntu:ubuntu" | chpasswd
 EOF
 	sudo chmod 755 "${TMP_DIR}"/usr/local/bin/prepare-rpi-image
 }
 
 function create_cloud_init_config()
 {
+	echo "--- Create cloud-init config"
+
 	cat <<EOF | \
 		write_to "${TMP_DIR}"/etc/cloud/cloud.cfg.d/99-prepare-rpi-image.cfg
-ssh_authorized_keys: [ $(cat ~/.ssh/id_rsa.pub) ]
+# Module ssh
+ssh_authorized_keys:
+  - $(cat ~/.ssh/id_rsa.pub)
+
+# Module set-password
 ssh_pwauth: true
 
 runcmd:
-  - prepare-rpi-image &
+  - /usr/local/bin/prepare-rpi-image &
 EOF
+}
+
+function disable_services()
+{
+	local services service
+
+	echo "--- Disable services"
+
+	services=(unattended-upgrades)
+	if [ "${SNAPD}" -eq 0 ] ; then
+		services+=(snapd)
+	fi
+
+	for service in "${services[@]}" ; do
+		echo "---   ${service}"
+		sudo rm -f "${TMP_DIR}"/{etc,lib}/systemd/system/*.wants/"${service}".*
+	done
 }
 
 function usage()
 {
 	cat <<EOF
-Usage: prepare-rpi-image [-h] IMAGE
+Usage: prepare-rpi-image [-h] [-s] [-w] IMAGE
 
 Prepare an Ubuntu Raspberry Pi image.
 
 Positional arguments:
-  IMAGE       The image to prepare.
+  IMAGE           The image to prepare.
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -h, --help      Show this help text and exit.
+  -s, --no-snapd  Disable the snapd services.
+  -w, --no-wifi   Don't enable wifi.
 EOF
 }
 
 image=
+SNAPD=1
+WIFI=1
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -205,8 +236,14 @@ while [ $# -gt 0 ] ; do
 			usage
 			exit
 			;;
+		-s|--no-snapd)
+			SNAPD=0
+			;;
+		-w|--no-wifi)
+			WIFI=0
+			;;
 		*)
-			if [ -z "${image}" ]; then
+			if [ -z "${image}" ] ; then
 				image=${1}
 			else
 				usage
@@ -227,7 +264,12 @@ if ! [ -e "${image}" ] ; then
 	exit 1
 fi
 
-echo "Copy image"
+if ! [ -e "rpi-installer.tgz" ] ; then
+	echo "No such installer: rpi-installer.tgz" >&2
+	exit 1
+fi
+
+echo "--- Copy image"
 image_prep=${image/.img/+prep.img}
 cp "${image}" "${image_prep}"
 
@@ -244,3 +286,4 @@ set_kernel_cmdline
 install_rpi_installer
 create_prep_script
 create_cloud_init_config
+disable_services
