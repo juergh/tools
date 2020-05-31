@@ -69,7 +69,6 @@ EOF
 [Unit]
 Description=Set the hostname
 DefaultDependencies=no
-After=dbus.service
 Before=network-pre.target
 Wants=network-pre.target
 
