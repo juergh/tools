@@ -1,0 +1,81 @@
+#!/bin/bash -eu
+#
+# Find references to upstream commit hashes in commit messages
+#
+
+LINUX_REPO=/srv/git/linux.git
+
+PATTERN_LIST=(
+        "commit [0-9a-f]* upstream"
+        "upstream commit [0-9a-f]*"
+        "cherry[ -]?picked from .*\b[0-9a-f]*"
+        "back[ -]?ported from .*\b[0-9a-f]*"
+)
+PATTERN=$(printf "|%s" "${PATTERN_LIST[@]}")
+PATTERN=${PATTERN:1}
+
+function parse_commit_message()
+{
+	local commit=${1}
+
+    git log --format="%b" "${commit}" -1 | \
+        grep -iP "${PATTERN}" | \
+        grep -oP '[0-9a-f]{12,}' || true
+}
+
+function usage()
+{
+    cat <<EOF
+Usage: find-upstream-hash [-h] [REV_RANGE]
+
+Find references to upstream commit hashes in the commit messages of the commits
+in REV_RANGE.
+
+Positional arguments:
+  REV_RANGE   A git revision range in a format that 'git log' understands.
+
+Optional arguments:
+  -h, --help    Show this help text and exit.
+EOF
+}
+
+rev_range=HEAD
+
+while [ $# -gt 0 ] ; do
+    case "${1}" in
+        -h|--help)
+            usage
+            exit
+            ;;
+        *)
+            rev_range=("${@}")
+            break
+            ;;
+    esac
+    shift
+done
+
+while IFS= read -r commit ; do
+	# Parse the commit message for upstream hashes
+	readarray -t upstream < <(parse_commit_message "${commit}")
+	if [ "${#upstream[@]}" -eq 0 ] ; then
+		echo "${commit} -> no upstream hash found"
+		continue
+	fi
+
+	# Verify that the upstream reference exists in Linus' repo
+	verified=()
+	for u in "${upstream[@]}" ; do
+		if git --git-dir "${LINUX_REPO}" cat-file -e "${commit}^{commit}" \
+			   2>/dev/null ; then
+			verified+=("${u}")
+		fi
+	done
+
+	if [ "${#verified[@]}" -eq 0 ] ; then
+		echo "${commit} -> upstream hash(es) found but not verifiable" \
+			 " (${upstream[*]})"
+	else
+		echo "${commit} -> ${verified[*]}"
+	fi
+done < <(git log --format=%h "${rev_range[@]}")
