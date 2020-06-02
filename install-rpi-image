@@ -1,0 +1,81 @@
+#!/bin/sh -u
+
+server=$1
+hostname=$2
+
+wget -O - "${server}/${hostname}" | gunzip -c > /dev/mmcblk0 && \
+	sync && \
+	exit 0
+
+while true ; do
+    cat <<__EOF__
+
+--- Select an image to install:
+      1) Focal arm64
+      2) Focal armhf
+      3) Bionic arm64
+      4) Bionic armhf
+
+     10) Core20 arm64
+     11) Core20 armhf
+     12) Core18 arm64
+     13) Core18 armhf
+
+     90) Enter an image name manually
+     91) Run a shell
+
+__EOF__
+
+	# shellcheck disable=SC2039
+    echo -n "--- Choice: "
+    read -r tmp
+
+    case "${tmp}" in
+		#
+		# Ubuntu Server
+		#
+        1)
+            image=focal-preinstalled-server-arm64+raspi+prep.img.gz
+            ;;
+        2)
+            image=focal-preinstalled-server-armhf+raspi+prep.img.gz
+            ;;
+        3)
+            image=bionic-preinstalled-server-arm64+raspi3+prep.img.gz
+            ;;
+        4)
+            image=bionic-preinstalled-server-armhf+raspi3+prep.img.gz
+            ;;
+
+		#
+		# Ubuntu Core
+		#
+		10)
+            image=ubuntu-core-20-arm64+raspi.img.gz
+			;;
+		11)
+            image=ubuntu-core-20-armhf+raspi.img.gz
+			;;
+
+		#
+		# Debug options
+		#
+		90)
+			# shellcheck disable=SC2039
+			echo -n "--- Image name: "
+			read -r image
+			;;
+        91)
+            /bin/sh
+			continue
+            ;;
+        *)
+			continue
+            ;;
+    esac
+
+    echo "--- Installing ${image}"
+    wget -O - "${server}/${image}" | gunzip -c > /dev/mmcblk0 && \
+		sync && \
+		exit 0
+done
