@@ -1,0 +1,176 @@
+#!/bin/bash -eu
+#
+# Run a Raspberry Pi OS image in QEMU
+#
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	rm -rf "${TMPDIR}"
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function usage()
+{
+    cat <<EOF
+Usage: qemu-raspi [-f] [-g] [-h] [-k KERNEL] [-q QEMU] IMAGE
+
+Positional arguments:
+  IMAGE                The image file containing the OS to run.
+
+Optional arguments:
+  -f, --force          Rebuild the cached kernel.
+  -g, --no-graphics    Display the graphics output.
+  -h, --help           Show this help text and exit.
+  -k, --kernel KERNEL  The kernel to use for booting the image. If not
+                       provided, the cached kernel is used. The cached kernel
+                       is built automatically if it doesn't exist.
+  -q, --qemu QEMU      Use the QEMU binary QEMU. If not provided,
+                       /usr/bin/qemu-system-aarch64 is used.
+EOF
+}
+
+force=0
+kernel=
+qemu=/usr/bin/qemu-system-aarch64
+image=
+graphics=1
+
+while [ $# -ne 0 ] ; do
+	case "${1}" in
+		-f|--force)
+			force=1
+			;;
+		-g|--no-graphics)
+			graphics=0
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-k|--kernel)
+			shift
+			kernel=${1}
+			;;
+		-q|--qemu)
+			shift
+			qemu=${1}
+			;;
+		*)
+			if [ -z "${image}" ] ; then
+				image=$(readlink -f "${1}")
+			else
+				echo "Unexpected argument: ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${image}" ] ; then
+    usage >&2
+    exit 2
+fi
+
+if ! [ -f "${image}" ] ; then
+    echo "No such image file: ${image}" >&2
+    exit 1
+fi
+
+if [ -n "${kernel}" ] && ! [ -f "${kernel}" ] ; then
+    echo "No such kernel file: ${kernel}" >&2
+    exit 1
+fi
+
+# Create a temporary directory and install an exit handler
+TMPDIR=$(mktemp -d --tmp qemu-raspi-XXXXXX)
+trap out EXIT INT TERM HUP
+
+if [ -z "${kernel}" ] ; then
+	# The cached kernel
+	kernel=~/.cache/qemu-raspi/Image
+	if [ "${force}" -eq 1 ] ; then
+		rm -f "${kernel}"
+	fi
+	if ! [ -e "${kernel}" ] ; then
+		(
+			cd "${TMPDIR}"
+			git clone --depth 1 --branch linux-5.4.y \
+				https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git \
+				linux
+			cd linux
+			export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+			make defconfig
+			cfgs=(
+				DRM
+				DRM_BOCHS
+				SND_ENS1370
+				SQUASHFS_XZ
+				SECURITY_APPARMOR
+				DEFAULT_SECURITY_APPARMOR
+			)
+			for cfg in "${cfgs[@]}" ; do
+				./scripts/config -e "${cfg}"
+			done
+			make olddefconfig
+			for cfg in "${cfgs[@]}" ; do \
+				grep -q "CONFIG_${cfg}=y" .config || \
+					{ echo "Kernel config not enabled: ${cfg}" >&2 ; false ; }
+			done
+			make -j"$(getconf _NPROCESSORS_ONLN)" Image
+			mkdir -p ~/.cache/qemu-raspi/
+			cp arch/arm64/boot/Image ~/.cache/qemu-raspi/
+		)
+	fi
+fi
+
+# Create a temporary disk image using the provided image file as a backing
+# file, so that we don't modify the original image
+tmp_image="${TMPDIR}/disk.qcow2"
+qemu-img create -f qcow2 -b "${image}" "${tmp_image}" 15G
+
+# Assemble the qemu options
+qemu_opts=(
+	"-M" "virt"
+	"-accel" "tcg,thread=multi"
+	"-cpu" "cortex-a57"
+	"-m" "1024"
+	"-smp" "4"
+	"-device" "usb-ehci"
+	"-device" "usb-kbd"
+	"-device" "ES1370"
+	"-device" "virtio-serial-pci"
+	"-device" "virtio-net-pci,netdev=net0"
+	"-netdev" "user,id=net0,hostfwd=tcp::5022-:22"
+	"-kernel" "${kernel}"
+	"-drive" "file=${tmp_image},format=qcow2"
+)
+
+if [ "${graphics}" -eq 1 ] ; then
+	qemu_opts+=(
+		"-device" "VGA,edid=on,xres=960,yres=540"
+		"-append" "root=/dev/vda2 rootwait console=tty1 console=ttyAMA0"
+	)
+else
+	qemu_opts+=(
+		"-nographic"
+		"-append" "root=/dev/vda2 rootwait console=ttyAMA0"
+	)
+fi
+
+echo
+echo "--- Kernel:       ${kernel}"
+echo "--- QEMU:         ${qemu}"
+echo "--- QEMU options: ${qemu_opts[*]}"
+echo
+
+"${qemu}" "${qemu_opts[@]}"
