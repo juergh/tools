@@ -8,12 +8,14 @@ STABLE_REPO=/srv/git/linux-stable.git
 
 function do_patch_id()
 {
+	local commit patch_id subject fuzzy_subject
+
 	while IFS= read -r commit ; do
 		patch_id=$(git show "${commit}" | git patch-id)
 		subject=$(git log --format=%s "${commit}" -1)
-		fuzzy=$(echo "${subject,,}" | tr -c -d '[:alnum:]')
-		echo "__MARK__${patch_id%% *}__MARK__${commit}__MARK__${subject}__MARK__${fuzzy}__MARK__"
-	done < <(git log --format=%h "${@}")
+		fuzzy_subject=$(echo "${subject,,}" | tr -c -d '[:alnum:]')
+		echo "__MARK__${commit}__MARK__${patch_id%% *}__MARK__${subject}__MARK__${fuzzy_subject}__MARK__"
+	done < <(git log --format=%h --no-merges "${@}")
 }
 
 function do_find()
@@ -22,8 +24,7 @@ function do_find()
 	local commit
 
 	commit=$(grep -m 1 -F "${pattern}" "${infile}")
-	commit=${commit#*__MARK__}
-	commit=${commit#*__MARK__}
+	commit=${commit#__MARK__}
 	commit=${commit%%__MARK__*}
 
 	echo "${commit}"
@@ -34,7 +35,7 @@ function usage()
 	cat <<EOF
 Usage: find-missing-commits [-h] [-r] BRANCH
 
-Find commits on the provded branch BRANCH that are not on the current branch.
+Find commits on the provided branch BRANCH that are not on the current branch.
 
 Positional arguments:
   BRANCH       The branch to use as a reference.
@@ -89,7 +90,8 @@ fi
 
 cat <<EOF
  Status
- N: Not found on the current branch
+ -: Not found on the current branch
+ P: Found by patch ID match
  S: Found by subject match
  U: Found by UBUNTU SAUCE subject match
  F: Found by fuzzy subject match
@@ -97,7 +99,7 @@ cat <<EOF
 /  Provenance
 |  L: Upstream linux
 |  S: Upstream stable
-|  U: Unknonwn
+|  -: Unknonwn
 | /  Commit hash on current branch
 | | /             Commit hash on ${branch} branch
 | | |            /             Subject
@@ -109,10 +111,10 @@ EOF
 while IFS= read -r line ; do
 	# shellcheck disable=SC2001
 	readarray -t tokens < <(echo "${line}" | sed -e 's,__MARK__,\n,g')
-	patch_id=${tokens[1]}
-	commit=${tokens[2]}
+	commit=${tokens[1]}
+	patch_id=${tokens[2]}
 	subject=${tokens[3]}
-	fuzzy=${tokens[4]}
+	fuzzy_subject=${tokens[4]}
 
 	# Check the provenance of the commit
 	if git -C "${LINUX_REPO}" cat-file -e "${commit}^{commit}" 2>/dev/null ; then
@@ -120,12 +122,13 @@ while IFS= read -r line ; do
 	elif git -C "${STABLE_REPO}" cat-file -e "${commit}^{commit}" 2>/dev/null ; then
 		prov=S
 	else
-		prov=U
+		prov=-
 	fi
 
 	# Check for a matching patch ID
 	found=$(do_find "__MARK__${patch_id}__MARK__" .head)
 	if [ -n "${found}" ] ; then
+		echo "P ${prov} ${found} ${commit} ${subject}"
 		continue
 	fi
 
@@ -144,19 +147,19 @@ while IFS= read -r line ; do
 	fi
 
 	# Check for a matching fuzzy subject
-	found=$(do_find "__MARK__${fuzzy}__MARK__" .head)
+	found=$(do_find "__MARK__${fuzzy_subject}__MARK__" .head)
 	if [ -n "${found}" ] ; then
 		echo "F ${prov} ${found} ${commit} ${subject}"
 		continue
 	fi
 
 	# Check for a matching UBUNTU SAUCE fuzzy subject
-	found=$(do_find "__MARK__ubuntusauce${fuzzy}__MARK__" .head)
+	found=$(do_find "__MARK__ubuntusauce${fuzzy_subject}__MARK__" .head)
 	if [ -n "${found}" ] ; then
 		echo "Z ${prov} ${found} ${commit} ${subject}"
 		continue
 	fi
 
 	# Not found
-	echo "N ${prov}              ${commit} ${subject//__MARK__/}"
+	echo "- ${prov}              ${commit} ${subject//__MARK__/}"
 done < <(cat .branch)
