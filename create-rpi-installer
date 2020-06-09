@@ -125,8 +125,12 @@ mkdir -p "${OUT_DIR}"/install
 # Raspberry Pi firmware
 find . | cpio -H newc -o | gzip -9 > "${OUT_DIR}"/install/initrd.img
 cp "${TMP_DIR}"/boot/firmware/vmlinuz "${TMP_DIR}"/boot/firmware/*.dtb \
-   "${TMP_DIR}"/boot/firmware/README "${TMP_DIR}"/boot/firmware/cmdline.txt \
-   "${OUT_DIR}"/install
+   "${TMP_DIR}"/boot/firmware/README "${OUT_DIR}"/install
+
+# Create cmdline.txt
+cat <<EOF >"${OUT_DIR}"/install/cmdline.txt
+console=ttyS0,115200
+EOF
 
 # Create the installer config snippet
 cat <<EOF >"${OUT_DIR}"/installcfg.txt
@@ -135,6 +139,8 @@ cat <<EOF >"${OUT_DIR}"/installcfg.txt
 os_prefix=install/
 kernel=vmlinuz
 initramfs initrd.img
+cmdline=cmdline.txt
+enable_uart=1
 EOF
 
 cd "${OUT_DIR}"
