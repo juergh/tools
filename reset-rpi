@@ -14,12 +14,13 @@ pin_map = {
     "slot-4": {"run": 32, "gpio4": 11},
     "slot-5": {"run": 26, "gpio4": 13},
     "slot-6": {"run": 24, "gpio4": 15},
+    "slot-7": {"run": 22, "gpio4": 19},
 }
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-4", "--gpio4", nargs=1, choices=('0', '1'))
 parser.add_argument("-n", "--no-reset", action="store_true")
-parser.add_argument("slot", choices=('1', '2', '3', '4', '5', '6'))
+parser.add_argument("slot", choices=('1', '2', '3', '4', '5', '6', '7'))
 args = parser.parse_args()
 
 run_pin = pin_map["slot-" + args.slot]["run"]
