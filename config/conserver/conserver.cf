@@ -1,0 +1,65 @@
+# The character '&' in logfile names are substituted with the console
+# name.
+#
+config * {
+}
+default full {
+	rw *;
+}
+default * {
+	logfile /var/log/conserver/&.log;
+	timestamp "";
+	include full;
+}
+console slot-1 {
+	master localhost;
+	type device;
+	device /dev/usb-ports/tty-1-1.1;
+	baud 115200;
+	parity none;
+}
+console slot-2 {
+	master localhost;
+	type device;
+	device /dev/usb-ports/tty-1-1.2;
+	baud 115200;
+	parity none;
+}
+console slot-3 {
+	master localhost;
+	type device;
+	device /dev/usb-ports/tty-1-1.3;
+	baud 115200;
+	parity none;
+}
+console slot-4 {
+	master localhost;
+	type device;
+	device /dev/usb-ports/tty-1-1.4.1;
+	baud 115200;
+	parity none;
+}
+console slot-5 {
+	master localhost;
+	type device;
+	device /dev/usb-ports/tty-1-1.4.2;
+	baud 115200;
+	parity none;
+}
+console slot-6 {
+	master localhost;
+	type device;
+	device /dev/usb-ports/tty-1-1.4.3;
+	baud 115200;
+	parity none;
+}
+console slot-7 {
+	master localhost;
+	type device;
+	device /dev/usb-ports/tty-1-1.4.4;
+	baud 115200;
+	parity none;
+}
+access * {
+	trusted 192.168.99.0;
+}
