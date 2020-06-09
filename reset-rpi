@@ -7,33 +7,23 @@ import argparse
 from time import sleep
 import RPi.GPIO as gpio
 
-run_pin_map = {
-    "rpi-4b":    40,
-    "rpi-3b+":   38,
-    "rpi-3b":    36,
-    "rpi-3a+":   32,
-    "rpi-2b":    26,
-    "rpi-cm3b+": 24,
-}
-
-gpio4_pin_map = {
-    "rpi-4b":     3,
-    "rpi-3b+":    5,
-    "rpi-3b":     7,
-    "rpi-3a+":   11,
-    "rpi-2b":    13,
-    "rpi-cm3b+": 15,
+pin_map = {
+    "slot-1": {"run": 40, "gpio4": 3},
+    "slot-2": {"run": 38, "gpio4": 5},
+    "slot-3": {"run": 36, "gpio4": 7},
+    "slot-4": {"run": 32, "gpio4": 11},
+    "slot-5": {"run": 26, "gpio4": 13},
+    "slot-6": {"run": 24, "gpio4": 15},
 }
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-4", "--gpio4", nargs=1, choices=('0', '1'))
 parser.add_argument("-n", "--no-reset", action="store_true")
-parser.add_argument("rpi", choices=("rpi-4b", "rpi-3b+", "rpi-3b", "rpi-3a+",
-                                    "rpi-2b", "rpi-cm3b+"))
+parser.add_argument("slot", choices=('1', '2', '3', '4', '5', '6'))
 args = parser.parse_args()
 
-run_pin = run_pin_map[args.rpi]
-gpio4_pin = gpio4_pin_map[args.rpi]
+run_pin = pin_map["slot-" + args.slot]["run"]
+gpio4_pin = pin_map["slot-" + args.slot]["gpio4"]
 gpio4_val = None if args.gpio4 is None else int(args.gpio4[0])
 
 # Use board pin numbers
