@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+
+from datetime import datetime
+from launchpadlib.launchpad import Launchpad
+
+series = 'focal'
+package = 'linux-raspi'
+
+datestr = datetime.now().strftime("%Y-%m-%d")
+title = "{}/{}: Upstream raspberrypi patchset {}".format(series, package,
+                                                         datestr)
+
+print(title)
+
+description = """
+Upstream raspberrypi patchset {}
+
+   Ported from the following raspberrypi branch:
+      rpi-5.4.y
+
+from https://github.com/raspberrypi/linux.git
+
+""".format(datestr)
+
+print(description)
+
+lp = Launchpad.login_with('tools', 'production', version='devel')
+
+project = lp.projects['ubuntu']
+target = lp.load(project.self_link + "/+source/" + package)
+bug = lp.bugs.createBug(target=target, title=title, description=description,
+                        tags=[], private=False)
+
+print("https://bugs.launchpad.net/bugs/%s" % (bug.id))
+
+# Set the status to 'Confirmed'
+for bug_task in bug.bug_tasks_collection:
+    bug_task.status = 'Confirmed'
+    bug_task.lp_save()
+
+# Nominate the series
+ubuntu = lp.distributions['ubuntu']
+for s in ubuntu.series_collection:
+    if s.name == series:
+        nomination = bug.addNomination(target=s)
+        if nomination.canApprove():
+            nomination.approve()
+        break
