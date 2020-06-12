@@ -33,20 +33,21 @@ gpio.setmode(gpio.BOARD)
 # Drive the gpio4 pin
 if gpio4_val is not None:
     print("Pulling gpio4 pin ({}) {}".format(gpio4_pin,
-                                             "high" if gpio4_val else "low"))
+                                             "high" if gpio4_val else "low"),
+          flush=True)
     gpio.setup(gpio4_pin, gpio.OUT, initial=gpio4_val)
 
 # Drive the run pin low and release it again
 if not args.no_reset:
-    print("Pulling run pin ({}) low".format(run_pin))
+    print("Pulling run pin ({}) low".format(run_pin), flush=True)
     gpio.setup(run_pin, gpio.OUT, initial=0)
     sleep(0.5)
-    print("Releasing run pin")
-    gpio.setup(run_pin, gpio.IN)
+    print("Releasing run pin", flush=True)
+    gpio.cleanup(run_pin)
 
 # Wait long enough for the firmware to sample the state of gpio4 pin and
 # then release it again
 if gpio4_val is not None:
     sleep(20)
-    print("Releasing gpio4 pin")
-    gpio.setup(gpio4_pin, gpio.IN)
+    print("Releasing gpio4 pin", flush=True)
+    gpio.cleanup(gpio4_pin)
