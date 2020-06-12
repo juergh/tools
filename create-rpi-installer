@@ -25,24 +25,23 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: create-rpi-installer [-h] [-o FILE] IMAGE
+Usage: create-rpi-installer [-h] IMAGE [OUTFILE]
 
 Create a Raspberry Pi installer kernel and initrd.
 
 Positional arguments:
   IMAGE       The image from which to extract the kernel, initrd and DTBs to
               use as the base for the installer.
+  OUTFILE     The filename of the installer. If not provided, defaults to
+              'rpi-installer.tgz' in the current working directory.
 
 Optional arguments:
-  -h, --help          Show this help text and exit.
-  -o, --outfile FILE  The filename of the installer. If not provided, it
-                      defaults to 'rpi-installer.tgz' in the current working
-                      directory.
+  -h, --help  Show this help text and exit.
 EOF
 }
 
-outfile=${PWD}/rpi-installer.tgz
 image=
+outfile=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -50,13 +49,11 @@ while [ $# -gt 0 ] ; do
 			usage
 			exit
 			;;
-		-o|--outfile)
-			shift
-			outfile=$(readlink -f "${1}")
-			;;
 		*)
 			if [ -z "${image}" ]; then
 				image=${1}
+			elif [ -z "${outfile}" ] ; then
+				outfile=${1}
 			else
 				usage
 				exit 2
@@ -74,6 +71,10 @@ fi
 if ! [ -e "${image}" ] ; then
 	echo "No such image file: ${image}" >&2
 	exit 1
+fi
+
+if [ -z "${outfile}" ] ; then
+	outfile=${PWD}/rpi-installer.tgz
 fi
 
 TMP_DIR=$(mktemp -d)

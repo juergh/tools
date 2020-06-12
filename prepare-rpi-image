@@ -211,12 +211,15 @@ function disable_services()
 function usage()
 {
 	cat <<EOF
-Usage: prepare-rpi-image [-h] [-s] [-w] IMAGE
+Usage: prepare-rpi-image [-h] [-s] [-w] IMAGE [OUTFILE]
 
 Prepare an Ubuntu Raspberry Pi image.
 
 Positional arguments:
   IMAGE           The image to prepare.
+  OUTFILE         The filename of the prepared image. If not provided, defaults
+                  to the original image name with '+prep' appended in the
+                  current working directory.
 
 Optional arguments:
   -h, --help      Show this help text and exit.
@@ -226,6 +229,7 @@ EOF
 }
 
 image=
+outfile=
 SNAPD=1
 WIFI=1
 
@@ -244,6 +248,8 @@ while [ $# -gt 0 ] ; do
 		*)
 			if [ -z "${image}" ] ; then
 				image=${1}
+			elif [ -z "${outfile}" ] ; then
+				outfile=${1}
 			else
 				usage
 				exit 2
@@ -268,15 +274,19 @@ if ! [ -e "rpi-installer.tgz" ] ; then
 	exit 1
 fi
 
+if [ -z "${outfile}" ] ; then
+	outfile=${image##*/}
+	outfile=${outfile/.img/+prep.img}
+fi
+
 echo "--- Copy image"
-image_prep=${image/.img/+prep.img}
-cp "${image}" "${image_prep}"
+cp "${image}" "${outfile}"
 
 TMP_DIR=$(mktemp -d)
 trap out INT TERM EXIT HUP
 
-partmount "${image_prep}" 2 "${TMP_DIR}"
-partmount "${image_prep}" 1 "${TMP_DIR}"/boot/firmware
+partmount "${outfile}" 2 "${TMP_DIR}"
+partmount "${outfile}" 1 "${TMP_DIR}"/boot/firmware
 
 copy_tools
 set_hostname
