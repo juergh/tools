@@ -21,6 +21,8 @@ while true ; do
      12) Core18 arm64
      13) Core18 armhf
 
+     20) Raspberry Pi OS armhf
+
      90) Enter an image name manually
      91) Run a shell
 
@@ -55,6 +57,13 @@ __EOF__
 			;;
 		11)
             image=ubuntu-core-20-armhf+raspi.img.gz
+			;;
+
+		#
+		# Raspberry Pi OS
+		#
+		20)
+			image=raspios_lite_armhf+prep.img.gz
 			;;
 
 		#
