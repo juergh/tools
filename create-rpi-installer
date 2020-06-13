@@ -129,11 +129,16 @@ chmod 755 init
 
 mkdir -p "${OUT_DIR}"/install
 
-# Recreate the initrd and copy the dtbs and other files required by the
-# Raspberry Pi firmware
+# Recreate the initrd
 find . | cpio -H newc -o | gzip -9 > "${OUT_DIR}"/install/initrd.img
+
+# Copy the dtbs and other files required by the Raspberry Pi firmware
 cp "${TMP_DIR}"/boot/firmware/vmlinuz "${TMP_DIR}"/boot/firmware/*.dtb \
-   "${TMP_DIR}"/boot/firmware/README "${OUT_DIR}"/install
+   "${TMP_DIR}"/boot/firmware/README "${OUT_DIR}"/install/
+
+# Create a dummy overlays directory
+mkdir "${OUT_DIR}"/install/overlays
+touch "${OUT_DIR}"/install/overlays/README
 
 # Create cmdline.txt
 cat <<EOF >"${OUT_DIR}"/install/cmdline.txt
@@ -144,7 +149,9 @@ EOF
 cat <<EOF >"${OUT_DIR}"/installcfg.txt
 [all]
 [gpio4=0]
+arm_64bit=0
 os_prefix=install/
+overlay_prefix=overlays/
 kernel=vmlinuz
 initramfs initrd.img
 cmdline=cmdline.txt
