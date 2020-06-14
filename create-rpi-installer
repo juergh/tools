@@ -114,7 +114,7 @@ mount -t devpts -o noexec,nosuid,gid=5,mode=0620 devpts /dev/pts || true
 dhclient
 
 # The location of the installer and images
-server=192.168.99.11/~juergh
+server=192.168.99.11/images
 
 # Download and run the installer
 wget \${server}/install-rpi-image && \
