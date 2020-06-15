@@ -137,6 +137,10 @@ wget \${server}/install-rpi-image && \
 EOF
 chmod 755 init
 
+# Copy the tar binary (required for updating the installer)
+cp "${TMP_DIR}"/usr/bin/tar usr/bin/
+
+# The installer directory
 mkdir -p "${OUT_DIR}"/install
 
 # Recreate the initrd
