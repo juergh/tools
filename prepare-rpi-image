@@ -129,7 +129,7 @@ function set_kernel_cmdline()
 			*) cmdline+=("${opt}") ;;  # Keep the option
 		esac
 	done
-	cmdline+=("console=tty1" "console=ttyS0,115200")
+	cmdline+=("console=tty1" "console=ttyAMA0,115200")
 	echo "${cmdline[*]}" | write_to "${BOOT_DIR}"/cmdline.txt
 
 	cat <<EOF | write_to -a "${BOOT_DIR}"/config.txt

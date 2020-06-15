@@ -156,7 +156,7 @@ touch "${OUT_DIR}"/install/overlays/README
 
 # Create cmdline.txt
 cat <<EOF >"${OUT_DIR}"/install/cmdline.txt
-console=ttyS0,115200
+console=ttyAMA0,115200
 EOF
 
 # Create the installer config snippet
