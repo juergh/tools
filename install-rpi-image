@@ -25,6 +25,7 @@ while true ; do
 
      90) Enter an image name manually
      91) Run a shell
+     92) Update the installer
 
 __EOF__
 
@@ -67,7 +68,7 @@ __EOF__
 			;;
 
 		#
-		# Debug options
+		# Misc options
 		#
 		90)
 			# shellcheck disable=SC2039
@@ -78,6 +79,21 @@ __EOF__
             /bin/sh
 			continue
             ;;
+		92)
+			mkdir -p /tmp/boot
+			if mount /dev/mmcblk0p1 /tmp/boot ; then
+				(
+					cd /tmp/boot && \
+					wget -O - "${server}"/rpi-installer.tgz | tar -xzvf -
+				)
+				umount /tmp/boot
+			fi
+			continue
+			;;
+
+		#
+		# Default
+		#
         *)
 			continue
             ;;
