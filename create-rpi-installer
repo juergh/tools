@@ -13,7 +13,12 @@ function out()
 	partumount "${TMP_DIR}" || true
 	rmdir "${TMP_DIR}" || true
 
-	rm -rf "${INITRD_DIR}" "${OUT_DIR}"
+	if [ "${KEEP}" -eq 1 ] ; then
+		mv "${INITRD_DIR}" "${OUT_DIR}"/initrd.d
+		echo "Temporary output directory: ${OUT_DIR}"
+	else
+		rm -rf "${INITRD_DIR}" "${OUT_DIR}"
+	fi
 
 	if [ "${rc}" -ne 0 ] ; then
 		echo "Script failed" >&2
@@ -37,14 +42,19 @@ Positional arguments:
 
 Optional arguments:
   -h, --help  Show this help text and exit.
+  -k, --keep  Keep the temporary initrd and installer directories.
 EOF
 }
 
+KEEP=0
 image=
 outfile=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
+		-k|--keep)
+			KEEP=1
+			;;
 		-h|--help)
 			usage
 			exit
