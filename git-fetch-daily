@@ -14,10 +14,6 @@ fetch_repo()
 
 fetch_all()
 {
-	# Current working directory
-	cwd=$(dirname "$(readlink -e "${0}")")
-	cd "${cwd}"
-
 	# Fetch the main linux repo first (since all the others use it as a
 	# reference)
 	fetch_repo linux.git
@@ -33,5 +29,9 @@ fetch_all()
 		fi
 	done
 }
+
+# Current working directory
+cwd=$(dirname "$(readlink -e "${0}")")
+cd "${cwd}"
 
 fetch_all 2>&1 | tee git-fetch-daily.log
