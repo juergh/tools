@@ -223,10 +223,21 @@ function disable_services()
 
 function enable_ssh()
 {
+	local user
+
 	echo "--- Enable ssh"
 
 	sudo ln -s /lib/systemd/system/ssh.service "${TMP_DIR}"/etc/systemd/system/sshd.service
 	sudo ln -s /lib/systemd/system/ssh.service "${TMP_DIR}"/etc/systemd/system/multi-user.target.wants/ssh.service
+
+	# Inject the SSH public key
+	user=${SUDO_USER:-${USER}}
+	if [ -d "${TMP_DIR}"/home/pi ] ; then
+		sudo mkdir -p "${TMP_DIR}"/home/pi/.ssh
+		cat /home/"${user}"/.ssh/id_rsa.pub | write_to "${TMP_DIR}"/home/pi/.ssh/authorized_keys
+		sudo chmod 700 "${TMP_DIR}"/home/pi/.ssh
+		sudo chown -R 1000:1000 "${TMP_DIR}"/home/pi/.ssh
+	fi
 }
 
 function usage()
