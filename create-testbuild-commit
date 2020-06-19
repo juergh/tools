@@ -50,8 +50,11 @@ done
 
 trap out EXIT INT TERM HUP
 
-# shellcheck disable=SC1091
-. debian/debian.env
+DEBIAN=debian
+if [ -e debian/debian.env ] ; then
+	# shellcheck disable=SC1091
+	. debian/debian.env
+fi
 changelog=${DEBIAN}/changelog
 
 # Check the release name
