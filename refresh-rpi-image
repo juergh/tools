@@ -99,6 +99,7 @@ trap out EXIT INT TERM HUP
 
 # Download and decompress the images
 if [ "${download}" -eq 1 ] || [ "${all}" -eq 1 ] ; then
+	echo "-- Downloading images"
 	rm -f ./*.img
 	download_ubuntu
 	download_raspios
@@ -106,11 +107,13 @@ fi
 
 # Create the installer
 if [ "${installer}" -eq 1 ] || [ "${all}" -eq 1 ] ; then
+	echo "-- Creating installer"
 	create-rpi-installer focal-preinstalled-server-armhf+raspi.img
 fi
 
 # Prepare and compress the images
 if [ "${prepare}" -eq 1 ] || [ "${all}" -eq 1 ] ; then
+	echo "Preparing images"
 	for image in *.img ; do
 		image_prep=${image%.img}+prep.img
 		echo "-- ${image}"
