@@ -126,13 +126,14 @@ while ! [ -b /dev/mmcblk0p1 ] ; do
     sleep .5
 done
 
-# Mount the boot partition and run the installer
+# Copy the installer
 mkdir -p /boot
 mount /dev/mmcblk0p1 /boot
-/boot/install/install-rpi-image && \
-   umount /boot && \
-   reboot -f && \
-   exit 0
+cp /boot/install/install-rpi-image .
+umount /boot
+
+# Run the installer
+./install-rpi-image
 
 # Fall-back
 /bin/sh

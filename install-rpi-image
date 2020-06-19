@@ -85,8 +85,12 @@ __EOF__
 			continue
             ;;
 		92)
-			wget -O - "${images_url}"/rpi-installer.tgz | \
-				( cd /boot && tar -xzvf - )
+			if mount /dev/mmcblk0p1 /boot ; then
+				wget -O - "${images_url}"/rpi-installer.tgz | \
+					( cd /boot && tar -xzvf - )
+				sync
+				umount /boot
+			fi
 			continue
 			;;
 		99)
@@ -104,7 +108,8 @@ __EOF__
     esac
 
     echo "--- Installing ${image}"
-    wget -O - "${images_url}"/"${image}" | gunzip -c > /dev/mmcblk0 && \
-		sync && \
-		exit 0
+    if wget -O - "${images_url}"/"${image}" | gunzip -c > /dev/mmcblk0 ; then
+		sync
+		reboot -f
+	fi
 done
