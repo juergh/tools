@@ -99,6 +99,7 @@ trap out EXIT INT TERM HUP
 
 # Download and decompress the images
 if [ "${download}" -eq 1 ] || [ "${all}" -eq 1 ] ; then
+	rm -f ./*.img
 	download_ubuntu
 	download_raspios
 fi
@@ -111,10 +112,10 @@ fi
 # Prepare and compress the images
 if [ "${prepare}" -eq 1 ] || [ "${all}" -eq 1 ] ; then
 	for image in *.img ; do
-		prepare-rpi-image "${image}"
-	done
-	for image in *+prep.img ; do
-		gzip -f "${image}"
+		image_prep=${image%.img}+prep.img
+		echo "-- ${image}"
+		prepare-rpi-image "${image}" "${image_prep}"
+		gzip -f "${image_prep}"
 	done
 fi
 
