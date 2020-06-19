@@ -185,13 +185,16 @@ EOF
 
 function create_cloud_init_config()
 {
+	local user
+
 	echo "--- Create cloud-init config"
 
+	user=${SUDO_USER:-${USER}}
 	cat <<EOF | \
 		write_to "${TMP_DIR}"/etc/cloud/cloud.cfg.d/99-prepare-rpi-image.cfg
 # Module ssh
 ssh_authorized_keys:
-  - $(cat ~/.ssh/id_rsa.pub)
+  - $(cat /home/"${user}"/.ssh/id_rsa.pub)
 
 # Module set-password
 ssh_pwauth: true
