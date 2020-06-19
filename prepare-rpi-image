@@ -234,7 +234,7 @@ function enable_ssh()
 	user=${SUDO_USER:-${USER}}
 	if [ -d "${TMP_DIR}"/home/pi ] ; then
 		sudo mkdir -p "${TMP_DIR}"/home/pi/.ssh
-		cat /home/"${user}"/.ssh/id_rsa.pub | write_to "${TMP_DIR}"/home/pi/.ssh/authorized_keys
+		write_to "${TMP_DIR}"/home/pi/.ssh/authorized_keys < /home/"${user}"/.ssh/id_rsa.pub
 		sudo chmod 700 "${TMP_DIR}"/home/pi/.ssh
 		sudo chown -R 1000:1000 "${TMP_DIR}"/home/pi/.ssh
 	fi
