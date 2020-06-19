@@ -1,0 +1,122 @@
+#!/bin/bash -eu
+#
+# Download and prepare Raspberry Pi images
+#
+
+function out()
+{
+	local rc=$?
+
+	trap - EXIT INT TERM HUP
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function download_ubuntu()
+{
+	declare -A flavors
+	local release flavor arch image
+
+	flavors=(
+		[focal]=raspi
+		[bionic]=raspi3
+	)
+
+	for release in focal bionic ; do
+		flavor=${flavors["${release}"]}
+		for arch in armhf arm64 ; do
+			image=${release}-preinstalled-server-${arch}+${flavor}.img.xz
+			wget -O "${image}" http://cdimage.ubuntu.com/ubuntu-server/"${release}"/daily-preinstalled/current/"${image}"
+			unxz -f "${image}"
+		done
+	done
+}
+
+function download_raspios()
+{
+	local image
+
+	image=raspios_lite_armhf.zip
+	wget -O "${image}" https://downloads.raspberrypi.org/raspios_lite_armhf_latest
+	unzip "${image}"
+	mv 20*raspios*.img "${image/.zip/.img}"
+	rm -f "${image}"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: refresh-rpi-image [-d] [-h] [i] [-p]
+
+Download and prepare Raspberry Pi images.
+
+Optional arguments:
+  -d, --download   Download new images.
+  -h, --help       Show this help text and exit.
+  -i, --installer  Create the installer tarball.
+  -p, --prepare    Prepare the downloaded images.
+
+Note: Not providing any option is equivalent to -d -i -p.
+EOF
+}
+
+download=0
+installer=0
+prepare=0
+all=1
+
+while [ $# -gt 0 ] ; do
+    case "${1}" in
+		-d|--download)
+			download=1
+			all=0
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-i|--installer)
+			installer=1
+			all=0
+			;;
+		-p|--prepare)
+			prepare=1
+			all=0
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+trap out EXIT INT TERM HUP
+
+# Download and decompress the images
+if [ "${download}" -eq 1 ] || [ "${all}" -eq 1 ] ; then
+	download_ubuntu
+	download_raspios
+fi
+
+# Create the installer
+if [ "${installer}" -eq 1 ] || [ "${all}" -eq 1 ] ; then
+	create-rpi-installer focal-preinstalled-server-armhf+raspi.img
+fi
+
+# Prepare and compress the images
+if [ "${prepare}" -eq 1 ] || [ "${all}" -eq 1 ] ; then
+	for image in *.img ; do
+		prepare-rpi-image "${image}"
+	done
+	for image in *+prep.img ; do
+		gzip -f "${image}"
+	done
+fi
+
+# Cleanup
+rm -f ./*.img
