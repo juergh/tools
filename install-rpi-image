@@ -1,11 +1,15 @@
 #!/bin/sh -u
+#
+# Download and install a Raspberry Pi image
+#
 
-server=$1
-hostname=$2
+echo "--- Running installer"
 
-wget -O - "${server}/${hostname}" | gunzip -c > /dev/mmcblk0 && \
-	sync && \
-	exit 0
+# Get an IP
+dhclient
+
+# The location of the images
+images_url=192.168.99.11/images
 
 while true ; do
     cat <<__EOF__
@@ -26,6 +30,7 @@ while true ; do
      90) Enter an image name manually
      91) Run a shell
      92) Update the installer
+     99) Reboot
 
 __EOF__
 
@@ -80,14 +85,13 @@ __EOF__
 			continue
             ;;
 		92)
-			mkdir -p /tmp/boot
-			if mount /dev/mmcblk0p1 /tmp/boot ; then
-				(
-					cd /tmp/boot && \
-					wget -O - "${server}"/rpi-installer.tgz | tar -xzvf -
-				)
-				umount /tmp/boot
-			fi
+			wget -O - "${images_url}"/rpi-installer.tgz | \
+				( cd /boot && tar -xzvf - )
+			continue
+			;;
+		99)
+			sync
+			reboot -f
 			continue
 			;;
 
@@ -100,7 +104,7 @@ __EOF__
     esac
 
     echo "--- Installing ${image}"
-    wget -O - "${server}/${image}" | gunzip -c > /dev/mmcblk0 && \
+    wget -O - "${images_url}"/"${image}" | gunzip -c > /dev/mmcblk0 && \
 		sync && \
 		exit 0
 done

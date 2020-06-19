@@ -30,7 +30,7 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: create-rpi-installer [-h] IMAGE [OUTFILE]
+Usage: create-rpi-installer [-h] [-k] IMAGE [OUTFILE]
 
 Create a Raspberry Pi installer kernel and initrd.
 
@@ -102,10 +102,10 @@ cd "${INITRD_DIR}"
 lz4cat "${TMP_DIR}"/boot/firmware/initrd.img | cpio -i
 
 # Inject the installer init script
-cat <<EOF > init
+cat <<EOF >init
 #!/bin/sh
 
-echo "--- Loading installer initrd ..."
+echo "--- Loading installer initrd"
 
 [ -d /dev ] || mkdir -m 0755 /dev
 [ -d /root ] || mkdir -m 0700 /root
@@ -120,17 +120,19 @@ mount -t devtmpfs -o nosuid,mode=0755 udev /dev
 mkdir /dev/pts
 mount -t devpts -o noexec,nosuid,gid=5,mode=0620 devpts /dev/pts || true
 
-# Get an IP
-dhclient
+# Wait for the boot partition
+echo "--- Waiting for /dev/mmcblk0p1"
+while ! [ -b /dev/mmcblk0p1 ] ; do
+    sleep .5
+done
 
-# The location of the installer and images
-server=192.168.99.11/images
-
-# Download and run the installer
-wget \${server}/install-rpi-image && \
-    /bin/sh ./install-rpi-image \${server} && \
-    reboot -f && \
-    exit 0
+# Mount the boot partition and run the installer
+mkdir -p /boot
+mount /dev/mmcblk0p1 /boot
+/boot/install/install-rpi-image && \
+   umount /boot && \
+   reboot -f && \
+   exit 0
 
 # Fall-back
 /bin/sh
@@ -145,6 +147,9 @@ mkdir -p "${OUT_DIR}"/install
 
 # Recreate the initrd
 find . | cpio -H newc -o | gzip -9 > "${OUT_DIR}"/install/initrd.img
+
+# Copy the installer script
+cp "$(dirname "$(readlink -e "${0}")")"/install-rpi-image "${OUT_DIR}"/install/
 
 # Copy the dtbs and other files required by the Raspberry Pi firmware
 cp "${TMP_DIR}"/boot/firmware/vmlinuz "${TMP_DIR}"/boot/firmware/*.dtb \
