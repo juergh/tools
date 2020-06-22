@@ -231,6 +231,8 @@ From $(git log --format=%H -1) Mon Sep 17 00:00:00 2001
 From: ${name} <${email}>
 Date: $(date -R)
 Subject: [${SUBJECT_PREFIX/PATCH/PULL}] ${subject}
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 EOF
 	git log --format=%b "${start}".. | grep '^BugLink: ' | sort -r -u
@@ -248,15 +250,16 @@ EOF
 function usage()
 {
 	cat <<EOF
-Usage: git-deb [-c] [-d] [-h] [-i MSG_ID] [-r RELEASE] [-v NUM] COMMAND [ARGS]
+Usage: git-deb [-c] [-d] [-h] [-i MSG_ID] [-r RELEASE] [-v NUM] COMMAND [OPTS]
 
 Helper script for managing Ubuntu package git repos.
 
 Supported commands:
-  format-patch         Create a patch (series).
-  send-patch [COMMIT]  Send the commit COMMIT as a patch email. If COMMIT is
-                       not provided, defaults to HEAD.
-  request-pull         Create a pull request.
+  format-patch [OPTS]       Create a patch (series). OPTS are additional
+                            options for 'git format-patch'.
+  send-patch [COMMIT]       Send the commit COMMIT as a patch email. If COMMIT
+                            is not provided, defaults to HEAD.
+  request-pull              Create a pull request.
 
 Optional arguments:
   -c, --cover-letter        Add a cover letter.
@@ -287,7 +290,6 @@ SUBJECT_PREFIX=
 TOKEN=
 
 cmd=
-args=()
 
 while [ ${#} -gt 0 ] ; do
 	case ${1} in
@@ -331,7 +333,6 @@ while [ ${#} -gt 0 ] ; do
 				pr_error "Unexpected argument: ${1}" >&2
 				exit 1
 			fi
-			args=("${@}")
 			break
 			;;
 	esac
@@ -344,4 +345,4 @@ if [ -z "${cmd}" ] ; then
 fi
 
 set_globals
-do_"${cmd}" "${args[@]}"
+do_"${cmd}" "${@}"
