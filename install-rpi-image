@@ -12,7 +12,7 @@ dhclient
 images_url=192.168.99.11/images
 
 while true ; do
-    cat <<__EOF__
+	cat <<__EOF__
 
 --- Select an image to install:
       1) Focal arm64
@@ -35,34 +35,40 @@ while true ; do
 __EOF__
 
 	# shellcheck disable=SC2039
-    echo -n "--- Choice: "
-    read -r tmp
+	echo -n "--- Choice: "
+	read -r tmp
 
-    case "${tmp}" in
+	case "${tmp}" in
 		#
 		# Ubuntu Server
 		#
-        1)
-            image=focal-preinstalled-server-arm64+raspi+prep.img.gz
-            ;;
-        2)
-            image=focal-preinstalled-server-armhf+raspi+prep.img.gz
-            ;;
-        3)
-            image=bionic-preinstalled-server-arm64+raspi3+prep.img.gz
-            ;;
-        4)
-            image=bionic-preinstalled-server-armhf+raspi3+prep.img.gz
-            ;;
+		1)
+			image=focal-preinstalled-server-arm64+raspi+prep.img.gz
+			;;
+		2)
+			image=focal-preinstalled-server-armhf+raspi+prep.img.gz
+			;;
+		3)
+			image=bionic-preinstalled-server-arm64+raspi3+prep.img.gz
+			;;
+		4)
+			image=bionic-preinstalled-server-armhf+raspi3+prep.img.gz
+			;;
 
 		#
 		# Ubuntu Core
 		#
 		10)
-            image=ubuntu-core-20-arm64+raspi.img.gz
+			image=ubuntu-core-20-arm64+raspi.img.gz
 			;;
 		11)
-            image=ubuntu-core-20-armhf+raspi.img.gz
+			image=ubuntu-core-20-armhf+raspi.img.gz
+			;;
+		12)
+			image=ubuntu-core-18-arm64+raspi.img.gz
+			;;
+		13)
+			image=ubuntu-core-18-armhf+raspi.img.gz
 			;;
 
 		#
@@ -80,14 +86,14 @@ __EOF__
 			echo -n "--- Image name: "
 			read -r image
 			;;
-        91)
-            /bin/sh
+		91)
+			/bin/sh
 			continue
-            ;;
+			;;
 		92)
 			if mount /dev/mmcblk0p1 /boot ; then
 				wget -O - "${images_url}"/rpi-installer.tgz | \
-					( cd /boot && tar -xzvf - )
+					( cd /boot && tar --no-same-owner -xzvf - )
 				sync
 				umount /boot
 			fi
@@ -102,13 +108,13 @@ __EOF__
 		#
 		# Default
 		#
-        *)
+		*)
 			continue
-            ;;
-    esac
+			;;
+	esac
 
-    echo "--- Installing ${image}"
-    if wget -O - "${images_url}"/"${image}" | gunzip -c > /dev/mmcblk0 ; then
+	echo "--- Installing ${image}"
+	if wget -O - "${images_url}"/"${image}" | gunzip -c > /dev/mmcblk0 ; then
 		sync
 		reboot -f
 	fi
