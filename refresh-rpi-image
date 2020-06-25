@@ -47,10 +47,30 @@ function download_raspios()
 	rm -f "${image}"
 }
 
+function download_core()
+{
+	declare -A flavors
+	local release flavor arch image
+
+	flavors=(
+		[20]=raspi
+		[18]=raspi3
+	)
+
+	for release in 20 18 ; do
+		flavor=${flavors["${release}"]}
+		for arch in armhf arm64 ; do
+			image=ubuntu-core-${release}-${arch}+${flavor}.img.xz
+			wget -O "${image}" http://cdimage.ubuntu.com/ubuntu-core/"${release}"/beta/current/"${image}"
+			unxz -f "${image}"
+		done
+	done
+}
+
 function usage()
 {
 	cat <<EOF
-Usage: refresh-rpi-image [-d] [-h] [i] [-p]
+Usage: refresh-rpi-image [-d] [-h] [-i] [-p]
 
 Download and prepare Raspberry Pi images.
 
@@ -102,6 +122,7 @@ if [ "${download}" -eq 1 ] || [ "${all}" -eq 1 ] ; then
 	echo "-- Downloading images"
 	rm -f ./*.img
 	download_ubuntu
+	download_core
 	download_raspios
 fi
 
