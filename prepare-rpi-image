@@ -7,8 +7,8 @@ function out()
 	trap - INT TERM EXIT HUP
 
 	partumount "${BOOT_DIR}" || true
-	partumount "${TMP_DIR}" || true
-	rmdir "${TMP_DIR}" || true
+	partumount "${ROOTFS_DIR}" || true
+	rmdir "${BOOT_DIR}" "${ROOTFS_DIR}" || true
 
 	if [ "${rc}" -ne 0 ] ; then
 		echo "Script failed" >&2
@@ -31,7 +31,7 @@ function copy_tools()
 	echo "--- Copy tools"
 
 	# shellcheck disable=SC2230
-	sudo cp "$(which collect-rpi-data)" "${TMP_DIR}"/usr/local/bin/
+	sudo cp "$(which collect-rpi-data)" "${ROOTFS_DIR}"/usr/local/bin/
 }
 
 function set_hostname()
@@ -39,7 +39,7 @@ function set_hostname()
 	echo "--- Set hostname"
 
 	# The script that determines the hostname dynamically
-	cat <<EOF | write_to "${TMP_DIR}"/usr/local/bin/set-hostname
+	cat <<EOF | write_to "${ROOTFS_DIR}"/usr/local/bin/set-hostname
 #!/bin/bash
 
 if ! [ -e /proc/device-tree/model ] ; then
@@ -60,10 +60,10 @@ hostname=rpi-\${hostname,,}-\${serial: -4}
 echo "\${hostname}" > /etc/hostname
 hostname "\${hostname}"
 EOF
-	sudo chmod 755 "${TMP_DIR}"/usr/local/bin/set-hostname
+	sudo chmod 755 "${ROOTFS_DIR}"/usr/local/bin/set-hostname
 
 	# Systemd service file
-	cat <<EOF | write_to "${TMP_DIR}"/etc/systemd/system/set-hostname.service
+	cat <<EOF | write_to "${ROOTFS_DIR}"/etc/systemd/system/set-hostname.service
 # prepare-rpi-image: Set the hostname
 
 [Unit]
@@ -83,7 +83,7 @@ EOF
 
 	# Enable the service
 	sudo ln -s /etc/systemd/system/set-hostname.service \
-		 "${TMP_DIR}"/etc/systemd/system/multi-user.target.wants/set-hostname.service
+		 "${ROOTFS_DIR}"/etc/systemd/system/multi-user.target.wants/set-hostname.service
 }
 
 function enable_wifi()
@@ -102,7 +102,7 @@ function enable_wifi()
 	wifi_passphrase=$(pass show local/wifi | grep '^passphrase: ')
 	wifi_passphrase=${wifi_passphrase#* }
 
-	cat <<EOF | write_to "${TMP_DIR}"/etc/netplan/99-prepare-rpi-image.yaml
+	cat <<EOF | write_to "${ROOTFS_DIR}"/etc/netplan/99-prepare-rpi-image.yaml
 network:
     wifis:
         wlan0:
@@ -139,8 +139,8 @@ function set_kernel_cmdline()
 enable_uart=1
 EOF
 
-	if [ -e "${TMP_DIR}"/etc/default/flash-kernel ] ; then
-		cat <<EOF | write_to "${TMP_DIR}"/etc/default/flash-kernel
+	if [ -e "${ROOTFS_DIR}"/etc/default/flash-kernel ] ; then
+		cat <<EOF | write_to "${ROOTFS_DIR}"/etc/default/flash-kernel
 LINUX_KERNEL_CMDLINE=
 LINUX_KERNEL_CMDLINE_DEFAULTS=
 EOF
@@ -169,7 +169,7 @@ function create_prep_script()
 {
 	echo "--- Create prep script"
 
-	cat <<EOF | write_to "${TMP_DIR}"/usr/local/bin/prepare-rpi-image
+	cat <<EOF | write_to "${ROOTFS_DIR}"/usr/local/bin/prepare-rpi-image
 #!/bin/bash
 
 echo "--- Waiting for cloud-init to finish"
@@ -180,7 +180,7 @@ done
 echo "--- Setting password"
 echo "ubuntu:ubuntu" | chpasswd
 EOF
-	sudo chmod 755 "${TMP_DIR}"/usr/local/bin/prepare-rpi-image
+	sudo chmod 755 "${ROOTFS_DIR}"/usr/local/bin/prepare-rpi-image
 }
 
 function create_cloud_init_config()
@@ -191,7 +191,7 @@ function create_cloud_init_config()
 
 	user=${SUDO_USER:-${USER}}
 	cat <<EOF | \
-		write_to "${TMP_DIR}"/etc/cloud/cloud.cfg.d/99-prepare-rpi-image.cfg
+		write_to "${ROOTFS_DIR}"/etc/cloud/cloud.cfg.d/99-prepare-rpi-image.cfg
 # Module ssh
 ssh_authorized_keys:
   - $(cat /home/"${user}"/.ssh/id_rsa.pub)
@@ -217,7 +217,7 @@ function disable_services()
 
 	for service in "${services[@]}" ; do
 		echo "---   ${service}"
-		sudo rm -f "${TMP_DIR}"/{etc,lib}/systemd/system/*.wants/"${service}".*
+		sudo rm -f "${ROOTFS_DIR}"/{etc,lib}/systemd/system/*.wants/"${service}".*
 	done
 }
 
@@ -227,16 +227,16 @@ function enable_ssh()
 
 	echo "--- Enable ssh"
 
-	sudo ln -s /lib/systemd/system/ssh.service "${TMP_DIR}"/etc/systemd/system/sshd.service
-	sudo ln -s /lib/systemd/system/ssh.service "${TMP_DIR}"/etc/systemd/system/multi-user.target.wants/ssh.service
+	sudo ln -s /lib/systemd/system/ssh.service "${ROOTFS_DIR}"/etc/systemd/system/sshd.service
+	sudo ln -s /lib/systemd/system/ssh.service "${ROOTFS_DIR}"/etc/systemd/system/multi-user.target.wants/ssh.service
 
 	# Inject the SSH public key
 	user=${SUDO_USER:-${USER}}
-	if [ -d "${TMP_DIR}"/home/pi ] ; then
-		sudo mkdir -p "${TMP_DIR}"/home/pi/.ssh
-		write_to "${TMP_DIR}"/home/pi/.ssh/authorized_keys < /home/"${user}"/.ssh/id_rsa.pub
-		sudo chmod 700 "${TMP_DIR}"/home/pi/.ssh
-		sudo chown -R 1000:1000 "${TMP_DIR}"/home/pi/.ssh
+	if [ -d "${ROOTFS_DIR}"/home/pi ] ; then
+		sudo mkdir -p "${ROOTFS_DIR}"/home/pi/.ssh
+		write_to "${ROOTFS_DIR}"/home/pi/.ssh/authorized_keys < /home/"${user}"/.ssh/id_rsa.pub
+		sudo chmod 700 "${ROOTFS_DIR}"/home/pi/.ssh
+		sudo chown -R 1000:1000 "${ROOTFS_DIR}"/home/pi/.ssh
 	fi
 }
 
@@ -314,27 +314,38 @@ fi
 echo "--- Copy image"
 cp "${image}" "${outfile}"
 
-TMP_DIR=$(mktemp -d)
+BOOT_DIR=$(mktemp -d)
+ROOTFS_DIR=$(mktemp -d)
 trap out INT TERM EXIT HUP
 
-partmount "${outfile}" 2 "${TMP_DIR}"
-
-BOOT_DIR=${TMP_DIR}/boot/firmware
-if ! [ -d "${BOOT_DIR}" ] ; then
-	BOOT_DIR=${TMP_DIR}/boot
-fi
+# Mount the boot partition
 partmount "${outfile}" 1 "${BOOT_DIR}"
+if ! [ -e "${BOOT_DIR}"/config.txt ] ; then
+	echo "config.txt not found in boot partition" >&2
+	exit 1
+fi
 
-vendor=$(awk -F= '$1 == "ID" { print $2 }' "${TMP_DIR}"/etc/os-release)
+# Determine the image vendor
+if [ -d "${BOOT_DIR}"/snaps ] ; then
+	vendor="core20"
+else
+	# Mount the rootfs partition
+	partmount "${outfile}" 2 "${ROOTFS_DIR}"
+	if [ -d "${ROOTFS_DIR}"/system-data ] ; then
+		vendor="core18"
+	elif [ -e "${ROOTFS_DIR}"/etc/os-release ] ; then
+		vendor=$(awk -F= '$1 == "ID" { print $2 }' "${ROOTFS_DIR}"/etc/os-release)
+	else
+		vendor="unknown"
+	fi
+fi
 echo "--- Vendor is ${vendor}"
 
-copy_tools
-set_hostname
-set_kernel_cmdline
-install_rpi_installer
-disable_services
-
 case "${vendor}" in
+	core*)
+		install_rpi_installer
+		exit
+		;;
 	ubuntu)
 		enable_wifi
 		create_prep_script
@@ -347,3 +358,9 @@ case "${vendor}" in
 		echo "Unknown vendor: ${vendor}" >&2
 		;;
 esac
+
+copy_tools
+set_hostname
+set_kernel_cmdline
+install_rpi_installer
+disable_services
