@@ -138,7 +138,7 @@ if [ -n "${NBD_DEVICE}" ] ; then
 else
 	# Get the start and size of the specified partition
 	IFS=" " read -r start sectors < <(partx -o START,SECTORS -g \
-											-n "${partnum}" "${image}")
+											-n "${partnum}" "${image}") || true
 	if [ -z "${start}" ] || [ -z "${sectors}" ] ; then
 		echo "Failed to determine start and/or size of partition: ${partnum}" >&2
 		exit 1
