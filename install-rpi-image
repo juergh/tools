@@ -59,16 +59,16 @@ __EOF__
 		# Ubuntu Core
 		#
 		10)
-			image=ubuntu-core-20-arm64+raspi.img.gz
+			image=ubuntu-core-20-arm64+raspi+prep.img.gz
 			;;
 		11)
-			image=ubuntu-core-20-armhf+raspi.img.gz
+			image=ubuntu-core-20-armhf+raspi+prep.img.gz
 			;;
 		12)
-			image=ubuntu-core-18-arm64+raspi.img.gz
+			image=ubuntu-core-18-arm64+raspi+prep.img.gz
 			;;
 		13)
-			image=ubuntu-core-18-armhf+raspi.img.gz
+			image=ubuntu-core-18-armhf+raspi+prep.img.gz
 			;;
 
 		#
