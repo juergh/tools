@@ -21,10 +21,10 @@ function out()
 function usage()
 {
 cat <<EOF
-Usage: diff-commits [-h] [-w NUM] COMMIT1 COMMIT2
+Usage: diff-git-commits [-h] [-w NUM] COMMIT COMMIT
 
-Show the differences between the two commits COMMIT1 and COMMIT2 side-by-side
-and color-highlight the differences.
+Show the differences between the two provided commits side-by-side and
+color-highlight the differences.
 
 Positional arguments:
   COMMIT           A git commit hash or a patch file.
