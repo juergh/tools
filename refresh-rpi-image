@@ -16,132 +16,109 @@ function out()
 	exit "${rc}"
 }
 
-function download_ubuntu()
+function download_image()
 {
+	local release=${1} arch=${2}
 	declare -A flavors
-	local release flavor arch image
 
 	flavors=(
-		[focal]=raspi
 		[bionic]=raspi3
+		[focal]=raspi
+		[core18]=raspi3
+		[core20]=raspi
 	)
 
-	for release in focal bionic ; do
-		flavor=${flavors["${release}"]}
-		for arch in armhf arm64 ; do
-			image=${release}-preinstalled-server-${arch}+${flavor}.img.xz
-			wget -O "${image}" http://cdimage.ubuntu.com/ubuntu-server/"${release}"/daily-preinstalled/current/"${image}"
-			unxz -f "${image}"
-		done
-	done
-}
+	echo "--- Downloading image"
 
-function download_raspios()
-{
-	local image
+	if [ "${arch}" != "armhf" ] && [ "${arch}" != "arm64" ] ; then
+		echo "Invalid architecture: ${arch}" >&2
+		exit 1
+	fi
 
-	image=raspios_lite_armhf.zip
-	wget -O "${image}" https://downloads.raspberrypi.org/raspios_lite_armhf_latest
-	unzip "${image}"
-	mv 20*raspios*.img "${image/.zip/.img}"
-	rm -f "${image}"
-}
-
-function download_core()
-{
-	declare -A flavors
-	local release flavor arch image
-
-	flavors=(
-		[20]=raspi
-		[18]=raspi3
-	)
-
-	for release in 20 18 ; do
-		flavor=${flavors["${release}"]}
-		for arch in armhf arm64 ; do
-			image=ubuntu-core-${release}-${arch}+${flavor}.img.xz
-			wget -O "${image}" http://cdimage.ubuntu.com/ubuntu-core/"${release}"/beta/current/"${image}"
-			unxz -f "${image}"
-		done
-	done
+	case "${release}" in
+		bionic|focal)
+			IMAGE=${release}-preinstalled-server-${arch}+${flavors[${release}]}.img
+			wget -O "${IMAGE}".xz http://cdimage.ubuntu.com/ubuntu-server/"${release}"/daily-preinstalled/current/"${IMAGE}".xz
+			unxz -f "${IMAGE}".xz
+			;;
+		core18|core20)
+			IMAGE=ubuntu-core-${release#core}-${arch}+${flavors[${release}]}.img
+			wget -O "${IMAGE}".xz http://cdimage.ubuntu.com/ubuntu-core/"${release}"/beta/current/"${IMAGE}".xz
+			unxz -f "${IMAGE}".xz
+			;;
+		raspberrypi)
+			IMAGE=raspios_lite_armhf.img
+			wget -O "${IMAGE}".zip https://downloads.raspberrypi.org/raspios_lite_armhf_latest
+			unzip "${IMAGE}".zip
+			mv 20*raspios*.img "${IMAGE}"
+			rm -f "${IMAGE}".zip
+			;;
+		*)
+			echo "Invalid release: ${release}" >&2
+			exit 1
+			;;
+	esac
 }
 
 function usage()
 {
 	cat <<EOF
-Usage: refresh-rpi-image [-d] [-h] [-i] [-p]
+Usage: refresh-rpi-image [-h] IMAGE
 
-Download and prepare Raspberry Pi images.
+Download and prepare a Raspberry Pi image.
+
+Positional argument:
+  IMAGE       The image to prepare. If it's an existing image file then that
+              image is prepared, otherwise the image will be downloaded first.
+              In that case, IMAGE needs to be in the form <release>-<arch>,
+              like focal-arm64, core18-armhf, raspios-armhf, ...
 
 Optional arguments:
-  -d, --download   Download new images.
-  -h, --help       Show this help text and exit.
-  -i, --installer  Create the installer tarball.
-  -p, --prepare    Prepare the downloaded images.
-
-Note: Not providing any option is equivalent to -d -i -p.
+  -h, --help  Show this help text and exit.
 EOF
 }
 
-download=0
-installer=0
-prepare=0
-all=1
+IMAGE=
 
 while [ $# -gt 0 ] ; do
     case "${1}" in
-		-d|--download)
-			download=1
-			all=0
-			;;
 		-h|--help)
 			usage
 			exit
 			;;
-		-i|--installer)
-			installer=1
-			all=0
-			;;
-		-p|--prepare)
-			prepare=1
-			all=0
-			;;
 		*)
-			echo "Invalid argument: ${1}" >&2
-			exit 2
+			if [ -z "${IMAGE}" ] ; then
+				IMAGE=${1}
+			else
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
 			;;
 	esac
 	shift
 done
 
+if [ -z "${IMAGE}" ] ; then
+	usage >&2
+	exit 2
+fi
+
 trap out EXIT INT TERM HUP
 
-# Download and decompress the images
-if [ "${download}" -eq 1 ] || [ "${all}" -eq 1 ] ; then
-	echo "-- Downloading images"
-	rm -f ./*.img
-	download_ubuntu
-	download_core
-	download_raspios
+if ! [ -e "${IMAGE}" ] ; then
+	release=${IMAGE%-*}
+	arch=${IMAGE#*-}
+	download_image "${release}" "${arch}"
 fi
 
-# Create the installer
-if [ "${installer}" -eq 1 ] || [ "${all}" -eq 1 ] ; then
-	echo "-- Creating installer"
-	create-rpi-installer focal-preinstalled-server-armhf+raspi.img
+if [ "${IMAGE##*/}" = "focal-preinstalled-server-armhf+raspi.img" ] ; then
+	echo "--- Creating installer"
+	create-rpi-installer "${IMAGE}"
 fi
 
-# Prepare and compress the images
-if [ "${prepare}" -eq 1 ] || [ "${all}" -eq 1 ] ; then
-	echo "Preparing images"
-	for image in *.img ; do
-		image_prep=${image%.img}+prep.img
-		echo "-- ${image}"
-		prepare-rpi-image "${image}" "${image_prep}"
-		gzip -f "${image_prep}"
-	done
-fi
+echo "--- Preparing image"
+image_prep=${IMAGE%.img}+prep.img
+prepare-rpi-image "${IMAGE}" "${image_prep}"
+gzip -f "${image_prep}"
 
-# Cleanup
-rm -f ./*.img
+echo "Created image: ${image_prep}.gz"
