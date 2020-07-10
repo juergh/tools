@@ -116,13 +116,18 @@ EOF
 
 function set_kernel_cmdline()
 {
-	local cmdline opts opt
+	local cmdline_file cmdline opts opt
 
 	echo "--- Set kernel cmdline"
 
+	for cmdline_file in "${BOOT_DIR}"/nobtcmd.txt "${BOOT_DIR}"/cmdline.txt ; do
+		if [ -e "${cmdline_file}" ] ; then
+			break
+		fi
+	done
+
 	cmdline=()
-	readarray -t opts < <(head -1 "${BOOT_DIR}"/cmdline.txt | \
-							  tr ' ' '\n')
+	readarray -t opts < <(head -1 "${cmdline_file}" | tr ' ' '\n')
 	for opt in "${opts[@]}" ; do
 		case "${opt}" in
 			console=*|quiet) ;;        # Drop the option
@@ -130,7 +135,7 @@ function set_kernel_cmdline()
 		esac
 	done
 	cmdline+=("console=tty1" "console=ttyAMA0,115200")
-	echo "${cmdline[*]}" | write_to "${BOOT_DIR}"/cmdline.txt
+	echo "${cmdline[*]}" | write_to "${cmdline_file}"
 
 	cat <<EOF | write_to -a "${BOOT_DIR}"/config.txt
 
