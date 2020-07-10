@@ -1,0 +1,108 @@
+#!/bin/bash -eu
+
+function scrub_commits()
+{
+	local line commit subject no_revert orig
+	declare -A drop
+
+	while IFS= read -r line ; do
+		commit=${line%% *}
+		subject=${line#*__MARK__}
+		subject=${subject%__MARK__}
+
+		# Ignore the commit if it's in the drop list
+		if [ -n "${drop[${commit}]:-}" ] ; then
+			continue
+		fi
+
+		# Remove 'Revert "..."' from the subject
+		no_revert=${subject#Revert \"}
+		no_revert=${no_revert%\"}
+
+		# Ignore UBUNTU commits that are *not* SAUCE commits
+		case "${no_revert}" in
+			UBUNTU*SAUCE*) ;;
+			UBUNTU*)       continue ;;
+			*)             ;;
+		esac
+
+		# If it's a revert, check if the original commit is in the list as well
+		if [ "${subject}" != "${no_revert}" ] ; then
+			orig=$(sed -e "1,/${commit} /d" "${1}" | \
+					   grep -m 1 -F "__MARK__${no_revert}__MARK__" || true)
+			orig=${orig%% *}
+			if [ -n "${orig}" ] ; then
+				# The original commit is in the list as well, so mark it as
+				# to-drop and ignore the current revert
+				drop[${orig}]=1
+				continue
+			fi
+		fi
+		
+		# Add the commit to the scrubbed list
+		echo "${line}"
+	done < <(cat "${1}")
+}
+
+function list_files()
+{
+	local line
+
+	while IFS= read -r line ; do
+		git log --format= --name-only "${line%% *}" -1
+	done < <(cat "${1}")
+}
+
+function list_missing_commits()
+{
+	local line commit subject
+
+	while IFS= read -r line ; do
+		commit=${line%% *}
+		subject=${line#*__MARK__}
+		subject=${subject%__MARK__}
+
+		# Check if the commit exists
+		if grep -qF "__MARK__${subject}__MARK__" "${2}" ; then
+			continue
+		fi
+
+		echo "${commit} ${subject}"
+	done < <(cat "${1}")
+}
+
+rpi=$1
+
+# -----------------------------------------------------------------------------
+# Process the current branch
+
+ubuntu_stable=$(git log --oneline | grep -m1 -P '^[0-9a-h]{12} Linux 5\.\d*\.\d*$')
+echo "-- Ubuntu stable: ${ubuntu_stable#* }"
+
+git log --format="%h __MARK__%s__MARK__" "${ubuntu_stable%% *}.." > \
+	.ubuntu.commits
+list_files .ubuntu.commits | grep -v '^debian' | sort -u > .ubuntu.files
+scrub_commits .ubuntu.commits > .ubuntu.scrubbed
+
+# -----------------------------------------------------------------------------
+# Process the provided rpi branch/tag
+
+rpi_stable=$(git log --oneline "${rpi}" | \
+				 grep -m1 -P '^[0-9a-h]{12} Linux 5\.\d*\.\d*$')
+echo "-- RPi stable:    ${rpi_stable#* }"
+
+git log --format="%h __MARK__%s__MARK__" "${rpi_stable%% *}..${rpi}" > \
+	.rpi.commits
+list_files .rpi.commits | sort -u > .rpi.files
+scrub_commits .rpi.commits > .rpi.scrubbed
+
+# -----------------------------------------------------------------------------
+# Process commits
+
+echo
+echo "-- Commits in RPi but missing in Ubuntu"
+list_missing_commits .rpi.scrubbed .ubuntu.scrubbed
+
+echo
+echo "-- Commits in Ubuntu but missing in RPi"
+list_missing_commits .ubuntu.scrubbed .rpi.scrubbed
