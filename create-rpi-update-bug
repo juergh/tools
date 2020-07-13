@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
 
-from datetime import datetime
+import argparse
+
 from launchpadlib.launchpad import Launchpad
 
-series = 'focal'
-package = 'linux-raspi'
+parser = argparse.ArgumentParser()
+parser.add_argument("-f", "--force", action='store_true')
+parser.add_argument("handle")
+parser.add_argument("rpi_branch")
+parser.add_argument("date")
+args = parser.parse_args()
 
-datestr = datetime.now().strftime("%Y-%m-%d")
+for delim in (':', '/'):
+    if delim in args.handle:
+        break
+series, package = args.handle.split(delim)
+
 title = "{}/{}: Upstream raspberrypi patchset {}".format(series, package,
-                                                         datestr)
+                                                         args.date)
 
 print(title)
 
@@ -16,13 +25,17 @@ description = """
 Upstream raspberrypi patchset {}
 
    Ported from the following raspberrypi branch:
-      rpi-5.4.y
+      {}
 
 from https://github.com/raspberrypi/linux.git
 
-""".format(datestr)
+""".format(args.date, args.rpi_branch)
 
 print(description)
+
+if not args.force:
+    print("Use -f, --force to create the bug")
+    exit(0)
 
 lp = Launchpad.login_with('tools', 'production', version='devel')
 
