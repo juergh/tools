@@ -5,6 +5,13 @@
 
 echo "--- Running installer"
 
+echo "--- Waiting for network device"
+for i in $(seq 10) ; do
+	[ -e /sys/class/net/eth0 ] && break
+	[ -e /sys/class/net/wlan0 ] && break
+	sleep .5
+done
+
 # Get an IP
 dhclient
 
