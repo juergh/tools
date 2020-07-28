@@ -140,8 +140,10 @@ umount /boot
 EOF
 chmod 755 init
 
-# Copy the tar binary (required for updating the installer)
-cp "${TMP_DIR}"/usr/bin/tar usr/bin/
+# Copy additional required binaries
+for bin in usr/bin/tar sbin/e2fsck ; do
+	cp "${TMP_DIR}/${bin}" "${bin}"
+done
 
 # The installer directory
 mkdir -p "${OUT_DIR}"/install
