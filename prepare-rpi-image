@@ -222,7 +222,9 @@ function disable_services()
 
 	for service in "${services[@]}" ; do
 		echo "---   ${service}"
-		sudo rm -f "${ROOTFS_DIR}"/{etc,lib}/systemd/system/*.wants/"${service}".*
+		sudo rm -f "${ROOTFS_DIR}"/etc/init.d/"${service}" \
+		     "${ROOTFS_DIR}"/etc/systemd/system/*.wants/"${service}".* \
+		     "${ROOTFS_DIR}"/lib/systemd/system/*.wants/"${service}".*
 	done
 }
 
