@@ -28,7 +28,7 @@ function pr_warn()
 
 function set_globals()
 {
-	local remote repo
+	local remote repo distro src
 
 	remote=$(git remote get-url origin)
 	repo=${remote##*/}
@@ -46,11 +46,12 @@ function set_globals()
 			else
 				DEBIAN=debian
 			fi
-			RELEASE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
-										  -S Distribution)
-			SOURCE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
-										 -S Source)
-			RELEASE=${RELEASE}/${SOURCE}
+			distro=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
+										 -S Distribution)
+			distro=${distro:0:1}
+			distro=${distro^^}
+			src=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+			RELEASE=${distro}/${src}
 		fi
 
 		# [SRU]
@@ -82,7 +83,7 @@ function set_globals()
 		SUBJECT_PREFIX="${SUBJECT_PREFIX} RESEND"
 	fi
 
-	# Remove leading '][' from the subjext prefix
+	# Remove leading '][' from the subject prefix
 	SUBJECT_PREFIX=${SUBJECT_PREFIX#][}
 }
 
@@ -101,13 +102,31 @@ function send_patch()
 function _get_first_buglink()
 {
 	for f in "${@}" ; do
-		grep -m1 '^BugLink: ' "${f}" && return
+		if grep -m1 '^BugLink: ' "${f}" ; then
+			return
+		fi
 	done
+}
+
+function _query_lp_bug()
+{
+	local bug=${1} attr=${2}
+	local fmt
+
+	fmt="{}"
+	if [ "${attr}" = "title" ] ; then
+		fmt="LP: #${bug} - {}"
+	fi
+
+	curl -s -S --get "https://api.launchpad.net/devel/bugs/${bug}" | \
+		python3 -c "import json,sys ; \
+					obj = json.load(sys.stdin) ; \
+					print('${fmt}'.format(obj['${attr}']))"
 }
 
 function do_format_patch()
 {
-	local patch buglink url subject blurb
+	local patch buglink url bug subject blurb
 	local opts=()
 
 	# Additional options
@@ -139,26 +158,33 @@ function do_format_patch()
 
 	# Try to fill in the cover letter
 	if [ -f .outgoing/0000-cover-letter.patch ] ; then
-		subject="*** SUBJECT HERE ***"
-		blurb="*** BLURB HERE ***"
-
+		subject=
+		blurb=
 		buglink=$(_get_first_buglink .outgoing/*.patch)
 		if [ -n "${buglink}" ] ; then
 			buglink=${buglink#BugLink: }
 			url=${buglink%% *}
 			if [ "${url}" = "${buglink}" ] ; then
 				# Try to query launchpad
-				true
+				bug=${buglink##*/}
+				subject=$(_query_lp_bug "${bug}" title)
+				blurb=$(_query_lp_bug "${bug}" description)
 			else
 				# Buglink contains a subject, so must be a private bug
 				subject=${buglink#* }
 				subject=${subject:1:-1}
+				blurb="*** PRIVATE BLURB HERE ***"
 			fi
 		fi
-		sed -i \
-			-e "s,\*\*\* SUBJECT HERE \*\*\*,${subject}," \
-			-e "s,\*\*\* BLURB HERE \*\*\*,${blurb}," \
-			.outgoing/0000-cover-letter.patch
+		if [ -n "${subject}" ] ; then
+			sed -e 's,\*\*\* SUBJECT HERE \*\*\*,${SUBJECT},' \
+				-e 's,\*\*\* BLURB HERE \*\*\*,${BLURB},' \
+				.outgoing/0000-cover-letter.patch | \
+			SUBJECT=${subject} BLURB=${blurb} envsubst > \
+				   .outgoing/0000-cover-letter.patch.tmp
+			mv .outgoing/0000-cover-letter.patch.tmp \
+			   .outgoing/0000-cover-letter.patch
+		fi
 	fi
 
 	if [ "${DRY_RUN}" -eq 1 ] ; then
