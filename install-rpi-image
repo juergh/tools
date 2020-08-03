@@ -5,6 +5,12 @@
 
 echo "--- Running installer"
 
+echo "--- Waiting for /dev/mmcblk0"
+for i in $(seq 10) ; do
+	[ -b /dev/mmcblk0 ] && break
+    sleep .5
+done
+
 echo "--- Waiting for network device"
 for i in $(seq 10) ; do
 	[ -e /sys/class/net/eth0 ] && break
