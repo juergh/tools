@@ -38,8 +38,8 @@ while true ; do
      12) Core18 - arm64
      13) Core18 - armhf
 
-     20) Raspberry Pi OS (Buster) - arm64
-     21) Raspberry Pi OS (Buster) - armhf
+     20) Raspberry Pi OS (Buster)      - arm64
+     21) Raspberry Pi OS (Buster)      - armhf
      22) Raspberry Pi OS (Buster) Lite - armhf
      23) Raspberry Pi OS (Buster) Full - armhf
 
