@@ -28,20 +28,23 @@ while true ; do
 	cat <<__EOF__
 
 --- Select an image to install:
-      1) Focal arm64
-      2) Focal armhf
-      3) Bionic arm64
-      4) Bionic armhf
+      1) Focal  - arm64
+      2) Focal  - armhf
+      3) Bionic - arm64
+      4) Bionic - armhf
 
-     10) Core20 arm64
-     11) Core20 armhf
-     12) Core18 arm64
-     13) Core18 armhf
+     10) Core20 - arm64
+     11) Core20 - armhf
+     12) Core18 - arm64
+     13) Core18 - armhf
 
-     20) Raspberry Pi OS armhf
+     20) Raspberry Pi OS (Buster) - arm64
+     21) Raspberry Pi OS (Buster) - armhf
+     22) Raspberry Pi OS (Buster) Lite - armhf
+     23) Raspberry Pi OS (Buster) Full - armhf
 
-     90) Enter an image name manually
-     91) Run a shell
+     90) Run a shell
+     91) Enter an image name manually
      92) Update the installer
      99) Reboot
 
@@ -88,20 +91,29 @@ __EOF__
 		# Raspberry Pi OS
 		#
 		20)
-			image=raspios_lite_armhf+prep.img.gz
+			image=raspios-buster-arm64+prep.img.gz
+			;;
+		21)
+			image=raspios-buster-armhf+prep.img.gz
+			;;
+		22)
+			image=raspios-buster-lite-armhf+prep.img.gz
+			;;
+		23)
+			image=raspios-buster-full-armhf+prep.img.gz
 			;;
 
 		#
 		# Misc options
 		#
 		90)
+			/bin/sh
+			continue
+			;;
+		91)
 			# shellcheck disable=SC2039
 			echo -n "--- Image name: "
 			read -r image
-			;;
-		91)
-			/bin/sh
-			continue
 			;;
 		92)
 			if mount /dev/mmcblk0p1 /boot ; then
