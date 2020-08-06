@@ -358,7 +358,7 @@ case "${vendor}" in
 		create_prep_script
 		create_cloud_init_config
 		;;
-	raspbian)
+	raspbian|debian)
 		enable_ssh
 		;;
 	*)
