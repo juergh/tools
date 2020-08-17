@@ -15,6 +15,7 @@ DEB_INCLUDE=(
 	dpkg-dev
 	fakeroot
 	less
+	perl-openssl-defaults  # [arm64] required due to dependency problems
 	sudo
 	tzdata
 )
