@@ -166,8 +166,7 @@ include installcfg.txt
 EOF
 
 	# Inject the installer
-	installer_tgz=$(pwd)/rpi-installer.tgz
-	sudo tar -C "${BOOT_DIR}" --no-same-owner -xaf "${installer_tgz}"
+	sudo tar -C "${BOOT_DIR}" --no-same-owner -xaf "${INSTALLER}"
 }
 
 function create_prep_script()
@@ -250,20 +249,23 @@ function enable_ssh()
 function usage()
 {
 	cat <<EOF
-Usage: prepare-rpi-image [-h] [-s] [-w] IMAGE [OUTFILE]
+Usage: prepare-rpi-image [-h] [-i TGZFILE] [-s] [-w] IMAGE [OUTFILE]
 
 Prepare an Ubuntu Raspberry Pi image.
 
 Positional arguments:
-  IMAGE           The image to prepare.
-  OUTFILE         The filename of the prepared image. If not provided, defaults
-                  to the original image name with '+prep' appended in the
-                  current working directory.
+  IMAGE                    The image to prepare.
+  OUTFILE                  The filename of the prepared image. If not provided
+                           defaults to the original image name with '+prep'
+                           appended in the current working directory.
 
 Optional arguments:
-  -h, --help      Show this help text and exit.
-  -s, --no-snapd  Disable the snapd services.
-  -w, --no-wifi   Don't enable wifi.
+  -h, --help               Show this help text and exit.
+  -i, --installer TGZFILE  Inject the rpi installer TGZFILE into the prepared
+                           image. If not specified, injects rpi-installer.tgz
+                           from the current directory.
+  -s, --no-snapd           Disable the snapd services.
+  -w, --no-wifi            Don't enable wifi.
 EOF
 }
 
@@ -271,12 +273,17 @@ image=
 outfile=
 SNAPD=1
 WIFI=1
+INSTALLER=$(pwd)/rpi-installer.tgz
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
 		-h|--help)
 			usage
 			exit
+			;;
+		-i|--installer)
+			shift
+			INSTALLER=$(readlink -m "${1}")
 			;;
 		-s|--no-snapd)
 			SNAPD=0
@@ -308,8 +315,8 @@ if ! [ -e "${image}" ] ; then
 	exit 1
 fi
 
-if ! [ -e "rpi-installer.tgz" ] ; then
-	echo "No such installer: rpi-installer.tgz" >&2
+if ! [ -e "${INSTALLER}" ] ; then
+	echo "No such installer: ${INSTALLER}" >&2
 	exit 1
 fi
 
