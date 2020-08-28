@@ -28,20 +28,20 @@ while true ; do
 	cat <<__EOF__
 
 --- Select an image to install:
-      1) Focal  - arm64
-      2) Focal  - armhf
-      3) Bionic - arm64
-      4) Bionic - armhf
+      1) Groovy - arm64
+      2) Groovy - armhf
+      3) Focal  - arm64
+      4) Focal  - armhf
+      5) Bionic - arm64
+      6) Bionic - armhf
 
      10) Core20 - arm64
      11) Core20 - armhf
      12) Core18 - arm64
      13) Core18 - armhf
 
-     20) Raspberry Pi OS (Buster)      - arm64
-     21) Raspberry Pi OS (Buster)      - armhf
-     22) Raspberry Pi OS (Buster) Lite - armhf
-     23) Raspberry Pi OS (Buster) Full - armhf
+     20) Raspberry Pi OS Lite - arm64
+     21) Raspberry Pi OS Lite - armhf
 
      90) Run a shell
      91) Enter an image name manually
@@ -59,15 +59,21 @@ __EOF__
 		# Ubuntu Server
 		#
 		1)
-			image=focal-preinstalled-server-arm64+raspi+prep.img.gz
+			image=groovy-preinstalled-server-arm64+raspi+prep.img.gz
 			;;
 		2)
-			image=focal-preinstalled-server-armhf+raspi+prep.img.gz
+			image=groovy-preinstalled-server-armhf+raspi+prep.img.gz
 			;;
 		3)
-			image=bionic-preinstalled-server-arm64+raspi3+prep.img.gz
+			image=focal-preinstalled-server-arm64+raspi+prep.img.gz
 			;;
 		4)
+			image=focal-preinstalled-server-armhf+raspi+prep.img.gz
+			;;
+		5)
+			image=bionic-preinstalled-server-arm64+raspi3+prep.img.gz
+			;;
+		6)
 			image=bionic-preinstalled-server-armhf+raspi3+prep.img.gz
 			;;
 
@@ -91,16 +97,10 @@ __EOF__
 		# Raspberry Pi OS
 		#
 		20)
-			image=raspios-buster-arm64+prep.img.gz
+			image=raspios-lite-arm64+prep.img.gz
 			;;
 		21)
-			image=raspios-buster-armhf+prep.img.gz
-			;;
-		22)
-			image=raspios-buster-lite-armhf+prep.img.gz
-			;;
-		23)
-			image=raspios-buster-full-armhf+prep.img.gz
+			image=raspios-lite-armhf+prep.img.gz
 			;;
 
 		#
