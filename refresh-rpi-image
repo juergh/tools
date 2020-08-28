@@ -19,7 +19,7 @@ function out()
 function download_image()
 {
 	local release=${1} arch=${2}
-	local subdir flavor
+	local release_dir flavor
 
 	echo "--- Downloading image"
 
@@ -29,12 +29,12 @@ function download_image()
 	fi
 
 	# Defaults
-	subdir=ubuntu-server
+	release_dir=${release}
 	flavor=raspi
 
 	case "${release}" in
 		groovy)
-			subdir=
+			release_dir=
 			;;
 		bionic|core18)
 			flavor=raspi3
@@ -44,7 +44,7 @@ function download_image()
 	case "${release}" in
 		bionic|focal|groovy)
 			IMAGE=${release}-preinstalled-server-${arch}+${flavor}.img
-			wget -O "${IMAGE}".xz http://cdimage.ubuntu.com/"${subdir}"/"${release}"/daily-preinstalled/current/"${IMAGE}".xz
+			wget -O "${IMAGE}".xz http://cdimage.ubuntu.com/ubuntu-server/"${release_dir}"/daily-preinstalled/current/"${IMAGE}".xz
 			unxz -f "${IMAGE}".xz
 			;;
 		core18|core20)
