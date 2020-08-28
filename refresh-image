@@ -1,0 +1,23 @@
+#!/bin/bash
+
+if [ "$(id -u)" -eq 0 ] ; then
+	echo "You must not be root!" >&2
+	exit 1
+fi
+
+if ! [ -e rpi-installer.tgz ] ; then
+	# Create the rpi installer
+	sudo bash -c "PATH=${PATH} refresh-rpi-image -i focal-armhf"
+fi
+
+if [ $# -eq 0 ] ; then
+	for release in groovy focal bionic core20 core18 raspios ; do
+		for arch in armhf arm64 ; do
+			sudo bash -c "PATH=${PATH} refresh-rpi-image ${release}-${arch}"
+		done
+	done
+else
+	for image in "${@}" ; do
+		sudo bash -c "PATH=${PATH} refresh-rpi-image ${image}"
+	done
+fi
