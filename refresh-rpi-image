@@ -69,28 +69,34 @@ function download_image()
 function usage()
 {
 	cat <<EOF
-Usage: refresh-rpi-image [-h] IMAGE
+Usage: refresh-rpi-image [-h] [-i] IMAGE
 
 Download and prepare a Raspberry Pi image.
 
 Positional argument:
-  IMAGE       The image to prepare. If it's an existing image file then that
-              image is prepared, otherwise the image will be downloaded first.
-              In that case, IMAGE needs to be in the form <release>-<arch>,
-              like focal-arm64, core18-armhf, raspios-armhf, ...
+  IMAGE            The image to prepare. If it's an existing image file then
+                   that image is prepared, otherwise the image is  downloaded
+                   first. In that case, IMAGE needs to be in the form
+                   <release>-<arch>, like focal-arm64, core18-armhf,
+                   raspios-armhf, ...
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -h, --help       Show this help text and exit.
+  -i, --installer  Create an rpi installer using the downloaded image.
 EOF
 }
 
 IMAGE=
+installer=0
 
 while [ $# -gt 0 ] ; do
     case "${1}" in
 		-h|--help)
 			usage
 			exit
+			;;
+		-i|--installer)
+			installer=1
 			;;
 		*)
 			if [ -z "${IMAGE}" ] ; then
@@ -117,7 +123,7 @@ if ! [ -e "${IMAGE}" ] ; then
 	download_image "${release}" "${arch}"
 fi
 
-if [ "${IMAGE##*/}" = "focal-preinstalled-server-armhf+raspi.img" ] ; then
+if [ "${installer}" -eq 1 ] ; then
 	echo "--- Creating installer"
 	create-rpi-installer "${IMAGE}"
 fi
