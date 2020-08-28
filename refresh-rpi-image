@@ -19,14 +19,7 @@ function out()
 function download_image()
 {
 	local release=${1} arch=${2}
-	declare -A flavors
-
-	flavors=(
-		[bionic]=raspi3
-		[focal]=raspi
-		[core18]=raspi3
-		[core20]=raspi
-	)
+	local subdir flavor
 
 	echo "--- Downloading image"
 
@@ -35,14 +28,27 @@ function download_image()
 		exit 1
 	fi
 
+	# Defaults
+	subdir=ubuntu-server
+	flavor=raspi
+
 	case "${release}" in
-		bionic|focal)
-			IMAGE=${release}-preinstalled-server-${arch}+${flavors[${release}]}.img
-			wget -O "${IMAGE}".xz http://cdimage.ubuntu.com/ubuntu-server/"${release}"/daily-preinstalled/current/"${IMAGE}".xz
+		groovy)
+			subdir=
+			;;
+		bionic|core18)
+			flavor=raspi3
+			;;
+	esac
+
+	case "${release}" in
+		bionic|focal|groovy)
+			IMAGE=${release}-preinstalled-server-${arch}+${flavor}.img
+			wget -O "${IMAGE}".xz http://cdimage.ubuntu.com/"${subdir}"/"${release}"/daily-preinstalled/current/"${IMAGE}".xz
 			unxz -f "${IMAGE}".xz
 			;;
 		core18|core20)
-			IMAGE=ubuntu-core-${release#core}-${arch}+${flavors[${release}]}.img
+			IMAGE=ubuntu-core-${release#core}-${arch}+${flavor}.img
 			wget -O "${IMAGE}".xz http://cdimage.ubuntu.com/ubuntu-core/"${release}"/beta/current/"${IMAGE}".xz
 			unxz -f "${IMAGE}".xz
 			;;
