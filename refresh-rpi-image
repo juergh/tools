@@ -52,11 +52,11 @@ function download_image()
 			wget -O "${IMAGE}".xz http://cdimage.ubuntu.com/ubuntu-core/"${release}"/beta/current/"${IMAGE}".xz
 			unxz -f "${IMAGE}".xz
 			;;
-		raspberrypi)
-			IMAGE=raspios_lite_armhf.img
-			wget -O "${IMAGE}".zip https://downloads.raspberrypi.org/raspios_lite_armhf_latest
-			unzip "${IMAGE}".zip
-			mv 20*raspios*.img "${IMAGE}"
+		raspios)
+			IMAGE=raspios-lite-${arch}.img
+			wget -O "${IMAGE}".zip https://downloads.raspberrypi.org/raspios_lite_"${arch}"_latest
+			unzip -o "${IMAGE}".zip
+			mv 20*-raspios-*.img "${IMAGE}"
 			rm -f "${IMAGE}".zip
 			;;
 		*)
