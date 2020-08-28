@@ -116,6 +116,7 @@ __EOF__
 			read -r image
 			;;
 		92)
+			mkdir -p /boot
 			if mount /dev/mmcblk0p1 /boot ; then
 				wget -O - "${images_url}"/rpi-installer.tgz | \
 					( cd /boot && tar --no-same-owner -xzvf - )
