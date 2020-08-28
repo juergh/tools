@@ -49,7 +49,7 @@ function download_image()
 			;;
 		core18|core20)
 			IMAGE=ubuntu-core-${release#core}-${arch}+${flavor}.img
-			wget -O "${IMAGE}".xz http://cdimage.ubuntu.com/ubuntu-core/"${release}"/beta/current/"${IMAGE}".xz
+			wget -O "${IMAGE}".xz http://cdimage.ubuntu.com/ubuntu-core/"${release#core}"/beta/current/"${IMAGE}".xz
 			unxz -f "${IMAGE}".xz
 			;;
 		raspios)
