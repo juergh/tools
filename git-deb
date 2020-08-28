@@ -51,7 +51,13 @@ function set_globals()
 			distro=${distro:0:1}
 			distro=${distro^^}
 			src=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
-			RELEASE=${distro}/${src}
+			src=${src#linux}
+			src=${src#-}
+			if [ -n "${src}" ] ; then
+				RELEASE=${distro}/${src}
+			else
+				RELEASE=${distro}
+			fi
 		fi
 
 		# [SRU]
