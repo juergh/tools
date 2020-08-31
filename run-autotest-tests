@@ -56,12 +56,14 @@ Usage: run-autotest-tests [-c] [-f] [-h] TEST [TEST ...]
 Run the specified autotest tests.
 
 Postional arguments:
-  TEST  The name of an autotest (client) test.
+  TEST             The name of an autotest (client) test.
 
 Optional arguments:
-  -c, --clean  Clean before run (delete and clone the client tests).
-  -f, --force  Run a test even if it is blacklisted.
-  -h, --help   Show this help text.
+  -c, --clean      Clean before run (delete and clone the client tests).
+  -f, --force      Run a test even if it is blacklisted.
+  -h, --help       Show this help text.
+  -u, --no-update  Don't update the existing autotest git repos before running
+                   the test(s).
 EOF
 }
 
@@ -72,6 +74,7 @@ EOF
 CLEAN=0
 FORCE=0
 TESTS=()
+update=1
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -84,6 +87,9 @@ while [ ${#} -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-u|--no-update)
+			update=0
 			;;
 		-*)
 			usage
@@ -113,13 +119,13 @@ fi
 # Clone (or update) the necessary repos
 for repo in autotest autotest-client-tests ; do
 	repo_dir=${repo//-//}
-	if [ -d "${repo_dir}/.git" ] ; then
+	if ! [ -d "${repo_dir}/.git" ] ; then
+		git clone git://kernel.ubuntu.com/ubuntu/"${repo}" "${repo_dir}"
+	elif [ "${update}" -eq 1 ] ; then
 		# juergh: git --git-dir=... doesn't seem to be working correctly on
 		# Precise, so cd to the git directory instead
 		( cd "${repo_dir}" && git fetch origin master )
 		( cd "${repo_dir}" && git reset --hard FETCH_HEAD )
-	else
-		git clone git://kernel.ubuntu.com/ubuntu/"${repo}" "${repo_dir}"
 	fi
 done
 
