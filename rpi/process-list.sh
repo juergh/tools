@@ -64,6 +64,20 @@ while IFS= read -r line ; do
 		continue
 	fi
 
+	# Check if it's a commit that modifies debian[.foo]/*
+	if git log --format= --name-only "${COMMIT}" -1 | grep -q '^debian[./]' ; then
+		STATUS="D"
+		encode_line
+		continue
+	fi
+
+	# Check if it's an UBUNTU commit
+	if [ "${SUBJECT#UBUNTU}" != "${SUBJECT}" ] ; then
+		STATUS="U"
+		encode_line
+		continue
+	fi
+
 	# Check if it's an upstream backport
 	if git log --format=%b "${COMMIT}" -1 | \
 			grep -qP '^[Cc]ommit [0-9a-f]{40} upstream|[Uu]pstream commit [0-9a-f]{40}' ; then
