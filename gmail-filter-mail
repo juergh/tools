@@ -32,6 +32,10 @@ move_messages(messages, account['Canonical/Bugs'])
 print('-- Move Salesforce mails')
 messages = account['Mailing List/Canonical/canonical-kernel-team']:contain_subject('SFDC')
 move_messages(messages, account['Canonical/SalesForce'])
+
+print('-- Move \'... uploaded (ABI bump)\' mails')
+messages = account['Mailing List/Ubuntu/kernel-team']:contain_subject('uploaded (ABI bump)')
+move_messages(messages, account['Mailing List/Ubuntu/kernel-team/noise'])
 __EOF__
 }
 
