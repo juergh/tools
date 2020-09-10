@@ -74,7 +74,7 @@ function create_lv_device()
 	fi
 
 	pr_info "Create ${LV_DEVICE}"
-	lvcreate --yes --name "${LV_NAME}" --size 10G "${VG_NAME}"
+	lvcreate --yes --name "${LV_NAME}" --size 20G "${VG_NAME}"
 }
 
 function copy_rootfs()
@@ -91,6 +91,13 @@ function copy_rootfs()
 	dd ibs=512 skip="${start}" count="${count}" if="${IMAGE}" of="${LV_DEVICE}"
 
 	pr_info "Set label on ${LV_DEVICE}"
+}
+
+function resize_rootfs()
+{
+	pr_info "Resize root filesystem ${LV_DEVICE}"
+	e2fsck -f "${LV_DEVICE}"
+	resize2fs "${LV_DEVICE}"
 }
 
 function mount_lv_device()
@@ -124,7 +131,7 @@ function unmount_lv_device()
 function fix_resolv_conf()
 {
 	if [ -e "${CONFIG_DIR}"/resolv.conf ] ; then
-		echo "Fix resolv.conf temporarily"
+		pr_info "Fix resolv.conf temporarily"
 		mv "${MOUNTP}"/etc/resolv.conf "${MOUNTP}"/etc/resolv.conf.orig
 		cp "${CONFIG_DIR}"/etc/resolv.conf "${MOUNTP}"/etc/
 	fi
@@ -410,6 +417,7 @@ if [ "${RECONFIG}" -eq 0 ] ; then
 	# Create the LV and copy the root filesystem
 	create_lv_device
 	copy_rootfs
+	resize_rootfs
 fi
 
 # Mount the LV
