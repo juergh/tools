@@ -130,11 +130,17 @@ function unmount_lv_device()
 
 function fix_resolv_conf()
 {
-	if [ -e "${CONFIG_DIR}"/resolv.conf ] ; then
-		pr_info "Fix resolv.conf temporarily"
-		mv "${MOUNTP}"/etc/resolv.conf "${MOUNTP}"/etc/resolv.conf.orig
-		cp "${CONFIG_DIR}"/etc/resolv.conf "${MOUNTP}"/etc/
-	fi
+	local ip
+
+	pr_info "Fix resolv.conf temporarily"
+
+	ip=$(ip route get 1.0.0.0)
+	ip=${ip#* via }
+	ip=${ip%% *}
+	mv "${MOUNTP}"/etc/resolv.conf "${MOUNTP}"/etc/resolv.conf.orig
+	cat <<EOF > "${MOUNTP}"/etc/resolv.conf
+nameserver ${ip}
+EOF
 }
 
 function blacklist_modules()
