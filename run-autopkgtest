@@ -107,7 +107,7 @@ image=/srv/autopkgtest/autopkgtest-${distro}-amd64.img
 if ! [ -e "${image}" ] ; then
 	echo "Error: No such image file: ${image}" >&2
 	echo "You can build one by running:" >&2
-	echo "  $ autopkgtest-buildvm-ubuntu-cloud ${distro}" >&2
+	echo "  $ autopkgtest-buildvm-ubuntu-cloud -r ${distro}" >&2
 	exit 1
 fi
 
