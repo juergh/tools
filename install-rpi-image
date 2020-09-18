@@ -8,8 +8,8 @@ BOTTLE_PI=192.168.99.11:3110
 get_hostname()
 {
 	model=$(cat /proc/device-tree/model | \
-			tr -d '[\0\n]' | \
-			tr '[:upper:]' '[:lower:]' | \
+			tr -d '\0\n' | \
+			tr 'A-Z' 'a-z' | \
 			sed -e 's/^raspberry pi /rpi /' \
 				-e 's/ rev / rev/' \
 				-e 's/compute module / cm /' \
@@ -133,7 +133,7 @@ __EOF__
 		92)
 			mkdir -p /boot
 			if mount /dev/mmcblk0p1 /boot ; then
-				wget -O - "${BOTTLE_PI}}/images/rpi-installer" | \
+				wget -O - "${BOTTLE_PI}/images/rpi-installer" | \
 					( cd /boot && tar --no-same-owner -xzvf - )
 				sync
 				umount /boot
