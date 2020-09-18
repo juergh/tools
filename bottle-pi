@@ -96,7 +96,7 @@ def put_hosts_name_reset(name):
     global PI_ACTION   # pylint: disable=W0603
     PI_ACTION[name] = bottle.request.body.getvalue().decode('ascii')
     install = False
-    if PI_ACTION[name].startswith('install '):
+    if PI_ACTION[name].startswith('install'):
         install = True
     return reset_host(name, install=install)
 
