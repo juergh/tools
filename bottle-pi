@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+#
+# A simple REST API server that manages a bunch of Raspberry Pis
+#
+
+import subprocess
+import time
+
+import bottle
+import RPi.GPIO as gpio
+
+PI_DB = {
+    'rpi-4b-rev1d2-2c1a': {'slot': 1, 'runpin': 40, 'gpio4': 3},
+    'rpi-3b-plus-rev1d3-abfb': {'slot': 2, 'runpin': 38, 'gpio4': 5},
+    'rpi-3b-rev1d2-62e2': {'slot': 3, 'runpin': 36, 'gpio4': 7},
+    'rpi-2b-rev1d2-0fc1': {'slot': 4, 'runpin': 32, 'gpio4': 11},
+    'rpi-4b-rev1d1-17cf': {'slot': 5, 'runpin': 26, 'gpio4': 13},
+    'rpi-4b-rev1d4-d9f5': {'slot': 6, 'runpin': 24, 'gpio4': 15},
+    'rpi-3a-plus-rev1d0-dd65': {'slot': 7, 'runpin': 22, 'gpio4': 19},
+}
+
+PI_ACTION = {}
+
+def abort(err, resp):
+    bottle.abort(401, err + '\n' + resp.stderr.decode('ascii'))
+
+# Run the given command on the provided host
+def ssh(host, cmd):
+    ssh_cmd = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=2',
+               '-o', 'StrictHostKeyChecking=no', '-o', 'User=ubuntu',
+               host] + cmd
+    resp = subprocess.run(ssh_cmd, capture_output=True)
+    if resp.returncode != 0:
+        abort('Failed to ssh to {}'.format(host), resp)
+
+# Gracefully shut down a host
+def shutdown_host(host):
+    ssh(host, ['sudo', 'poweroff'])
+    # Wait some time for the machine to poweroff and assume success
+    time.sleep(10)
+    return 'ok\n'
+
+# Reset a a host
+def reset_host(host, install=False):
+    runpin = PI_DB[host]['runpin']
+    gpio4 = PI_DB[host]['gpio4']
+
+    if install:
+        # Invoke the installer by driving the gpio4 pin
+        gpio.setup(gpio4, gpio.OUT, initial=0)
+
+    # Reset the host
+    gpio.setup(runpin, gpio.OUT, initial=0)
+    time.sleep(1)
+    gpio.cleanup(runpin)
+
+    if install:
+        # Keep driving the gpio4 pin for a bit to give the Pi firmware enough
+        # time to sample its state
+        time.sleep(20)
+        gpio.cleanup(gpio4)
+
+    return 'ok\n'
+
+# -----------------------------------------------------------------------------
+# API routes
+
+@bottle.get('/')
+def get_root():
+    return 'hosts\nimages\n'
+
+@bottle.get('/hosts')
+def get_hosts():
+    return PI_DB
+
+@bottle.get('/hosts/')
+def get_hosts_():
+    return '\n'.join(PI_DB.keys()) + '\n'
+
+@bottle.get('/hosts/<name>')
+def get_hosts_name(name):
+    return PI_DB[name]
+
+@bottle.get('/hosts/<name>/')
+def get_hosts_name_(name):   # pylint: disable=W0613
+    return 'action\nreset\nshutdown\n'
+
+@bottle.get('/hosts/<name>/action')
+def get_hosts_name_action(name):
+    if name in PI_ACTION:
+        return PI_ACTION[name]
+    return ''
+
+@bottle.put('/hosts/<name>/reset')
+def put_hosts_name_reset(name):
+    global PI_ACTION   # pylint: disable=W0603
+    PI_ACTION[name] = bottle.request.body.getvalue().decode('ascii')
+    install = False
+    if PI_ACTION[name].startswith('install '):
+        install = True
+    return reset_host(name, install=install)
+
+@bottle.put('/hosts/<name>/shutdown')
+def put_hosts_name_shutdown(name):
+    return shutdown_host(name)
+
+@bottle.get('/images')
+def get_images():
+    resp = subprocess.run(['ls', '-1', '/srv/images'], capture_output=True)
+    if resp.returncode != 0:
+        raise_exception('Failed to get list of images', resp)
+    return resp.stdout.decode('ascii')
+
+@bottle.get('/images/<name>')
+def get_images_name(name):
+    return bottle.static_file(name, root='/srv/images')
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+if __name__ == '__main__':
+    # Use board pin numbers
+    gpio.setmode(gpio.BOARD)
+
+    # Run the bottle server
+    bottle.run(host='0.0.0.0', port=3110)

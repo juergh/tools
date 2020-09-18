@@ -1,0 +1,12 @@
+[Unit]
+Description=bottle-pi
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/bottle-pi
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
