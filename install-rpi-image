@@ -1,7 +1,33 @@
-#!/bin/sh -u
+#!/bin/sh
 #
 # Download and install a Raspberry Pi image
 #
+
+BOTTLE_PI=192.168.99.11:3110
+
+get_hostname()
+{
+	model=$(cat /proc/device-tree/model | \
+			tr -d '[\0\n]' | \
+			tr '[:upper:]' '[:lower:]' | \
+			sed -e 's/^raspberry pi /rpi /' \
+				-e 's/ rev / rev/' \
+				-e 's/compute module / cm /' \
+				-e 's/ model //' \
+				-e 's/ /-/g' \
+				-e 's/\./d/g')
+	serial=$(cat /proc/device-tree/serial-number | tr -d '[\0\n]' | tail -c 4)
+	echo "${model}-${serial}"
+}
+
+install_image()
+{
+	echo "--- Installing ${1}"
+	if wget -O - "${BOTTLE_PI}/images/${1}" | gunzip -c > /dev/mmcblk0 ; then
+		sync
+		reboot -f
+	fi
+}
 
 echo "--- Running installer"
 
@@ -21,9 +47,14 @@ done
 # Get an IP
 dhclient
 
-# The location of the images
-images_url=192.168.99.11/images
+hostname=$(get_hostname)
+echo "--- Checking action for ${hostname}"
+action=$(wget -q -O - "${BOTTLE_PI}/hosts/${hostname}/action")
+if [ "${action%% *}" = "install" ] ; then
+	install_image "${action#install }"
+fi
 
+# Run the interactive installer
 while true ; do
 	cat <<__EOF__
 
@@ -34,11 +65,15 @@ while true ; do
       4) Focal  - armhf
       5) Bionic - arm64
       6) Bionic - armhf
+      7) Xenial - arm64
+      8) Xenial - armhf
 
      10) Core20 - arm64
      11) Core20 - armhf
      12) Core18 - arm64
      13) Core18 - armhf
+     14) Core16 - arm64
+     15) Core16 - armhf
 
      20) Raspberry Pi OS Lite - arm64
      21) Raspberry Pi OS Lite - armhf
@@ -58,50 +93,30 @@ __EOF__
 		#
 		# Ubuntu Server
 		#
-		1)
-			image=groovy-preinstalled-server-arm64+raspi+prep.img.gz
-			;;
-		2)
-			image=groovy-preinstalled-server-armhf+raspi+prep.img.gz
-			;;
-		3)
-			image=focal-preinstalled-server-arm64+raspi+prep.img.gz
-			;;
-		4)
-			image=focal-preinstalled-server-armhf+raspi+prep.img.gz
-			;;
-		5)
-			image=bionic-preinstalled-server-arm64+raspi3+prep.img.gz
-			;;
-		6)
-			image=bionic-preinstalled-server-armhf+raspi3+prep.img.gz
-			;;
+		1) image=ubuntu-groovy-arm64 ;;
+		2) image=ubuntu-groovy-armhf ;;
+		3) image=ubuntu-focal-arm64 ;;
+		4) image=ubuntu-focal-armhf ;;
+		5) image=ubuntu-bionic-arm64 ;;
+		6) image=ubuntu-bionic-armhf ;;
+		7) image=ubuntu-xenial-arm64 ;;
+		8) image=ubuntu-xenial-armhf ;;
 
 		#
 		# Ubuntu Core
 		#
-		10)
-			image=ubuntu-core-20-arm64+raspi+prep.img.gz
-			;;
-		11)
-			image=ubuntu-core-20-armhf+raspi+prep.img.gz
-			;;
-		12)
-			image=ubuntu-core-18-arm64+raspi+prep.img.gz
-			;;
-		13)
-			image=ubuntu-core-18-armhf+raspi+prep.img.gz
-			;;
+		10) image=ubuntu-core20-arm64 ;;
+		11) image=ubuntu-core20-armhf ;;
+		12) image=ubuntu-core18-arm64 ;;
+		13) image=ubuntu-core18-armhf ;;
+		14) image=ubuntu-core16-arm64 ;;
+		15) image=ubuntu-core16-armhf ;;
 
 		#
 		# Raspberry Pi OS
 		#
-		20)
-			image=raspios-lite-arm64+prep.img.gz
-			;;
-		21)
-			image=raspios-lite-armhf+prep.img.gz
-			;;
+		20) image=raspios-lite-arm64 ;;
+		21) image=raspios-lite-armhf ;;
 
 		#
 		# Misc options
@@ -118,7 +133,7 @@ __EOF__
 		92)
 			mkdir -p /boot
 			if mount /dev/mmcblk0p1 /boot ; then
-				wget -O - "${images_url}"/rpi-installer.tgz | \
+				wget -O - "${BOTTLE_PI}}/images/rpi-installer" | \
 					( cd /boot && tar --no-same-owner -xzvf - )
 				sync
 				umount /boot
@@ -139,9 +154,5 @@ __EOF__
 			;;
 	esac
 
-	echo "--- Installing ${image}"
-	if wget -O - "${images_url}"/"${image}" | gunzip -c > /dev/mmcblk0 ; then
-		sync
-		reboot -f
-	fi
+	install_image "${image}"
 done
