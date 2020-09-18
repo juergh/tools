@@ -134,7 +134,7 @@ __EOF__
 			mkdir -p /boot
 			if mount /dev/mmcblk0p1 /boot ; then
 				wget -O - "${BOTTLE_PI}/images/rpi-installer" | \
-					( cd /boot && tar --no-same-owner -xzvf - )
+					( cd /boot && tar --no-same-owner --touch -xzvf - )
 				sync
 				umount /boot
 			fi
