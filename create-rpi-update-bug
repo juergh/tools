@@ -7,8 +7,7 @@ from launchpadlib.launchpad import Launchpad
 parser = argparse.ArgumentParser()
 parser.add_argument("-f", "--force", action='store_true')
 parser.add_argument("handle")
-parser.add_argument("rpi_branch")
-parser.add_argument("date")
+parser.add_argument("tag")
 args = parser.parse_args()
 
 for delim in (':', '/'):
@@ -16,9 +15,11 @@ for delim in (':', '/'):
         break
 series, package = args.handle.split(delim)
 
-title = "{}/{}: Upstream raspberrypi patchset {}".format(series, package,
-                                                         args.date)
+tmp = args.tag.split('-')
+branch = '-'.join(tmp[:2])
+date = '-'.join(tmp[2:])
 
+title = "{}/{}: Upstream raspberrypi patchset {}".format(series, package, date)
 print(title)
 
 description = """
@@ -29,7 +30,7 @@ Upstream raspberrypi patchset {}
 
 from https://github.com/raspberrypi/linux.git
 
-""".format(args.date, args.rpi_branch)
+""".format(date, branch)
 
 print(description)
 
