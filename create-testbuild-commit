@@ -73,6 +73,9 @@ if [ -z "${suffix}" ] ; then
 	fi
 fi
 
+# Strip '-' from the version suffix as it confused the debian build rules
+suffix=${suffix//-/}
+
 # Generate the test version
 version=$(dpkg-parsechangelog -l "${changelog}" -S Version)
 test_version="${version}+${suffix}"
