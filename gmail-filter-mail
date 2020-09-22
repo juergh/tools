@@ -40,7 +40,7 @@ noise = {
 }
 for folder, subject in pairs(noise) do
    print('-- Move \' .. subject .. \' mails')
-   messages = account[folder]:contain_subject(subject')
+   messages = account[folder]:contain_subject(subject)
    move_messages(messages, account[folder .. '/noise'])
 end
 __EOF__
