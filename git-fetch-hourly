@@ -15,15 +15,15 @@ fetch_repo()
 
 fetch_all()
 {
-	# Current working directory
-	cwd=$(dirname "$(readlink -e "${0}")")
-	cd "${cwd}"
-
 	for git_dir in * ; do
 		if [ -d "${git_dir}/.git" ] ; then
 			fetch_repo "${git_dir}"
 		fi
 	done
 }
+
+# Current working directory
+cwd=$(dirname "$(readlink -e "${0}")")
+cd "${cwd}"
 
 fetch_all 2>&1 | tee git-fetch-hourly.log
