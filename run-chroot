@@ -89,7 +89,7 @@ fi
 
 # Append the host arch to the chroot name, if necessary
 case "${chroot}" in
-	*-amd64|*-i386|*-powerpc|*-s390x|*-x86_64|*-armhf)
+	*-amd64|*-i386|*-powerpc|*-s390x|*-x86_64|*-armhf|*-arm64)
 		;;
 	fedora*|centos*)
 		chroot=${chroot}-$(dpkg-architecture -q DEB_HOST_GNU_CPU)
