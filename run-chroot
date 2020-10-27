@@ -21,20 +21,22 @@ function session_exists()
 function usage()
 {
 	cat <<EOF
-Usage: run-chroot [-h] [-r] [-u USER] CHROOT [--] [COMMAND [ARGS]]
+Usage: run-chroot [-d] [-h] [-l] [-npe] [-r] [-u USER] CHROOT [--]
+       [COMMAND [ARGS]]
 
 Run a chroot session.
 
 Positional arguments:
-  CHROOT  Name of the base chroot to use for the session.
+  CHROOT                   Name of the base chroot to use for the session.
 
 Optional 
-  -d,   --destroy          Destroy a session.
-  -h,   --help             Show this help text and exit.
+  -d, --destroy            Destroy a session.
+  -h, --help               Show this help text and exit.
+  -l, --list               List existing sessions.
   -npe, --no-preserve-env  Don't preserve the user's environment inside the
                            chroot.
-  -r,  --recreate          Recreate an already existing session.
-  -u,  --user USER         Run the session as the user USER.
+  -r, --recreate           Recreate an already existing session.
+  -u, --user USER          Run the session as the user USER.
 EOF
 }
 
@@ -51,6 +53,11 @@ while [ $# -gt 0 ] ; do
 			;;
 		-h|--help)
 			usage
+			exit
+			;;
+		-l|--list)
+			schroot -l --all-sessions | grep "^session:${USER}-" | \
+				sed 's/^session://'
 			exit
 			;;
 		-npe|--no-preserve-env)
