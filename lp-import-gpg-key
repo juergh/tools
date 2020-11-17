@@ -9,33 +9,43 @@ function lp_get_user()
 {
 	local text=${1}
 
-	curl -s -S --get \
+	curl --silent --show-error --get \
 		 --data-urlencode "ws.op=findPerson" \
 		 --data-urlencode "text=${text}" \
 		 "${LP_URL}/people" | \
-		python -c 'import json,sys ; \
-				   obj = json.load(sys.stdin) ; \
-				   print obj["entries"][0]["name"]'
+		python3 -c '
+import json,sys
+try:
+    obj = json.load(sys.stdin)
+    print(obj["entries"][0]["name"])
+except:
+    pass
+'
 }
 
 function lp_get_gpg_keyids()
 {
 	local user=${1}
 
-	curl -s -S --get "${LP_URL}/~${user}/gpg_keys" | \
-		python -c 'import json,sys ; \
-				   obj = json.load(sys.stdin) ; \
-				   print "\n".join([o["keyid"] for o in obj["entries"]])'
+	curl --silent --show-error --get "${LP_URL}/~${user}/gpg_keys" | \
+		python3 -c '
+import json,sys
+try:
+    obj = json.load(sys.stdin)
+    print("\n".join([o["keyid"] for o in obj["entries"]]))
+except:
+    pass
+'
 }
 
 function usage()
 {
 	cat <<EOF
-Usage: lp_import-gpg-key [-d] [-h] USER...
+Usage: lp-import-gpg-key [-d] [-h] USER...
 
 Import GPG keys listed in launchpad user accounts.
 
-USER   An LP user identification like email or LP user name.
+USER             An LP user identification like email or LP user name.
 
 Optional arguments:
   -d, --dry-run  List key IDs but don't import the keys.
@@ -70,15 +80,17 @@ if [ ${#} -eq 0 ] ; then
 	exit 2
 fi
 
-for text in "${@}" ; do
-	user=$(lp_get_user "${text}")
+for user in "${@}" ; do
+	if [ "${user//@/}" != "${user}" ] ; then
+		# Assume it's an email, so lookup the LP username
+		user=$(lp_get_user "${user}")
+	fi
 	for keyid in $(lp_get_gpg_keyids "${user}") ; do
 		if [ ${dry_run} -eq 1 ] ; then
-			echo
 			echo "${user}: ${keyid}"
 			gpg --no-tty --search-keys "${keyid}" 2>/dev/null || true
 		else
-			gpg --recv-key "${keyid}" || true
+			gpg --recv-key --keyserver keyserver.ubuntu.com "${keyid}" || true
 		fi
 	done
 done
