@@ -21,10 +21,11 @@ function out()
 function usage()
 {
 cat <<EOF
-Usage: diff-git-commits [-h] [-w NUM] COMMIT COMMIT
+Usage: diff-git-commits [-h] [-w NUM] COMMIT [COMMIT]
 
-Show the differences between the two provided commits side-by-side and
-color-highlight the differences.
+Show the differences between two commits side-by-side and color-highlight the
+differences. If only one commit is provided, the script tries to parse the
+first commit message for the hash of the second commit.
 
 Positional arguments:
   COMMIT           A git commit hash or a patch file.
@@ -37,6 +38,8 @@ EOF
 }
 
 width=$(tput cols)
+commit1=
+commit2=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -49,13 +52,20 @@ while [ $# -gt 0 ] ; do
 			shift
 			;;
 		*)
-			break
+			if [ -z "${commit1}" ] ; then
+				commit1=${1}
+			elif [ -z "${commit2}" ] ; then
+				commit2=${1}
+			else
+				echo "Invalid argument: ${1}" >&2
+				exit 1
+			fi
 			;;
 	esac
 	shift
 done
 
-if [ $# -lt 2 ] ; then
+if [ -z "${commit1}" ] ; then
 	usage
 	exit 1
 fi
@@ -64,20 +74,29 @@ TMP1=
 TMP2=
 trap out EXIT INT TERM HUP
 
-if [ -e "${1}" ] ; then
-	patch1=${1}
+if [ -e "${commit1}" ] ; then
+	patch1=${commit1}
 else
 	TMP1=$(mktemp)
-	git show "${1}" > "${TMP1}"
+	git show "${commit1}" > "${TMP1}"
 	patch1=${TMP1}
 fi
 
-if [ -e "${2}" ] ; then
-	patch2=${2}
+if [ -z "${commit2}" ] ; then
+	commit2=$(grep -P '(cherry picked|backported) from commit [0-9a-f]{40}' \
+				   "${patch1}" | grep -oP '[0-9a-f]{40}' || true)
+	if [ -z "${commit2}" ] ; then
+		echo "Unable to find second commit hash in first commit message" >&2
+		exit 1
+	fi
+fi
+
+if [ -e "${commit2}" ] ; then
+	patch2=${commit2}
 else
 	TMP2=$(mktemp)
-	git show "${2}" > "${TMP2}"
+	git show "${commit2}" > "${TMP2}"
 	patch2=${TMP2}
 fi
 
-colordiff -y -W "${width}" "${patch1}" "${patch2}"
+colordiff -y -W "${width}" "${patch1}" "${patch2}" || true
