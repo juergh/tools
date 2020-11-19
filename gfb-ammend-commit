@@ -103,7 +103,7 @@ def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, color=NONE):
                 idx = i
 
         # Add the provenance to the line
-        if re.search(r"[0-9a-h]{40}\)$", msg[idx]):
+        if re.search(r"[0-9a-f]{40}\)$", msg[idx]):
             msg[idx] = (color[0] + msg[idx][:-1] + " " + provenance + ")" +
                         color[1])
 
