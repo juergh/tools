@@ -67,7 +67,7 @@ EOF
 function usage()
 {
         cat <<EOF
-Usage: tagger [-h] [-d] DIRECTORY
+Usage: tag-mp3 [-h] [-d] DIRECTORY
 
 Tag mp3 files by deducing the artist, album, track number and song title from
 the pathname, which has to be in the form of:
