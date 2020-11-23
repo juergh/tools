@@ -3,6 +3,41 @@
 # Unmount a partition of a disk image file
 #
 
+
+function usage()
+{
+	cat <<EOF
+Usage: partumount [-h] [-s] MOUNTPOINT
+
+Optional arguments:
+  -h, --help     Show this help text and exit.
+  -s, --silent   Disable output.
+EOF
+}
+
+silent=0
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-s|--silent)
+			silent=1
+			;;
+		*)
+			break;
+			;;
+	esac
+	shift
+done
+
+if [ $# -ne 1 ] ; then
+	usage
+	exit 2
+fi
+
 MOUNTPOINT=${1}
 
 if ! [ -d "${MOUNTPOINT}" ] ; then
@@ -20,12 +55,14 @@ fi
 . "${config}"
 
 if ! sudo umount "${MOUNTPOINT}" ; then
-	echo "Failed to unmount partition" >&2
+	echo "Failed to unmount partition from ${MOUNTPOINT}" >&2
 	exit 1
 fi
 
 rm -f "${config}"
-echo "Partition unmounted"
+if [ "${silent}" -eq 0 ] ; then
+	echo "Partition unmounted from ${MOUNTPOINT}"
+fi
 
 if [ "${DEL_MOUNTPOINT}" -eq 1 ] ; then
 	rmdir "${MOUNTPOINT}"

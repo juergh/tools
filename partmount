@@ -27,27 +27,27 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: partmount [-b] [-h] [-v] DEVICE PARTITION [MOUNTPOINT]
+Usage: partmount [-h] [-s] [-v] DEVICE PARTITION [MOUNTPOINT]
 
 Optional arguments:
-  -b, --brief    Only print the mountpoint.
   -h, --help     Show this help text and exit.
+  -s, --silent   Only print the mountpoint.
   -v, --verbose  Enable verbose output. Can be provided multiple times to
                  increase verbosity.
 EOF
 }
 
-brief=0
+silent=0
 verbose=0
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
-		-b|--brief)
-			brief=1
-			;;
 		-h|--help)
 			usage
 			exit
+			;;
+		-s|--silent)
+			silent=1
 			;;
 		-v|--verbose)
 			verbose=$((verbose + 1))
@@ -59,8 +59,8 @@ while [ $# -gt 0 ] ; do
 	shift
 done
 
-if [ $# -lt 2 ] ; then
-	usage >&2
+if [ $# -lt 2 ] || [ $# -gt 3 ] ; then
+	usage
 	exit 2
 fi
 
@@ -156,7 +156,7 @@ else
 	# Mount the partition
 	if ! sudo mount -o loop,offset="${start_bytes}",sizelimit="${sectors_bytes}" \
 		 "${image}" "${MOUNTPOINT}" ; then
-		echo "Failed to mount partition: ${partnum}" >&2
+		echo "Failed to mount partition ${partnum} on ${MOUNTPOINT}" >&2
 		exit 1
 	fi
 fi
@@ -170,7 +170,7 @@ DEL_MOUNTPOINT=${DEL_MOUNTPOINT}
 NBD_DEVICE=${NBD_DEVICE}
 EOF
 
-if [ "${brief}" -eq 1 ] ; then
+if [ "${silent}" -eq 1 ] ; then
 	echo "${MOUNTPOINT}"
 else
 	echo "Partition mounted on ${MOUNTPOINT}"
