@@ -214,7 +214,7 @@ function do_send_patch()
 function do_request_pull()
 {
 	local refs_heads start commit branch remote ref _remote _branch \
-		  remote name email subject
+		  remote buglink subject name email
 
 	# Get the start commit for this pull request
 	readarray -t refs_heads < <(git for-each-ref --format="%(objectname)" \
@@ -252,11 +252,18 @@ function do_request_pull()
 		exit 1
 	fi
 
+	# Determine the subject for this pull request
+	buglink=$(git log --format=%b -1 | grep '^BugLink: ' || true)
+	subject=${buglink#BugLink: * }
+	subject=${subject:1:-1}
+	if [ -z "${subject}" ] ; then
+		subject=$(git log --format=%s -1)
+		subject=${subject#UBUNTU: }
+		subject=${subject#raspi: }
+	fi
+
 	name=$(git config user.name)
 	email=$(git config user.email)
-	subject=$(git log --format=%s -1)
-	subject=${subject#UBUNTU: }
-	subject=${subject#raspi: }
 
 	cat <<EOF
 From $(git log --format=%H -1) Mon Sep 17 00:00:00 2001
