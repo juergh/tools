@@ -24,4 +24,4 @@ opts=(
 	"-us"  # Don't sign the source package
 	"-d"   # Don't check build dependencies
 )
-run-chroot "${release}" -- dpkg-buildpackage "${opts[@]}"
+run-chroot "${release}" -- dpkg-buildpackage "${opts[@]}" "${@}"
