@@ -1,0 +1,37 @@
+#!/bin/bash -eu
+#
+# Import a Debian source package into the current git repo
+#
+
+version=${1}
+name=${2:-}
+
+if [ -z "${name}" ] ; then
+	name=$(dpkg-parsechangelog -SSource)
+fi
+
+if [ -n "$(git status --porcelain)" ] ; then
+    echo "Repo is not clean" >&2
+    exit 1
+fi
+
+tag=${version//~/_}
+if git tag | grep -q "^${tag}$" ; then
+	echo "Tag exists already: ${tag}" >&2
+	exit 1
+fi
+
+pull-lp-source -d "${name}" "${version}"
+dsc="${name}_${version}.dsc"
+
+# Create a temporary directory
+tmpd=$(mktemp -d -u)
+trap "rm -rf ${tmpd}" EXIT INT TERM HUP
+
+# Extract the source package and update the tree
+dpkg-source --skip-patches -x "${dsc}" "${tmpd}"
+rsync -a --delete --exclude .git "${tmpd}"/ .
+
+git add .
+git commit -s -m "Import ${name} ${version}"
+git tag "${tag}"
