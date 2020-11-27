@@ -1,0 +1,76 @@
+#!/bin/bash -eu
+#
+# Review a debian source package
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: review-source-deb [-h]
+
+Review a debian source package.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+recreate=0
+
+while [ "${#}" -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-r|--recreate)
+			recreate=1
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+src=$(dpkg-parsechangelog -S Source)
+version=$(dpkg-parsechangelog -S Version)
+
+echo "Current:  ${src} (${version})"
+
+dsc=${src}_${version}.dsc
+changes=${src}_${version}_source.changes
+debdiff=${src}_${version}.debdiff
+
+if [ "${recreate}" -eq 1 ] ; then
+	rm -f ../"${debdiff}"
+fi
+
+if ! [ -e ../"${debdiff}" ] ; then
+	# Find the oldest version mentioned in the .changes file
+	old=$(grep "^ ${src} (" ../"${changes}" | tail -1)
+	old_version=${old#* \(}
+	old_version=${old_version%\) *}
+
+	# Find the version prior to that in the changelog
+	prev=$(grep "^${src} " debian/changelog | \
+			   grep -m1 " (${old_version}) " -A1 | tail -1)
+	prev_version=${prev#* \(}
+	prev_version=${prev_version%\) *}
+	prev_dsc=${src}_${prev_version}.dsc
+
+	if [ -z "${prev_version}" ] ; then
+		echo "Failed to determine previous version" >&2
+		exit 1
+	fi
+	echo "Previous: ${src} (${prev_version})"
+
+	if ! [ -e ../"${prev_dsc}" ] ; then
+		( cd .. && pull-lp-source -d "${src}" "${prev_version}" )
+	fi
+
+	debdiff ../"${prev_dsc}" ../"${dsc}" > ../"${debdiff}"
+fi
+
+review-debdiff ../"${debdiff}"

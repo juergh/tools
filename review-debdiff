@@ -1,0 +1,56 @@
+#!/bin/bash -eu
+
+function do_colordiff()
+{
+    local line
+
+    while IFS= read -r line ; do
+		case "${line}" in
+			"-"*)
+				echo -e "\e[31m${line}\e[0m"
+				;;
+			"+"*)
+				echo -e "\e[32m${line}\e[0m"
+				;;
+			"!"*)
+				echo -e "\e[33m${line}\e[0m"
+				;;
+			"@@"*)
+				echo -e "\e[36m${line}\e[0m"
+				;;
+			"diff --git "*)
+				echo -e "\e[1m\e[36m${line}\e[0m"
+				;;
+			*)
+				echo "${line}"
+				;;
+		esac
+	done
+}
+
+debdiff=$1
+
+src=${debdiff%_*}
+changes=${debdiff%.debdiff}_source.changes
+
+# lsdiff .debdiff
+echo
+echo -e "\e[96m*** ${src} [1/3]: lsdiff ${debdiff} ***\e[0m"
+echo
+lsdiff -s "${debdiff}" | do_colordiff
+
+# filterdiff .debdiff
+echo
+echo -e "\e[96m*** ${src} [2/3]: filterdiff ${debdiff} ***\e[0m"
+echo
+filterdiff -x '*/abi/*' "${debdiff}" | do_colordiff
+
+# Content of .changes
+echo
+echo -e "\e[96m*** ${src} [3/3]: cat ${changes} ***\e[0m"
+echo
+if [ -e "${changes}" ] ; then
+	cat "${changes}"
+else
+	echo "No such .changes file: ${changes}"
+fi
