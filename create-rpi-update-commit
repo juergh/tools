@@ -31,26 +31,24 @@ done
 
 trap "echo Failure" INT TERM EXIT HUP
 
-oneline=
+# Walk back in history to find the latest raspberrypi commit
+found=0
 while IFS= read -r commit ; do
 	commit=$(git log "${commit}" -1 | \
 				 grep -P 'cherry picked from|backported from' | tail -1 | \
 				 grep -oP '[0-9a-f]{40}' || true)
 	if [ -n "${commit}" ] ; then
 		oneline=$(git log --format='%h ("%s")' "${commit}" -1)
-		break
+		tag=$(git tag --points-at "${oneline%% *}" | grep '^rpi-' | tail -1)
+		if [ -n "${tag}" ] ; then
+			found=1
+			break
+		fi
 	fi
-done < <(git log --format=%h)
+done < <(git log --format=%h HEAD~20..)
 
-if [ -z "${oneline}" ] ; then
-	echo "Failed to find latest upstream raspberrypi commit" >&2
-	exit 1
-fi
-
-# Get the tag name
-tag=$(git tag --points-at "${oneline%% *}" | grep '^rpi-' | tail -1)
-if [ -z "${tag}" ] ; then
-	echo "Failed to find tagname for ${oneline}" >&2
+if [ "${found}" -ne 1 ] ; then
+	echo "Failed to find the latest raspberrypi commit" >&2
 	exit 1
 fi
 
@@ -64,7 +62,7 @@ cat <<EOF > debian.raspi/upstream-raspberrypi
 EOF
 
 git commit -s \
-	-m "UBUNTU: raspi: Update to upstream raspberrypi ${commit::12}" \
+	-m "UBUNTU: raspi: Update to upstream raspberrypi ${commit::12} (${date})" \
 	-m "Ignore: yes" \
 	-- debian.raspi/upstream-raspberrypi
 
