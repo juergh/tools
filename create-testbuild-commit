@@ -80,6 +80,9 @@ suffix=${suffix//-/}
 version=$(dpkg-parsechangelog -l "${changelog}" -S Version)
 test_version="${version}+${suffix}"
 
+# Checkout a test branch
+git checkout -b testbuild-"${suffix}"
+
 # Update the changelog
 tmp=$(mktemp)
 last=$(git log --format=%h -1 -- "${changelog}")
