@@ -28,7 +28,7 @@ function pr_warn()
 
 function set_globals()
 {
-	local remote repo distro src
+	local remote repo distro
 
 	remote=$(git remote get-url origin)
 	repo=${remote##*/}
@@ -50,11 +50,11 @@ function set_globals()
 										 -S Distribution)
 			distro=${distro:0:1}
 			distro=${distro^^}
-			src=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
-			src=${src#linux}
-			src=${src#-}
-			if [ -n "${src}" ] ; then
-				RELEASE=${distro}/${src}
+			DERIVATIVE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+			DERIVATIVE=${DERIVATIVE#linux}
+			DERIVATIVE=${DERIVATIVE#-}
+			if [ -n "${DERIVATIVE}" ] ; then
+				RELEASE=${distro}/${DERIVATIVE}
 			else
 				RELEASE=${distro}
 			fi
@@ -151,7 +151,9 @@ function do_format_patch()
 	rm -rf .outgoing/
 	git format-patch -o .outgoing/ "${opts[@]}" "${@}"
 
-	# Check for BugLink and CVE tags
+	# Check for
+	#   - BugLink or CVE tags
+	#   - Requested-by tags for IBM-GT patches
 	for patch in .outgoing/*.patch ; do
 		if [ "${patch}" = ".outgoing/0000-cover-letter.patch" ] ; then
 			continue
@@ -159,6 +161,10 @@ function do_format_patch()
 		if ! grep -m1 -qP "^(BugLink: https://.*|CVE-[0-9]{4}-[0-9]*)$" \
 			 "${patch}" ; then
 			pr_warn "Missing BugLink and/or CVE tag in ${patch#*/}"
+		fi
+		if [ "${DERIVATIVE}" = "ibm-gt" ] && \
+			   ! grep -m1 -qP '^Requested-by: .*@ibm' "${patch}" ; then
+			pr_warn "Missing Requested-by tag in ${patch#*/}"
 		fi
 	done
 
