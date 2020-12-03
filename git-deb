@@ -117,17 +117,13 @@ function _get_first_buglink()
 function _query_lp_bug()
 {
 	local bug=${1} attr=${2}
-	local fmt
-
-	fmt="{}"
-	if [ "${attr}" = "title" ] ; then
-		fmt="LP: #${bug} - {}"
-	fi
 
 	curl -s -S --get "https://api.launchpad.net/devel/bugs/${bug}" | \
-		python3 -c "import json,sys ; \
-					obj = json.load(sys.stdin) ; \
-					print('${fmt}'.format(obj['${attr}']))"
+		python3 -c "\
+import json,sys
+obj = json.load(sys.stdin)
+print(obj['${attr}'])
+"
 }
 
 function do_format_patch()
@@ -219,8 +215,8 @@ function do_send_patch()
 
 function do_request_pull()
 {
-	local refs_heads start commit branch remote ref _remote _branch \
-		  remote buglink subject name email
+	local refs_heads start commit branch remote ref _remote _branch buglink
+	local subject name email
 
 	# Get the start commit for this pull request
 	readarray -t refs_heads < <(git for-each-ref --format="%(objectname)" \
@@ -260,12 +256,16 @@ function do_request_pull()
 
 	# Determine the subject for this pull request
 	buglink=$(git log --format=%b -1 | grep '^BugLink: ' || true)
-	subject=${buglink#BugLink: * }
-	subject=${subject:1:-1}
-	if [ -z "${subject}" ] ; then
-		subject=$(git log --format=%s -1)
-		subject=${subject#UBUNTU: }
-		subject=${subject#raspi: }
+	buglink=${buglink#BugLink: }
+	url=${buglink%% *}
+	if [ "${url}" = "${buglink}" ] ; then
+		# Try to query launchpad
+		bug=${buglink##*/}
+		subject="$(_query_lp_bug "${bug}" title) (LP: #${bug})"
+	else
+		# Buglink contains a subject, so must be a private bug
+		subject=${buglink#* }
+		subject=${subject:1:-1}
 	fi
 
 	name=$(git config user.name)
