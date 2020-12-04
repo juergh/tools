@@ -33,16 +33,19 @@ function install_pkg_files()
 
 		case "${package}" in
 			linux-image-*-dbgsym)
-				flavor=${package%-dbgsym}
-				flavor=-${flavor##*-}
+				flavor=${package#linux-image-*-}
+				flavor=${flavor#*-}
+				flavor=-${flavor%-dbgsym}
 				manifest=.dbg
 				;;
 			linux-image-*)
-				flavor=-${package##*-}
+				flavor=${package#linux-image-*-}
+				flavor=-${flavor#*-}
 				manifest=.img
 				;;
 			linux-modules-*)
-				flavor=-${package##*-}
+				flavor=${package#linux-modules-*-}
+				flavor=-${flavor#*-}
 				manifest=.mod
 				;;
 			linux-source-*)
@@ -99,8 +102,9 @@ function list_pkgs()
 		if [ "${arch}" = "all" ] ; then
 			flavor=
 		else
-			flavor=${version##*-}
-			version=${version%-*}
+			flavor=${version#*-}
+			flavor=${flavor#*-}
+			version=${version%-${flavor}}
 		fi
 
 		[ -f "${UPKG_DIR}/${inst_dir}/.dbg" ] && dbg=" * " || dbg=
