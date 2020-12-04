@@ -24,12 +24,9 @@ function install_pkg_files()
 	local pkg_file package version arch flavor manifest inst_dir
 
 	for pkg_file in "${PKG_FILES[@]}" ; do
-		# shellcheck disable=SC2016
-		package=$(dpkg-deb --show --showformat='${Package}' "${pkg_file}")
-		# shellcheck disable=SC2016
-		version=$(dpkg-deb --show --showformat='${Version}' "${pkg_file}")
-		# shellcheck disable=SC2016
-		arch=$(dpkg-deb --show --showformat='${Architecture}' "${pkg_file}")
+		package=$(dpkg-deb --field "${pkg_file}" Package)
+		version=$(dpkg-deb --field "${pkg_file}" Version)
+		arch=$(dpkg-deb --field "${pkg_file}" Architecture)
 
 		case "${package}" in
 			linux-image-*-dbgsym)
