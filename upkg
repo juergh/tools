@@ -21,7 +21,7 @@ function verify_pkg_index()
 
 function install_pkg_files()
 {
-	local pkg_file package version arch flavor inst_dir
+	local pkg_file package version arch flavor manifest inst_dir
 
 	for pkg_file in "${PKG_FILES[@]}" ; do
 		# shellcheck disable=SC2016
