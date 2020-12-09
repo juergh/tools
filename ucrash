@@ -149,6 +149,8 @@ function parse_dump_file()
 
 	if [ "${header[0]}" = "KDUMP   " ] ; then
 		parse_kdump "${header[@]}"
+	elif [ "${header[1]}" = "KDUMP   " ] ; then
+		parse_kdump "${header[@]:1}"
 	elif [ "${header[0]}" = "CORE" ] ; then
 		 parse_core
 	elif [ "${header[0]}" = "makedumpfile" ] ; then
