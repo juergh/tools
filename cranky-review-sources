@@ -1,0 +1,154 @@
+#!/bin/bash -eu
+
+#C=${C-cranky}
+#P=${P-$0}
+
+function do_colordiff()
+{
+	local line
+
+	while IFS= read -r line ; do
+		if [ "${line#-}" != "${line}" ] ; then
+			echo -e "\e[31m${line}\e[0m"
+		elif [ "${line#+}" != "${line}" ] ; then
+			echo -e "\e[32m${line}\e[0m"
+		elif [ "${line#!}" != "${line}" ] ; then
+			echo -e "\e[33m${line}\e[0m"
+		elif [ "${line#@@}" != "${line}" ] ; then
+			echo -e "\e[36m${line}\e[0m"
+		elif [ "${line#diff --git }" != "${line}" ] ; then
+			echo -e "\e[1m\e[36m${line}\e[0m"
+		else
+			echo "${line}"
+		fi
+	done
+}
+
+function out()
+{
+	local rc=$?
+
+	trap - EXIT INT TERM HUP
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function review_src()
+{
+	local dir=$1 recreate=$2
+	local DEBIAN src version debdiff changes
+
+	(
+		cd "$dir" || exit 1
+
+		DEBIAN=debian
+		# shellcheck disable=SC1091
+		if [ -e debian/debian.env ] ; then
+			. debian/debian.env
+		fi
+
+		src=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+		version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Version)
+		debdiff=${src}_${version}.debdiff
+		changes=${src}_${version}_source.changes
+
+		if ! [ -f "../${changes}" ] ; then
+			echo "No .changes file found: ${changes}" >&2
+			return
+		fi
+
+		if [ "${recreate}" -eq 1 ] ; then
+			rm -f "../${debdiff}"
+		fi
+
+		if ! [ -e "../${debdiff}" ] ; then
+			( cd ../ && cranky review "${changes}" )
+		fi
+
+		# lsdiff .debdiff
+		echo
+		echo -e "\e[96m*** ${src} [1/3]: lsdiff ${debdiff} ***\e[0m"
+		echo
+		lsdiff -s "../${debdiff}" | do_colordiff
+
+		# filterdiff .debdiff
+		echo
+		echo -e "\e[96m*** ${src} [2/3]: filterdiff ${debdiff} ***\e[0m"
+		echo
+		filterdiff -x '*/abi/*' "../${debdiff}" | do_colordiff
+
+		# Content of .changes
+		echo
+		echo -e "\e[96m*** ${src} [3/3]: cat ${changes} ***\e[0m"
+		echo
+		cat "../${changes}"
+	)
+}
+
+# bash-completion: review-sources -h --help -r --recreate
+function usage()
+{
+	cat <<EOF
+Usage: cranky review-sources [-h] [-r] [handle]
+
+Review all source packages for the specified series and source as defined in
+kernel-series.yaml.
+
+Positional arguments:
+  handle          Handle to a kernel source tree. Either a path to a kernel
+                  source tree or a handle in <series>:<package> format. If not
+                  given, the current working directory is used.
+
+Optional arguments:
+  -h, --help      Show this help message and exit.
+  -r, --recreate  Recreate an already existing .debdiff file.
+EOF
+}
+
+recreate=0
+handle=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-r|--recreate)
+			recreate=1
+			;;
+		-*)
+			usage
+			exit 2
+			;;
+		*)
+			if [ -z "${handle}" ] ; then
+				handle=${1}
+			else
+				usage
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${handle}" ] ; then
+	handle=${PWD}
+fi
+
+trap out EXIT INT TERM HUP
+
+#FIXME: $here
+readarray -t srcs < <(cranky shell-helper source-packages-path "$handle")
+if [ "${#srcs[@]}" -eq 0 ] ; then
+	exit 1
+fi
+
+for src in "${srcs[@]}" ; do
+	review_src "${src}" "${recreate}"
+done

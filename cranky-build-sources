@@ -1,0 +1,72 @@
+#!/bin/bash -eu
+
+function usage()
+{
+	cat <<EOF
+Usage: cranky-build-sources [-h] POCKET
+
+Build a set of kernel packages.
+
+Positional arguments:
+  POCKET      The pocket that contains the previous released package set.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+pocket=
+
+while [ "${#}" -gt 0 ] ; do
+	case "${1}" in
+		-H|--help)
+			usage
+			exit
+			;;
+		updates|release|security|proposed)
+			if [ -z "${pocket}" ] ; then
+				pocket=${1}
+			else
+				echo "Invalid pocket: ${1}" >&2
+				exit 2
+			fi
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+if [ -z "${pocket}" ] ; then
+	usage
+	exit 2
+fi
+
+if [ -n "$(git status --porcelain)" ] ; then
+	echo "Repo is unclean" >&2
+	exit 1
+fi
+
+build_opts=()
+# shellcheck disable=SC2034
+while IFS=' ' read -r package version rest ; do
+	case "${package}" in
+		linux-meta*)
+			build_opts+=("--build-opts" "meta:-v${version}")
+			;;
+		linux-signed*)
+			build_opts+=("--build-opts" "signed:-v${version}")
+			;;
+		linux*)
+			build_opts+=("--build-opts" "main:-v${version}")
+			;;
+		*)
+			echo "Unsupported package: ${package}" >&2
+			exit 1
+	esac
+done < <(cranky rmadison -s -p "${pocket}")
+
+echo "cranky build-sources ${build_opts[*]}"
+cranky build-sources "${build_opts[@]}"

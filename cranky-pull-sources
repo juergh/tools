@@ -1,0 +1,146 @@
+#!/bin/bash -eu
+#
+# Download kernel source packages from a PPA
+#
+
+C=${C-cranky}
+P=${P-$0}
+
+here=$(dirname "$(readlink -f "${0}")")
+
+function out()
+{
+	local rc=$?
+
+	trap - EXIT INT TERM HUP
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function pull_src()
+{
+	local dir=${1} pocket=${2} re_download=${3}
+	local DEBIAN src version dsc
+
+	(
+		cd "$dir" || exit 1
+
+		DEBIAN=debian
+		# shellcheck disable=SC1091
+		if [ -e debian/debian.env ] ; then
+			. debian/debian.env
+		fi
+
+		src=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+		version=$(cranky rmadison -s | \
+					  awk '$1 == "'"${src}"'" && $3 == "'"${pocket}"'" { print $2 }')
+		dsc=${src}_${version}.dsc
+
+		if [ -e "../${dsc}" ] && [ "${re_download}" -eq 0 ] ; then
+			echo "Source package exists already: ${dir%/}/../${dsc}"
+			echo "Use -r, --re-download to download it again"
+			return
+		fi
+
+		cd ..
+		cranky pull-source "${src}" "${version}" || \
+			cranky pull-source "${src}" "${version}" "${pocket%%-*}"
+	)
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: cranky-pull-sources [-h] [-r] [POCKET] [HANDLE]
+
+Download the latest kernel source packages specified by HANDLE from POCKET.
+These are the versions that cranky-rmadison displays for the given POCKET.
+Note that the packages are downloaded to the parent directories of the
+different kernel source trees.
+
+Positional arguments:
+  POCKET  The pocket/PPA to download the packages from. Possible values are:
+          release, security, updates, and proposed. If not specified, defaults
+          to 'release'.
+  HANDLE  Handle to a kernel source tree, either a path to a kernel source tree
+          or a handle in <series>:<package> format. If not specified, defaults
+          to the current working directory.
+
+Optional arguments:
+  -h, --help         Show this help text and exit.
+  -r, --re-download  Re-download already existing source packages.
+
+Example:
+  $ cranky-pull-sources
+EOF
+}
+
+pocket=
+handle=
+re_download=0
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-r|--re-download)
+			re_download=1
+			;;
+		-*)
+			usage
+			exit 2
+			;;
+		*)
+			if [ -z "${pocket}" ] ; then
+				pocket=${1}
+			elif [ -z "${handle}" ] ; then
+				handle=${1}
+			else
+				usage
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${handle}" ] ; then
+	handle=${PWD}
+fi
+
+case "${pocket}" in
+	""|release)
+		pocket=
+		;;
+	security|updates|proposed)
+		pocket=-${pocket}
+		;;
+	*)
+		echo "Invalid pocket name: ${pocket}" >&2
+		exit 1
+		;;
+esac
+
+trap out EXIT INT TERM HUP
+
+# Get the source directories for the package set
+# FIXME
+#readarray -t srcs < <("${here}"/cranky-shell-helper source-packages-path \
+readarray -t srcs < <(cranky shell-helper source-packages-path "${handle}")
+if [ "${#srcs[@]}" -eq 0 ] ; then
+	exit 1
+fi
+
+# Prepend the release name to form a pocket name like bionic-proposed
+pocket=$(cranky shell-helper series-codename "${handle}")${pocket}
+
+# Download the source packages
+for src in "${srcs[@]}" ; do
+	pull_src "${src}" "${pocket}" "${re_download}"
+done
