@@ -1,0 +1,63 @@
+#!/bin/bash -eu
+#
+# Run linting tools on scripts
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: lint-any [-h] FILE [FILE...]
+
+Run the relevant linting tools (shellcheck, flake8, pylint) on the provided
+files.
+
+Optional arguments:
+  -h, --help  Show this help text.
+EOF
+}
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
+
+if [ ${#} -eq 0 ] ; then
+   usage
+   exit 1
+fi
+
+shell_scripts=()
+python_scripts=()
+
+# Determine the script types of the provided files
+for f in "${@}" ; do
+	if ! [ -e "${f}" ] ; then
+		echo "No such file: ${1}" >&2
+		exit 1
+	fi
+	if file "${f}" | grep -iq 'shell script' ; then
+		shell_scripts+=("${f}")
+	elif file "${f}" | grep -iq 'python script' ; then
+		python_scripts+=("${f}")
+	else
+		echo "Unknown file type: ${f}" >&2
+		exit 1
+	fi
+done
+
+if [ ${#shell_scripts[@]} -gt 0 ] ; then
+	shellcheck --external-sources --exclude=SC1117 "${shell_scripts[@]}" || true
+fi
+
+if [ ${#python_scripts[@]} -gt 0 ] ; then
+	flake8 --ignore=E501,E302,E305,E402,W504 "${python_scripts[@]}" || true
+	pylint --disable=C0301,W0311,E0401,C1801,R0912,C0326,R0903,C0330 "${python_scripts[@]}" || true
+fi
