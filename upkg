@@ -9,203 +9,174 @@
 
 function verify_pkg_index()
 {
+	local pkg_index=${1}
+
 	# Verify that the package index is valid
 	# shellcheck disable=SC2012
-	if  ! [[ "${PKG_INDEX}" =~ ^[0-9]+$ ]] || \
-		  [ "${PKG_INDEX}" -lt 1 ] || \
-		  [ "${PKG_INDEX}" -gt "$(ls -1d "${UPKG_DIR}"/*/* | wc -l)" ] ; then
-		echo "Error: Invalid package index: ${PKG_INDEX}" >&2
+	if  ! [[ "${pkg_index}" =~ ^[0-9]+$ ]] || \
+		  [ "${pkg_index}" -lt 1 ] || \
+		  [ "${pkg_index}" -gt "$(ls -1d "${UPKG_DIR}"/*/* | wc -l)" ] ; then
+		echo "Error: Invalid package index: ${pkg_index}" >&2
 		exit 1
 	fi
 }
 
+function install_source_pkg()
+{
+	local pkg_file=${1}
+	local source version inst_dir
+
+	source=${pkg_file##*/}
+	source=${source%_*}
+
+	version=${pkg_file##*/}
+	version=${version#*_}
+	version=${version%.dsc}
+
+	# The source package installation directory
+	inst_dir=${UPKG_DIR}/${source}/${version}/all/src
+
+	# Install the source package
+	echo -n "Installing source package ${pkg_file##*/} ... "
+	rm -rf "${inst_dir}"
+	mkdir -p  "${inst_dir%/*}"
+	dpkg-source -x "${pkg_file}" "${inst_dir}" > /dev/null
+	echo "done"
+}
+
+function install_binary_pkg()
+{
+	local pkg_file=${1}
+	local package source version arch flavor stamp inst_dir
+
+	package=$(dpkg-deb --field "${pkg_file}" Package)
+	source=$(dpkg-deb --field "${pkg_file}" Source)
+	version=$(dpkg-deb --field "${pkg_file}" Version)
+	arch=$(dpkg-deb --field "${pkg_file}" Architecture)
+
+	case "${package}" in
+		linux-image-*-dbgsym)
+			flavor=${package#linux-image-*-}
+			flavor=${flavor#*-}
+			flavor=${flavor%-dbgsym}
+			stamp=.dbg
+			;;
+		linux-image-*)
+			flavor=${package#linux-image-*-}
+			flavor=${flavor#*-}
+			stamp=.img
+			;;
+		linux-modules-*)
+			flavor=${package#linux-modules-*-}
+			flavor=${flavor#*-}
+			stamp=.mod
+			;;
+		*)
+			echo "Error: Unsupported package: ${pkg_file}" >&2
+			exit 1
+			;;
+	esac
+
+	# The binary package installation directory
+	inst_dir=${UPKG_DIR}/${source}/${version}/${arch}/${flavor}
+
+	# Install the binary package
+	echo -n "Installing binary package ${pkg_file##*/} ... "
+	mkdir -p "${inst_dir}"
+	dpkg-deb -x "${pkg_file}" "${inst_dir}"
+	touch "${inst_dir}/${stamp}"
+	echo "done"
+}
+
 function install_pkg_files()
 {
-	local pkg_file package version arch flavor manifest inst_dir
+	local pkg_file
 
-	for pkg_file in "${PKG_FILES[@]}" ; do
-		package=$(dpkg-deb --field "${pkg_file}" Package)
-		version=$(dpkg-deb --field "${pkg_file}" Version)
-		arch=$(dpkg-deb --field "${pkg_file}" Architecture)
+	for pkg_file in "${@}" ; do
+		if ! [ -e "${pkg_file}" ] ; then
+			echo "Error: No such package file: ${pkg_file}" >&2
+			exit 1
+		fi
 
-		case "${package}" in
-			linux-image-*-dbgsym)
-				flavor=${package#linux-image-*-}
-				flavor=${flavor#*-}
-				flavor=-${flavor%-dbgsym}
-				manifest=.dbg
+		case "${pkg_file}" in
+			*.dsc)
+				install_source_pkg "${pkg_file}"
 				;;
-			linux-image-*)
-				flavor=${package#linux-image-*-}
-				flavor=-${flavor#*-}
-				manifest=.img
-				;;
-			linux-modules-*)
-				flavor=${package#linux-modules-*-}
-				flavor=-${flavor#*-}
-				manifest=.mod
-				;;
-			linux-source-*)
-				flavor=
-				manifest=.src
+			*.deb|*.ddeb)
+				install_binary_pkg "${pkg_file}"
 				;;
 			*)
-				echo "Error: Unrecognized package: ${pkg_file}" >&2
+				echo "Error: Unsupported package: ${pkg_file}" >&2
 				exit 1
 				;;
 		esac
-
-		# The package installation directory
-		inst_dir=${UPKG_DIR}/${arch}/${version}${flavor}
-
-		# Install it
-		echo -n "Installing package ${pkg_file##*/} ... "
-		mkdir -p "${inst_dir}"
-		dpkg-deb -x "${pkg_file}" "${inst_dir}"
-		touch "${inst_dir}/${manifest}"
-		echo "done"
-
-		# Unpack the source tarball
-		tarball_dir=${inst_dir}/usr/src
-		tarball=${tarball_dir}/${package}.tar.bz2
-		if [ -e  "${tarball}" ] ; then
-			echo -n "Extracting source tarball ${tarball##*/} ... "
-			tar -C "${tarball_dir}" -xaf "${tarball}"
-			echo "done"
-
-			# Delete the tarball to save some space
-			rm -f "$(readlink -f "${tarball}")" "${tarball}"
-		fi
 	done
 }
 
 function list_pkgs()
 {
-	local fmt num inst_dir arch version flavor dbg img mod src
+	local fmt num inst_dir source version arch flavor
 
-	fmt="%3s   %-7s   %-20s   %-10s   %3s   %3s   %3s   %3s\n"
+	fmt="%3s   %-12s   %-20s   %-10s   %3s   %3s   %3s   %3s\n"
 
 	# shellcheck disable=SC2059
-	printf "${fmt}" "Idx" "Arch" "Version" "Flavor" "Dbg" "Img" "Mod" "Src"
-	echo "-------------------------------------------------------------------------"
+	printf "${fmt}" "Idx" "Source" "Version" "Flavor" "Dbg" "Img" "Mod" "Src"
+    printf "%0.s-" {1..78}
+	echo
 
 	num=1
 	# shellcheck disable=SC2035
-	for inst_dir in $(cd "${UPKG_DIR}" && ls -1d */* 2>/dev/null) ; do
-		arch=${inst_dir%/*}
-		arch=${arch##*/}
-		version=${inst_dir##*/}
-
+	for inst_dir in $(cd "${UPKG_DIR}" && ls -1d */*/*/* 2>/dev/null) ; do
+		IFS="/" read -r source version arch flavor < <(echo "${inst_dir}")
 		if [ "${arch}" = "all" ] ; then
-			flavor=
-		else
-			flavor=${version#*-}
-			flavor=${flavor#*-}
-			version=${version%-${flavor}}
+			continue
 		fi
 
 		[ -f "${UPKG_DIR}/${inst_dir}/.dbg" ] && dbg=" * " || dbg=
 		[ -f "${UPKG_DIR}/${inst_dir}/.img" ] && img=" * " || img=
 		[ -f "${UPKG_DIR}/${inst_dir}/.mod" ] && mod=" * " || mod=
-		[ -f "${UPKG_DIR}/${inst_dir}/.src" ] && src=" * " || src=
+
+		[ -d "${UPKG_DIR}/${inst_dir}/../../all/src" ] && src=" * " || src=
 
 		# shellcheck disable=SC2059
-		printf "${fmt}" "${num}" "${arch}" "${version}" "${flavor}" \
+		printf "${fmt}" "${num}" "${source}" "${version}" "${flavor}" \
 			   "${dbg}" "${img}" "${mod}" "${src}"
 
 		num=$((num + 1))
 	done
 }
 
-
 function list_pkgs_files()
 {
+	local pkg_index=${1}
 	local inst_dir
 
-	verify_pkg_index
+	verify_pkg_index "${1}"
 
 	# shellcheck disable=SC2012
-	inst_dir=$(ls -1d "${UPKG_DIR}"/*/* | head "-${PKG_INDEX}" | tail -1)
+	inst_dir=$(ls -1d "${UPKG_DIR}"/*/* | head "-${pkg_index}" | tail -1)
 	find "${inst_dir}" | sed "s,^${UPKG_DIR}/,,"
 }
 
 # -----------------------------------------------------------------------------
-# Command functions
-
-function do_download()
-{
-	local base rev abi pkg_files pkg_file pkg_file_path
-
-	if [ "${#CMD_ARGS[@]}" -ne 1 ] ; then
-		usage
-		exit 2
-	fi
-
-	if ! [ -d "${PKG_DIR}" ] ; then
-		echo "Error: No such target directory: ${PKG_DIR}" >&2
-		exit 1
-	fi
-
-	PKG_VERSION=${CMD_ARGS[0]}
-
-	base=${PKG_VERSION%%-*}
-	rev=${PKG_VERSION#*-}
-	abi=${base}-${rev%%.*}
-
-	pkg_files=(
-		"linux-image-unsigned-${abi}-${FLAVOR}-dbgsym_${PKG_VERSION}_${ARCH}.ddeb"
-		"linux-image-${abi}-${FLAVOR}-dbgsym_${PKG_VERSION}_${ARCH}.ddeb"
-		"linux-image-unsigned-${abi}-${FLAVOR}_${PKG_VERSION}_${ARCH}.deb"
-		"linux-image-${abi}-${FLAVOR}_${PKG_VERSION}_${ARCH}.deb"
-		"linux-modules-${abi}-${FLAVOR}_${PKG_VERSION}_${ARCH}.deb"
-		"linux-source-${base}_${PKG_VERSION}_all.deb"
-	)
-
-	PKG_FILES=()
-	for pkg_file in "${pkg_files[@]}" ; do
-		pkg_file_path=${PKG_DIR}/${pkg_file}
-		if [ -e "${pkg_file_path}" ] ; then
-			echo "Skipping ${pkg_file} (already exists)"
-			PKG_FILES+=("${pkg_file_path}")
-			continue
-		fi
-
-		echo -n "Downloading ${pkg_file}  ... "
-		if wget -q -O "${pkg_file_path}" \
-				"${ARCHIVE_URL}/${pkg_file}" ; then
-			echo "done"
-			PKG_FILES+=("${pkg_file_path}")
-		else
-			rm -f "${PKG_DIR}/${pkg_file}"
-			echo "failed"
-		fi
-	done
-}
+# Commands
 
 function do_install()
 {
-	if [ "${#CMD_ARGS[@]}" -eq 0 ] ; then
+	if [ "${#}" -gt 0 ] ; then
+		install_pkg_files "${@}"
+	else
 		usage
 		exit 2
-	elif [ -f "${CMD_ARGS[0]}" ] ; then
-		PKG_FILES=("${CMD_ARGS[@]}")
-	else
-		PKG_DIR=$(mktemp -d)
-		# shellcheck disable=SC2064
-		trap "rm -rf ${PKG_DIR}" EXIT INT TERM HUP
-		do_download
 	fi
-
-	install_pkg_files
 }
 
 function do_list()
 {
-	if [ "${#CMD_ARGS[@]}" -eq 0 ] ; then
+	if [ "${#}" -eq 0 ] ; then
 		list_pkgs
-	elif [ "${#CMD_ARGS[@]}" -eq 1 ] ; then
-		PKG_INDEX=${CMD_ARGS[0]}
-		list_pkgs_files
+	elif [ "${#}" -eq 1 ] ; then
+		list_pkgs_files "${1}"
 	else
 		usage
 		exit 2
@@ -216,16 +187,15 @@ function do_remove()
 {
 	local inst_dir
 
-	if [ "${#CMD_ARGS[@]}" -ne 1 ] ; then
+	if [ "${#}" -ne 1 ] ; then
 		usage
 		exit 2
 	fi
 
-	PKG_INDEX=${CMD_ARGS[0]}
-	verify_pkg_index
+	verify_pkg_index "${1}"
 
 	# shellcheck disable=SC2012
-	inst_dir=$(ls -1d "${UPKG_DIR}"/*/* | head -"${PKG_INDEX}" | tail -1)
+	inst_dir=$(ls -1d "${UPKG_DIR}"/*/* | head -"${pkg_index}" | tail -1)
 
 	echo -n "Removing package(s) ... "
 	rm -rf "${inst_dir}"
@@ -236,29 +206,20 @@ function do_remove()
 function usage()
 {
 	cat <<EOF
-Usage: upkg [-a ARCH] [-d DIR] [-f FLAVOR] [-h] [-x] COMMAND [ARGS]
+Usage: upkg [-h] COMMAND [ARGS]
 
 Ubuntu kernel (debug) package manager.
 
 Available commands:
-  download PKG_VERSION  Download the packages with packge version PKG_VERSION
-                        from the archive.
-  install PKG_VERSION | PKG_FILE [PKG_FILE ...]
-                        Download and install the packages with package version
-                        PKG_VERSION from the archive or install the local
-                        install the local packages PKG_FILE [PKG_FILE ...].
-  list [PKG_INDEX]      List all installed packages or, if PKG_INDEX is
-                        specified, the files provided by the package(s) with
-                        the index PKG_INDEX.
-  remove PKG_INDEX      Remove the package(s) with the index PKG_INDEX.
+  install PKG_FILE [PKG_FILE ...]
+                    Install the provided package(s).
+  list [PKG_INDEX]  List all installed packages or, if PKG_INDEX is specified,
+                    the files provided by the package(s) with the index
+                    PKG_INDEX.
+  remove PKG_INDEX  Remove the package(s) with the index PKG_INDEX.
 
 Optional arguments:
-  -a, --arch ARCH      Download the packages for kernel architecture ARCH
-                       (defaults to ${ARCH}).
-  -d, --dir DIR        Target directory for downloaded files (defaults to ./).
-  -f, --flavor FLAVOR  Download the binary package for flavor FLAVOR (defaults
-                       to generic).
-  -h, --help           Show this help.
+  -h, --help        Show this help text and exit.
 EOF
 }
 
@@ -274,51 +235,26 @@ fi
 UPKG_DIR=${HOME}/.upkg
 [ -d "${UPKG_DIR}" ] || mkdir -p "${UPKG_DIR}"
 
-# Archive download URL
-ARCHIVE_URL="https://launchpad.net/ubuntu/+archive/primary/+files/"
-
-ARCH=$(dpkg --print-architecture)
-CMD=
-CMD_ARGS=
-FLAVOR=generic
-PKG_DIR=${PWD}
-
 # Parse the commandline options
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
-		-a|--arch)
-			shift
-			ARCH="${1}"
-			;;
-		-f|--flavor)
-			shift
-			FLAVOR="${1}"
-			;;
 		-h|--help)
 			usage
 			exit
 			;;
-		-d|--dir)
+		install|list|remove)
+			cmd=${1}
 			shift
-			PKG_DIR="${1}"
-			;;
-		download|install|list|remove)
-			CMD="${1}"
-			shift
-			CMD_ARGS=("${@}")
-			break
+			"do_${cmd}" "${@}"
+			exit
 			;;
 		*)
-			echo "Error: Unexpected argument: ${1}" >&2
+			echo "Error: Invalid argument: ${1}" >&2
 			exit 2
 			;;
 	esac
 	shift
 done
 
-if [ -z "${CMD}" ] ; then
-	usage
-	exit 2
-fi
-
-"do_${CMD}"
+usage
+exit 2

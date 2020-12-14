@@ -9,7 +9,7 @@
 
 function pr_info()
 {
-	echo -e "\e[0;33m$(printf "%-24s : %s\n" "${1}" "${2}")\e[0m"
+	echo -e "\e[0;33m$(printf "%-19s : %s\n" "${1}" "${2}")\e[0m"
 }
 
 function pr_error()
@@ -38,6 +38,20 @@ function lookup_arch()
 	esac
 }
 
+function lookup_source()
+{
+	local flavor=${1}
+
+	case "${flavor}" in
+		ibm-gt)
+			echo "linux-ibm-gt"
+			;;
+		*)
+			pr_error "Unknown kernel flavor: ${flavor}"
+			;;
+	esac
+}
+
 function parse_linux_version()
 {
 	local linux_version=${1}
@@ -59,7 +73,7 @@ function parse_linux_version()
 
 	DUMP_VERSION=${DUMP_ABI}.${DUMP_UPLOAD}
 
-	DUMP_FULL_VERSION=${DUMP_VERSION}-${DUMP_FLAVOR}
+	DUMP_SOURCE=$(lookup_source "${DUMP_FLAVOR}")
  }
 
 function parse_debug_kernel()
@@ -107,7 +121,7 @@ function parse_kdump()
 
 	DUMP_VERSION=${DUMP_ABI}.${DUMP_UPLOAD}
 
-    DUMP_FULL_VERSION=${DUMP_VERSION}-${DUMP_FLAVOR}
+	DUMP_SOURCE=$(lookup_source "${DUMP_FLAVOR}")
 }
 
 function parse_core()
@@ -169,24 +183,23 @@ function run_crash()
 
 	pr_info "dump file" "${DUMP_FILE}"
 
-	pr_info "dump kernel arch"         "${DUMP_ARCH}"
-	pr_info "dump kernel release"      "${DUMP_RELEASE}"
-	pr_info "dump kernel base"         "${DUMP_BASE}"
-	pr_info "dump kernel abi"          "${DUMP_ABI}"
-	pr_info "dump kernel flavor"       "${DUMP_FLAVOR}"
-	pr_info "dump kernel upload"       "${DUMP_UPLOAD}"
-	pr_info "dump kernel version"      "${DUMP_VERSION}"
-	pr_info "dump kernel full version" "${DUMP_FULL_VERSION}"
+	pr_info "dump kernel arch"    "${DUMP_ARCH}"
+	pr_info "dump kernel release" "${DUMP_RELEASE}"
+	pr_info "dump kernel base"    "${DUMP_BASE}"
+	pr_info "dump kernel abi"     "${DUMP_ABI}"
+	pr_info "dump kernel flavor"  "${DUMP_FLAVOR}"
+	pr_info "dump kernel upload"  "${DUMP_UPLOAD}"
+	pr_info "dump kernel version" "${DUMP_VERSION}"
+	pr_info "dump kernel source"  "${DUMP_SOURCE}"
 
-	# upkg kernel root directories
-	kernel_bin_root=${UPKG_DIR}/${DUMP_ARCH}/${DUMP_FULL_VERSION}
-	kernel_src_root=${UPKG_DIR}/all/${DUMP_VERSION}
+	# upkg kernel root directory
+	kernel_bin_root=${UPKG_DIR}/${DUMP_SOURCE}/${DUMP_VERSION}/${DUMP_ARCH}/${DUMP_FLAVOR}
 
 	# Debug kernel, modules, system map and source code location
 	debug_kernel=${kernel_bin_root}/usr/lib/debug/boot/vmlinux-${DUMP_RELEASE}
 	debug_modules=${kernel_bin_root}/usr/lib/debug/lib/modules/${DUMP_RELEASE}
 #	system_map=${kernel_bin_root}/boot/System.map-${DUMP_RELEASE}
-	kernel_source=${kernel_src_root}/usr/src/linux-source-${DUMP_BASE}
+	kernel_source=${UPKG_DIR}/${DUMP_SOURCE}/${DUMP_VERSION}/all/src
 
 	# A debug kernel was specified on the commandline and it does *not* match
 	# the corresponding upkg kernel
