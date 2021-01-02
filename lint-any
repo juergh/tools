@@ -54,10 +54,13 @@ for f in "${@}" ; do
 done
 
 if [ ${#shell_scripts[@]} -gt 0 ] ; then
+	echo "-- Running shellcheck"
 	shellcheck --external-sources --exclude=SC1117 "${shell_scripts[@]}" || true
 fi
 
 if [ ${#python_scripts[@]} -gt 0 ] ; then
+	echo "-- Running flake8"
 	flake8 --ignore=E501,E302,E305,E402,W504 "${python_scripts[@]}" || true
+	echo "-- Running pylint"
 	pylint --disable=C0301,W0311,E0401,C1801,R0912,C0326,R0903,C0330 "${python_scripts[@]}" || true
 fi
