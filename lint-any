@@ -62,5 +62,5 @@ if [ ${#python_scripts[@]} -gt 0 ] ; then
 	echo "-- Running flake8"
 	flake8 --ignore=E501,E302,E305,E402,W504 "${python_scripts[@]}" || true
 	echo "-- Running pylint"
-	pylint --disable=C0301,W0311,E0401,C1801,R0912,C0326,R0903,C0330 "${python_scripts[@]}" || true
+	pylint --disable=C0301,W0311,E0401,C1801,R0912,C0326,R0903,C0330,W0621,C0103,C0114,C0115,C0116 "${python_scripts[@]}" || true
 fi
