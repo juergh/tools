@@ -33,6 +33,7 @@ function set_globals()
 	remote=$(git remote get-url origin)
 	repo=${remote##*/}
 
+	DERIVATIVE=
 	if [ "${repo}" = kteam-tools ] ; then
 		SUBJECT_PREFIX="kteam-tools][PATCH"
 	else
@@ -215,22 +216,24 @@ function do_send_patch()
 
 function do_request_pull()
 {
+	local start=${1:-}
 	local refs_heads start commit branch remote ref _remote _branch buglink
 	local subject name email
 
-	# Get the start commit for this pull request
-	readarray -t refs_heads < <(git for-each-ref --format="%(objectname)" \
-									refs/heads)
-	start=
-	while IFS= read -r commit ; do
-		if printf "%s\n" "${refs_heads[@]}" | grep -q "${commit}" ; then
-			start=${commit}
-			break
-		fi
-	done < <(git log --format="%H" -1000 HEAD~1)
 	if [ -z "${start}" ] ; then
-		pr_error "Start commit for pull request not found"
-		exit 1
+		# Get the start commit for this pull request
+		readarray -t refs_heads < <(git for-each-ref --format="%(objectname)" \
+										refs/heads)
+		while IFS= read -r commit ; do
+			if printf "%s\n" "${refs_heads[@]}" | grep -q "${commit}" ; then
+				start=${commit}
+				break
+			fi
+		done < <(git log --format="%H" -1000 HEAD~1)
+		if [ -z "${start}" ] ; then
+			pr_error "Start commit for pull request not found"
+			exit 1
+		fi
 	fi
 
 	# Get the remote where we pushed this branch to
@@ -304,7 +307,7 @@ Supported commands:
                             options for 'git format-patch'.
   send-patch [COMMIT]       Send the commit COMMIT as a patch email. If COMMIT
                             is not provided, defaults to HEAD.
-  request-pull              Create a pull request.
+  request-pull [COMMIT]     Create a pull request.
 
 Optional arguments:
   -c, --cover-letter        Add a cover letter.
