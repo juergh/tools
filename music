@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+
+import argparse
+import os
+import sys
+
+from PIL import Image
+
+import taglib
+
+# -----------------------------------------------------------------------------
+# Helper functions
+
+def add(name, *args, **kwargs):
+    def dec(name, *args, **kwargs):
+        def _decorator(func):
+            func.__dict__.setdefault(name, []).insert(0, (args, kwargs))
+            return func
+        return _decorator
+    return dec(name, *args, **kwargs)
+
+# -----------------------------------------------------------------------------
+# Commands
+
+@add('arg', 'file', metavar='FILE', help='Filename')
+@add('help', 'Show mp3 tag details')
+def do_mp3_tag_show(args):
+    """
+    Show mp3 file metadata tags
+    """
+    f = taglib.File(args.file)   # pylint: disable=I1101
+    for key, val in f.tags.items():
+        print('{:<12}: {}'.format(key, ' '.join(val)))
+    return 0
+
+@add('arg', 'file', metavar='FILE', help='Filename')
+@add('help', 'Show mp3 information')
+def do_mp3_info(args):
+    """
+    Show mp3 information
+    """
+    f = taglib.File(args.file)   # pylint: disable=I1101
+    print('Channels    : {}'.format(f.channels))
+    print('Bit rate    : {:<5} [kbit/s]'.format(f.bitrate))
+    print('Sample rate : {:<5} [Hz]'.format(f.sampleRate))
+    print('Length      : {:<5} [sec]'.format(f.length))
+    return 0
+
+@add('arg', 'file', metavar='FILE', help='Filename')
+@add('help', 'Show image information')
+def do_image_info(args):
+    """
+    Show image information
+    """
+    i = Image.open(args.file)
+    print('Size: {}'.format(i.size))
+    i.close()
+    return 0
+
+@add('arg', 'file', metavar='FILE', help='Filename')
+@add('help', 'Resize image to 400x400')
+def do_image_resize(args):
+    """
+    Resize image
+    """
+    i = Image.open(args.file)
+    n = i.resize((400, 400), Image.ANTIALIAS)
+    n.save(args.file + '.new', 'JPEG')
+    os.rename(args.file + '.new', args.file)
+    print('Size: {}'.format(n.size))
+    i.close()
+    n.close()
+    return 0
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+def main():
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(title='commands')
+
+    module = sys.modules[__name__]
+    for attr in (a for a in dir(module) if a.startswith('do_')):
+        cmd_name = attr[3:].replace('_', '-')
+        cmd_cb = getattr(module, attr)
+        cmd_desc = cmd_cb.__doc__ or ''
+        cmd_help = getattr(cmd_cb, 'help', [])
+        cmd_args = getattr(cmd_cb, 'arg', [])
+
+        sparser = subparsers.add_parser(cmd_name, help=cmd_help[0][0][0],
+                                        description=cmd_desc, add_help=False)
+
+        sparser.add_argument('-h', '--help', action='help')
+        for (args, kwargs) in cmd_args:
+            sparser.add_argument(*args, **kwargs)
+
+        sparser.set_defaults(func=cmd_cb)
+
+    # Parse the arguments
+    args = parser.parse_args()
+    if getattr(args, 'func', None) is None:
+        parser.print_help()
+        return 2
+
+    return args.func(args)
+
+if __name__ == "__main__":
+    sys.exit(main())
