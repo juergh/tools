@@ -23,6 +23,40 @@ def add(name, *args, **kwargs):
 # Commands
 
 @add('arg', 'file', metavar='FILE', help='Filename')
+@add('arg', '-f', '--force', action='store_true', help='Write the tags')
+@add('help', 'Set mp3 tag details')
+def do_mp3_tag_set(args):
+    """
+    Set mp3 file metadata tags
+    """
+    tmp, song = os.path.split(os.path.abspath(args.file))
+    tmp, album = os.path.split(tmp)
+    tmp, artist = os.path.split(tmp)
+    tracknumber, tmp, title = song.split(' ', 2)
+
+    tracknumber = tracknumber.lstrip('0')
+    title = os.path.splitext(title)[0]
+
+    tags = {
+        'ALBUM': [album],
+        'ARTIST': [artist],
+        'TITLE': [title],
+        'TRACKNUMBER': [tracknumber],
+    }
+
+    for key, val in tags.items():
+        print('{:<12}: {}'.format(key, ' '.join(val)))
+
+    if not args.force:
+        print('Use -f, --force to write the tags')
+        return 0
+
+    f = taglib.File(args.file)   # pylint: disable=I1101
+    f.tags = tags
+    f.save()
+    return 0
+
+@add('arg', 'file', metavar='FILE', help='Filename')
 @add('help', 'Show mp3 tag details')
 def do_mp3_tag_show(args):
     """
