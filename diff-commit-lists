@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+#
+# Diff two commit lists
+#
+
+import subprocess
+import sys
+
+def read_list(filename):
+    data = []
+    with open(filename) as fh:
+        for line in fh:
+            commit, subject = line.strip().split(' ', 1)
+            data.append({
+                'commit': commit,
+                'subject': subject,
+            })
+    return data
+
+def search_list(list1, subject):
+    for line in list1:
+        if line['subject'] == subject:
+            return line['commit']
+    return '-'
+
+def add_common_commits(list1, list2):
+    data = []
+    for line in list1:
+        line['match'] = search_list(list2, line['subject'])
+        data.append(line)
+    return data
+
+left = read_list(sys.argv[1])
+right = read_list(sys.argv[2])
+
+left_plus = add_common_commits(left, right)
+right_plus = add_common_commits(right, left)
+
+# Write the processed lists to temp files
+with open('/tmp/.left', 'w') as fh:
+    fh.write('\n'.join(['{commit:12} {match:12} {subject}'.format(**l)
+                        for l in left_plus]))
+with open('/tmp/.right', 'w') as fh:
+    fh.write('\n'.join(['{match:12} {commit:12} {subject}'.format(**l)
+                        for l in right_plus]))
+
+# Run 'diff' on the two temp files
+width = 400
+p = subprocess.run(['diff', '-y', '--width={}'.format(2 * width + 3),
+                    '--tabsize=1', '/tmp/.left', '/tmp/.right'],
+                   capture_output=True, check=False)
+
+# Process the side-by-side diff output
+for line in p.stdout.decode().split('\n'):
+    line = line.replace('\t', ' ')
+    left = line[0:width].strip()
+    right = line[width + 2:].strip()
+    result = line[width + 1:width + 2]
+
+    if result in (' ', '>'):
+        # Prefer the right-side ordering
+        print(right)
+    else:
+        # Drop the line if it's an out-of-order common commit
+        right_commit = line.split(' ')[1]
+        if right_commit == '-':
+            print(left)
