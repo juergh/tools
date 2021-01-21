@@ -1,8 +1,5 @@
 #!/bin/bash -eu
 
-#C=${C-cranky}
-#P=${P-$0}
-
 function do_colordiff()
 {
 	local line
@@ -66,7 +63,7 @@ function review_src()
 		return
 	fi
 
-	if [ "${RECREATE}" -eq 1 ] ; then
+	if [ "${FORCE}" -eq 1 ] ; then
 		rm -f ../"${debdiff}"
 	fi
 
@@ -121,32 +118,32 @@ function review_src()
 function usage()
 {
 	cat <<EOF
-Usage: cranky review-sources [-h] [-r] POCKET
+Usage: cranky review-sources [-f] [-h] POCKET
 
 Review the differences between the current kernel source packages and the
 previous source packages from pocket <POCKET>.
 
 Positional arguments:
-  POCKET          The name of the pocket that contains the previous kernel
-                  packages to compare against.
+  POCKET       The name of the pocket that contains the previous kernel
+               packages to compare against.
 
 Optional arguments:
-  -h, --help      Show this help message and exit.
-  -r, --recreate  Recreate the .debdiff files.
+  -f, --force  Force the recreation of the .debdiff files.
+  -h, --help   Show this help message and exit.
 EOF
 }
 
-RECREATE=0
+FORCE=0
 POCKET=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-f|--force)
+			FORCE=1
+			;;
 		-h|--help)
 			usage
 			exit
-			;;
-		-r|--recreate)
-			RECREATE=1
 			;;
 		-*)
 			echo "Invalid argument: ${1}" >&2
