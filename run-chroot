@@ -94,22 +94,26 @@ if [ -z "${chroot}" ] ; then
 	exit 2
 fi
 
-# Append the host arch to the chroot name, if necessary
-case "${chroot}" in
-	*-amd64|*-i386|*-powerpc|*-s390x|*-x86_64|*-armhf|*-arm64)
-		;;
-	fedora*|centos*)
-		chroot=${chroot}-$(dpkg-architecture -q DEB_HOST_GNU_CPU)
-		;;
-	*)
-		chroot=${chroot}-$(dpkg-architecture -q DEB_HOST_ARCH)
-		;;
-esac
-
 # Check if the chroot exists
 if ! schroot -l | grep -q "^chroot:${chroot}$" ; then
-	pr_error "No such chroot: ${chroot}"
-	exit 1
+	# Append the host arch to the chroot name, if necessary
+	case "${chroot}" in
+		*-amd64|*-i386|*-powerpc|*-s390x|*-x86_64|*-armhf|*-arm64)
+			_chroot=${chroot}
+			;;
+		fedora*|centos*)
+			_chroot=${chroot}-$(dpkg-architecture -q DEB_HOST_GNU_CPU)
+			;;
+		*)
+			_chroot=${chroot}-$(dpkg-architecture -q DEB_HOST_ARCH)
+			;;
+	esac
+	# Check if the chroot exists
+	if ! schroot -l | grep -q "^chroot:${_chroot}$" ; then
+		pr_error "No such chroot: ${chroot}"
+		exit 1
+	fi
+	chroot=${_chroot}
 fi
 
 session=${USER}-${chroot}
