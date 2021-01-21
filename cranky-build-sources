@@ -1,5 +1,18 @@
 #!/bin/bash -eu
 
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
 function usage()
 {
 	cat <<EOF
@@ -8,7 +21,7 @@ Usage: cranky-build-sources [-h] POCKET
 Build a set of kernel packages.
 
 Positional arguments:
-  POCKET      The pocket that contains the previous released package set.
+  POCKET      The pocket that contains the previously released package set.
 
 Optional arguments:
   -h, --help  Show this help text and exit.
@@ -19,7 +32,7 @@ pocket=
 
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
-		-H|--help)
+		-h|--help)
 			usage
 			exit
 			;;
@@ -27,7 +40,7 @@ while [ "${#}" -gt 0 ] ; do
 			if [ -z "${pocket}" ] ; then
 				pocket=${1}
 			else
-				echo "Invalid pocket: ${1}" >&2
+				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
 			;;
@@ -48,6 +61,8 @@ if [ -n "$(git status --porcelain)" ] ; then
 	echo "Repo is unclean" >&2
 	exit 1
 fi
+
+trap out EXIT
 
 build_opts=()
 # shellcheck disable=SC2034
