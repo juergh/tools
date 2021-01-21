@@ -26,9 +26,13 @@ function do_colordiff()
 
 function out()
 {
-	local rc=$?
+	local rc=${?}
 
-	trap - EXIT INT TERM HUP
+	trap - EXIT
+
+	if [ -d "${TMPD}" ] ; then
+		rm -rf "${TMPD}"
+	fi
 
 	if [ "${rc}" -ne 0 ] ; then
 		echo "Script failed" >&2
@@ -39,78 +43,101 @@ function out()
 
 function review_src()
 {
-	local dir=$1 recreate=$2
-	local DEBIAN src version debdiff changes
+	local src_dir=$1
+	local cwd DEBIAN src version debdiff changes
 
-	(
-		cd "$dir" || exit 1
+	cwd=${PWD}
 
-		DEBIAN=debian
-		# shellcheck disable=SC1091
-		if [ -e debian/debian.env ] ; then
-			. debian/debian.env
+	cd "${src_dir}" || exit 1
+
+	DEBIAN=debian
+	# shellcheck disable=SC1091
+	if [ -e debian/debian.env ] ; then
+		. debian/debian.env
+	fi
+
+	src=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+	version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Version)
+	debdiff=${src}_${version}.debdiff
+	changes=${src}_${version}_source.changes
+
+	if ! [ -f ../"${changes}" ] ; then
+		echo "No .changes file found: ${changes}" >&2
+		return
+	fi
+
+	if [ "${RECREATE}" -eq 1 ] ; then
+		rm -f ../"${debdiff}"
+	fi
+
+	# Create the debdiff if it doesn't exist
+	if ! [ -e ../"${debdiff}" ] ; then
+		if [ -z "${TMPD}" ] ; then
+			TMPD=$(mktemp -d)
+			# Cache the previous versions
+			while read -r prev_src prev_version rest ; do
+				PREVIOUS[${prev_src}]=${prev_version}
+			done < <(cranky rmadison -s -p "${POCKET}")
 		fi
 
-		src=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
-		version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Version)
-		debdiff=${src}_${version}.debdiff
-		changes=${src}_${version}_source.changes
-
-		if ! [ -f "../${changes}" ] ; then
-			echo "No .changes file found: ${changes}" >&2
+		prev_dsc="${src}"_"${PREVIOUS[${src}]}".dsc
+		if ! [ -e ../"${prev_dsc}" ] ; then
+			echo "No previous .dsc found: ${prev_dsc}" >&2
 			return
 		fi
 
-		if [ "${recreate}" -eq 1 ] ; then
-			rm -f "../${debdiff}"
-		fi
+		( cd "${TMPD}" && dcmd "${cwd}"/../"${prev_dsc}" | \
+			while read -r f ; do ln -sf "${f}" . ; done )
+		( cd ../ && cranky review -p "${TMPD}" "${changes}" )
+	fi
 
-		if ! [ -e "../${debdiff}" ] ; then
-			( cd ../ && cranky review "${changes}" )
-		fi
+	# Bail out if the debdiff doesn't exists
+	if ! [ -e ../"${debdiff}" ] ; then
+		echo "No .debdiff file found: ${debdiff}" >&2
+		return
+	fi
 
-		# lsdiff .debdiff
-		echo
-		echo -e "\e[96m*** ${src} [1/3]: lsdiff ${debdiff} ***\e[0m"
-		echo
-		lsdiff -s "../${debdiff}" | do_colordiff
+	# lsdiff .debdiff
+	echo
+	echo -e "\e[96m*** ${src} [1/3]: lsdiff ${debdiff} ***\e[0m"
+	echo
+	lsdiff -s ../"${debdiff}" | do_colordiff
 
-		# filterdiff .debdiff
-		echo
-		echo -e "\e[96m*** ${src} [2/3]: filterdiff ${debdiff} ***\e[0m"
-		echo
-		filterdiff -x '*/abi/*' "../${debdiff}" | do_colordiff
+	# filterdiff .debdiff
+	echo
+	echo -e "\e[96m*** ${src} [2/3]: filterdiff ${debdiff} ***\e[0m"
+	echo
+	filterdiff -x '*/abi/*' "../${debdiff}" | do_colordiff
 
-		# Content of .changes
-		echo
-		echo -e "\e[96m*** ${src} [3/3]: cat ${changes} ***\e[0m"
-		echo
-		cat "../${changes}"
-	)
+	# Content of .changes
+	echo
+	echo -e "\e[96m*** ${src} [3/3]: cat ${changes} ***\e[0m"
+	echo
+	cat ../"${changes}"
+
+	cd "${cwd}"
 }
 
-# bash-completion: review-sources -h --help -r --recreate
 function usage()
 {
 	cat <<EOF
-Usage: cranky review-sources [-h] [-r] [handle]
+Usage: cranky review-sources [-h] [-r] POCKET
 
-Review all source packages for the specified series and source as defined in
-kernel-series.yaml.
+Review the differences between the current kernel source packages and the
+previous source packages from pocket <POCKET>.
 
 Positional arguments:
-  handle          Handle to a kernel source tree. Either a path to a kernel
-                  source tree or a handle in <series>:<package> format. If not
-                  given, the current working directory is used.
+  POCKET          The name of the pocket that contains the previous kernel
+                  packages to compare against.
 
 Optional arguments:
   -h, --help      Show this help message and exit.
-  -r, --recreate  Recreate an already existing .debdiff file.
+  -r, --recreate  Recreate the .debdiff files.
 EOF
 }
 
-recreate=0
-handle=
+RECREATE=0
+POCKET=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -119,17 +146,17 @@ while [ ${#} -gt 0 ] ; do
 			exit
 			;;
 		-r|--recreate)
-			recreate=1
+			RECREATE=1
 			;;
 		-*)
-			usage
+			echo "Invalid argument: ${1}" >&2
 			exit 2
 			;;
 		*)
-			if [ -z "${handle}" ] ; then
-				handle=${1}
+			if [ -z "${POCKET}" ] ; then
+				POCKET=${1}
 			else
-				usage
+				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
 			;;
@@ -137,18 +164,20 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
-if [ -z "${handle}" ] ; then
-	handle=${PWD}
+if [ -z "${POCKET}" ] ; then
+	usage
+	exit 2
 fi
 
-trap out EXIT INT TERM HUP
+TMPD=
+trap out EXIT
 
-#FIXME: $here
-readarray -t srcs < <(cranky shell-helper source-packages-path "$handle")
+readarray -t srcs < <(cranky shell-helper source-packages-path)
 if [ "${#srcs[@]}" -eq 0 ] ; then
 	exit 1
 fi
 
+declare -A PREVIOUS
 for src in "${srcs[@]}" ; do
-	review_src "${src}" "${recreate}"
+	review_src "${src}"
 done
