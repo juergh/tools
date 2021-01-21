@@ -1,0 +1,129 @@
+#!/bin/bash -eu
+#
+# List downstream commits
+#
+
+function out()
+{
+	local rc=${?}
+
+	if [ -n "${TMPF}" ] ; then
+		rm -f "${TMPF}"
+	fi
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "Failure" >&2
+	fi
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: list-downstream-commits [-f] [-h] [REV_RANGE]
+
+List the downstream patches on the current branch.
+
+Postional arguments:
+  REV_RANGE     The git commit revision range to process. If not provided,
+                determine the starting commit and process
+                <starting_commit>..HEAD.
+
+Optional arguments:
+  -h, --help    Show this help text and exit.
+  -r, --revert  Filter reverted commits.
+  -u, --ubuntu  Filter UBUNTU commits.
+EOF
+}
+
+filter_ubuntu=0
+filter_revert=0
+rev_range=()
+
+while [ "${#}" -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-u|--ubuntu)
+			filter_ubuntu=1
+			;;
+		-r|--revert)
+			filter_revert=1
+			;;
+		*)
+			rev_range=("${@}")
+			break
+			;;
+	esac
+	shift
+done
+
+TMPF=
+trap out EXIT
+
+is_ubuntu=0
+deriv=
+if [ -e debian/debian.env ] ; then
+	is_ubuntu=1
+	# shellcheck disable=SC1091
+	. debian/debian.env
+	deriv=-${DEBIAN#*debian.}
+fi
+
+# Determine the rev range to process
+if [ "${#rev_range[@]}" -eq 0 ] ; then
+	if [ "${is_ubuntu}" -eq 1 ] ; then
+		subject="^[0-9a-f]{12} UBUNTU: Ubuntu-\d+\.\d+\.\d+"
+	else
+		subject="^[0-9a-f]{12} Linux \d+\.\d+"
+	fi
+	commit=$(git log --oneline | grep -m1 -P "${subject}")
+	rev_range=("${commit%% *}..")
+fi
+
+# Create a temp file for filtering reverted commits
+if [ "${filter_revert}" -eq 1 ] ; then
+	TMPF=$(mktemp)
+	git log --format='%h __MARK__%s__MARK__' "${rev_range[@]}" > "${TMPF}"
+fi
+
+# Process the rev range
+declare -A reverted
+while IFS= read -r line ; do
+	commit=${line%% *}
+	subject=${line#* }
+
+	# Filter ubuntu commits
+	if [ "${filter_ubuntu}" -eq 1 ] ; then
+	   case "${subject}" in
+		   UBUNTU:\ Start\ new\ release|\
+		   UBUNTU:\ link-to-tracker*|\
+		   UBUNTU:\ Ubuntu"${deriv}"-[0-9]*\.[0-9]*\.[0-9]*)
+			   continue
+			   ;;
+	   esac
+	fi
+
+	# Filter reverted commits
+	if [ "${filter_revert}" -eq 1 ] ; then
+		if [ -n "${reverted[${commit}]:-}" ] ; then
+			continue
+		fi
+
+		no_revert=${subject#UBUNTU: * Revert \"}
+		no_revert=${subject#Revert \"}
+		if [ "${no_revert}" != "${subject}" ] ; then
+			no_revert=${no_revert%\"}
+			match=$(sed -e "1,/^${commit}/d" "${TMPF}" | \
+						grep -m1 -F "__MARK__${no_revert}__MARK__" | \
+						sed 's, .*,,')
+			if [ -n "${match}" ] ; then
+				reverted[${match}]=1
+				continue
+			fi
+		fi
+	fi
+
+	echo "${line}"
+done < <(git log --format='%h %s' "${rev_range[@]}")
