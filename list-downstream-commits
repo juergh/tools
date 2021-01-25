@@ -111,7 +111,6 @@ while IFS= read -r line ; do
 			continue
 		fi
 
-		no_revert=${subject#UBUNTU: * Revert \"}
 		no_revert=${subject#Revert \"}
 		if [ "${no_revert}" != "${subject}" ] ; then
 			no_revert=${no_revert%\"}
