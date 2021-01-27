@@ -62,7 +62,7 @@ cat <<EOF > debian.raspi/upstream-raspberrypi
 EOF
 
 git commit -s \
-	-m "UBUNTU: raspi: Update to upstream raspberrypi ${commit::12} (${date})" \
+	-m "UBUNTU: raspi: Update to upstream raspberrypi ${branch} (${date})" \
 	-m "Ignore: yes" \
 	-- debian.raspi/upstream-raspberrypi
 
