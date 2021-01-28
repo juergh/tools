@@ -13,7 +13,7 @@ function out()
 	if [ ${rc} -eq 0 ] ; then
 		echo -e "\e[32mCompilation succeeded\e[0m"
 	else
-		echo -e "\e[31mCompilation failed\e[0m" 1>&2
+		echo -e "\e[31mCompilation failed\e[0m" >&2
 	fi
 
 	exit "${rc}"
@@ -122,7 +122,7 @@ function get_upstream_schroot()
 			series=bionic
 			;;
 		*)
-			series=cosmic
+			series=focal
 			;;
 	esac
 
@@ -160,7 +160,7 @@ function build_upstream_kernel()
 			target=vmlinux
 			;;
 		*)
-			echo "+++ Error: Unsupported arch: ${DEB_ARCH}" 2>&1
+			echo "+++ Error: Unsupported arch: ${DEB_ARCH}" >&2
 			exit 1
 			;;
 	esac
@@ -339,7 +339,7 @@ while [ $# -gt 0 ] ; do
 			break
 			;;
 		-*)
-			echo "Error: Unknown option: ${1}" 2>&1
+			echo "+++ Error: Unknown option: ${1}" >&2
 			exit 1
 			;;
 		*)
@@ -352,11 +352,11 @@ done
 trap out INT TERM EXIT HUP
 
 if [ ${UBUNTU} -eq 1 ] ; then
-	build_ubuntu_kernel
+	build_ubuntu_kernel 2>&1 | tee "make-kernel-${DEB_ARCH}.log"
 else
 	if ! [ -e "${CONFIG}" ] ; then
-		echo "+++ Error: Config file not found: ${CONFIG}" 2>&1
+		echo "+++ Error: Config file not found: ${CONFIG}" >&2
 		exit 1
 	fi
-	build_upstream_kernel
+	build_upstream_kernel 2>&1 | tee "make-kernel-${DEB_ARCH}.log"
 fi
