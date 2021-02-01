@@ -1,0 +1,35 @@
+#!/bin/bash -eu
+#
+# List Ubuntu-specific commits (that are not part of an upstream update)
+#
+
+version=$(dpkg-parsechangelog -l debian.master/changelog -S Version)
+start=$(git log --oneline | grep -m1 "UBUNTU: Ubuntu-${version}" | \
+			sed 's/ .*//')
+
+buglink=
+while IFS= read -r line ; do
+	commit=${line%% *}
+	subject=${line#* }
+
+	case "${subject}" in
+		UBUNTU:\ Start\ new\ release|\
+		UBUNTU:\ link-to-tracker*|\
+		UBUNTU:\ Ubuntu-raspi-[0-9]*|\
+		UBUNTU:\ *\ updateconfigs\ after\ update\ to\ *)
+			continue
+			;;
+		UBUNTU:\ *\ Update\ to\ upstream\ raspberrypi\ *)
+			buglink=$(git log --format=%b "${commit}" -1 | \
+						  grep -m1 '^BugLink' || true)
+			;;
+	esac
+
+	if [ -n "${buglink}" ] && \
+	   git log --format=%b "${commit}" -1 | grep -q "^${buglink}$" ; then
+		continue
+	fi
+
+	echo "$line"
+
+done < <(git log --oneline "${start}"..)
