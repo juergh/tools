@@ -1,0 +1,39 @@
+#!/bin/bash -eu
+#
+# Diff the current branch against the relevant raspberrypi branch
+#
+
+# Determine the 'start' of the derivative
+master_version=$(dpkg-parsechangelog -l debian.master/changelog -S Version)
+tmp=$(git log --oneline -1000 | \
+		  grep -m1 -P "^[0-9a-f]{12} UBUNTU: Ubuntu-${master_version}$" || \
+		  true)
+master_commit=${tmp%% *}
+if [ -z "${master_commit}" ] ; then
+	echo "Failed to determine Ubuntu master commit" >&2
+	exit 1
+fi
+
+# Determine the last raspberrypi update tag
+tmp=$(git log --oneline -1000 | \
+		  grep -m1 -P "^[0-9a-f]{12} UBUNTU:.* Update to upstream raspberrypi" || \
+		  true)
+rpi_tag=${tmp#* upstream raspberrypi }
+rpi_tag=${rpi_tag%\)*}
+rpi_tag=${rpi_tag/ \(/-}
+if [ -z "${rpi_tag}" ] ; then
+	echo "Failed to determine raspberrypi update tag" >&2
+	exit 1
+fi
+if ! git rev-parse "${rpi_tag}" >/dev/null 2>&1 ; then
+	echo "No such tag: ${rpi_tag}" >&2
+	exit 1
+fi
+
+# Collect the list of modified files
+while IFS= read -r name ; do
+	echo
+	echo -e "\e[93m${name}\e[0m"
+	git --no-pager diff --color=always "${rpi_tag}" -- "${name}" || true
+done < <(git log --format= --name-only "${master_commit}".. | \
+			 grep -vP '^(debian|ubuntu|\.)' | sort -u)
