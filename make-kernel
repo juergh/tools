@@ -98,13 +98,14 @@ function need_cross_compilation()
 
 function get_upstream_schroot()
 {
-	local version patchlevel series
+	local version patchlevel series revision
 
 	version=$(awk '/^VERSION = / { print $3 ; exit }' Makefile)
 	patchlevel=$(awk '/^PATCHLEVEL = / { print $3 ; exit }' Makefile)
+	revision=${version}.${patchlevel}
 
 	# The schroot distro, based on the kernel version
-	case "${version}.${patchlevel}" in
+	case "${revision}" in
 		3.[0-9])
 			# 3.0 to 3.9
 			series=precise
@@ -121,8 +122,19 @@ function get_upstream_schroot()
 			# 4.10 to 4.17
 			series=bionic
 			;;
-		*)
+		5.4)
 			series=focal
+			;;
+		5.8)
+			series=groovy
+			;;
+		5.10|5.11)
+			series=hirsute
+			;;
+		*)
+			echo "+++ Error: Failed to determine chroot for" \
+				 "kernel ${revision}" >&2
+			exit 1
 			;;
 	esac
 
