@@ -151,13 +151,17 @@ function build_upstream_kernel()
 
 	# The kernel build architecture and default target
 	case "${DEB_ARCH}" in
+		amd64)
+			arch=x86_64
+			target=bzImage
+			;;
 		arm64)
 			arch=arm64
 			target=Image.gz
 			;;
-		amd64)
-			arch=x86_64
-			target=bzImage
+		armhf)
+			arch=arm
+			target=zImage
 			;;
 		i386)
 			arch=i386
