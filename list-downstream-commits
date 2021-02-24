@@ -19,7 +19,7 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: list-downstream-commits [-f] [-h] [REV_RANGE]
+Usage: list-downstream-commits [-f] [-h] [-r] [REV_RANGE]
 
 List the downstream patches on the current branch.
 
