@@ -99,7 +99,11 @@ while IFS= read -r line ; do
 	   case "${subject}" in
 		   UBUNTU:\ Start\ new\ release|\
 		   UBUNTU:\ link-to-tracker*|\
-		   UBUNTU:\ Ubuntu"${deriv}"-[0-9]*\.[0-9]*\.[0-9]*)
+		   UBUNTU:\ Ubuntu"${deriv}"-[0-9]*\.[0-9]*\.[0-9]*|\
+		   UBUNTU:\ Ubuntu-unstable-[0-9]*\.[0-9]*\.[0-9]*|\
+		   UBUNTU:\ \[[cC]onfig\]*|\
+		   UBUNTU:\ \[[pP]ackaging\]*|\
+		   UBUNTU:\ \[[dD]ebian\]*)
 			   continue
 			   ;;
 	   esac
