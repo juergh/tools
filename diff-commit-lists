@@ -38,21 +38,22 @@ right_plus = add_common_commits(right, left)
 
 # Write the processed lists to temp files
 with open('/tmp/.left', 'w') as fh:
-    fh.write('\n'.join(['{commit:12} {match:12} {subject}'.format(**l)
-                        for l in left_plus]))
+    for line in left_plus:
+        fh.write('{commit:12} {match:12} {subject}\n'.format(**line))
 with open('/tmp/.right', 'w') as fh:
-    fh.write('\n'.join(['{match:12} {commit:12} {subject}'.format(**l)
-                        for l in right_plus]))
+    for line in right_plus:
+        fh.write('{match:12} {commit:12} {subject}\n'.format(**line))
 
 # Run 'diff' on the two temp files
 width = 400
-p = subprocess.run(['diff', '-y', '--width={}'.format(2 * width + 3),
-                    '--tabsize=1', '/tmp/.left', '/tmp/.right'],
+p = subprocess.run(['sdiff', '--ignore-case', '--ignore-all-space',
+                    '--ignore-blank-lines', '--width={}'.format(2 * width + 3),
+                    '--expand-tabs', '--tabsize=1', '--minimal',
+                    '/tmp/.left', '/tmp/.right'],
                    capture_output=True, check=False)
 
 # Process the side-by-side diff output
-for line in p.stdout.decode().split('\n'):
-    line = line.replace('\t', ' ')
+for line in p.stdout.decode().split('\n')[:-1]:
     left = line[0:width].strip()
     right = line[width + 2:].strip()
     result = line[width + 1:width + 2]
@@ -60,8 +61,16 @@ for line in p.stdout.decode().split('\n'):
     if result in (' ', '>'):
         # Prefer the right-side ordering
         print(right)
-    else:
+    elif result == '<':
         # Drop the line if it's an out-of-order common commit
         right_commit = line.split(' ')[1]
         if right_commit == '-':
             print(left)
+    elif result == '|':
+        print(left)
+        print(right)
+    else:
+        print('*************************')
+        print('Unable to process line:')
+        print(line)
+        print('*************************')
