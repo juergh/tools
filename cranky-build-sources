@@ -27,16 +27,21 @@ Positional arguments:
 
 Optional arguments:
   -h, --help  Show this help text and exit.
+  -o, --orig  Include the orig source tarball in the upload.
 EOF
 }
 
 pocket=
+orig=0
 
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
 		-h|--help)
 			usage
 			exit
+			;;
+		-o|--orig)
+			orig=1
 			;;
 		updates|release|security|proposed|none)
 			if [ -z "${pocket}" ] ; then
@@ -111,6 +116,11 @@ for prev in "${previous[@]}" ; do
 			exit 1
 	esac
 done
+
+if [ "${orig}" -eq 1 ] ; then
+	# Include the orig source tarball in the upload
+	build_opts+=("--build-opts" "main:-sa")
+fi
 
 echo "cranky build-sources ${build_opts[*]}"
 cranky build-sources "${build_opts[@]}"
