@@ -5,8 +5,10 @@
 
 # Determine the 'start' of the derivative
 master_version=$(dpkg-parsechangelog -l debian.master/changelog -S Version)
+master_source=$(dpkg-parsechangelog -l debian.master/changelog -S Source)
+master_source=${master_source#linux}
 tmp=$(git log --oneline -1000 | \
-		  grep -m1 -P "^[0-9a-f]{12} UBUNTU: Ubuntu-${master_version}$" || \
+		  grep -m1 -P "^[0-9a-f]{12} UBUNTU: Ubuntu${master_source}-${master_version}$" || \
 		  true)
 master_commit=${tmp%% *}
 if [ -z "${master_commit}" ] ; then
