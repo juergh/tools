@@ -71,10 +71,20 @@ function review_src()
 	if ! [ -e ../"${debdiff}" ] ; then
 		if [ -z "${TMPD}" ] ; then
 			TMPD=$(mktemp -d)
-			# Cache the previous versions
-			while read -r prev_src prev_version rest ; do
-				PREVIOUS[${prev_src}]=${prev_version}
-			done < <(cranky rmadison -s -p "${POCKET}")
+
+			# Get and cache the previous versions from the provided pocket
+			if [ "${POCKET}" != "none" ] ; then
+				while read -r prev_src prev_version rest ; do
+					PREVIOUS[${prev_src}]=${prev_version}
+				done < <(cranky rmadison -s -p "${POCKET}")
+			fi
+		fi
+
+		if [ "${POCKET}" = "none" ] ; then
+			# No pocket, hence no cached previous version, so get it from the
+			# previous changelog entry
+			PREVIOUS[${src}]=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
+												   -S Version -o 1 -c 1)
 		fi
 
 		prev_dsc="${src}"_"${PREVIOUS[${src}]}".dsc
@@ -83,8 +93,15 @@ function review_src()
 			return
 		fi
 
+		echo
+		echo -e "\e[96m*** ${src} [0/3]: Diffing against ${prev_dsc} ***\e[0m"
+		echo
+
+		# Populate TMPD with symlinks to the previous package files
 		( cd "${TMPD}" && dcmd "${cwd}"/../"${prev_dsc}" | \
 			while read -r f ; do ln -sf "${f}" . ; done )
+
+		# Finally call cranky review against TMPD
 		( cd ../ && cranky review -p "${TMPD}" "${changes}" )
 	fi
 
@@ -125,7 +142,8 @@ previous source packages from pocket <POCKET>.
 
 Positional arguments:
   POCKET       The name of the pocket that contains the previous kernel
-               packages to compare against.
+               packages to compare against. If set to 'none', uses the version
+               from the previous changelog entry.
 
 Optional arguments:
   -f, --force  Force the recreation of the .debdiff files.
@@ -145,17 +163,17 @@ while [ ${#} -gt 0 ] ; do
 			usage
 			exit
 			;;
-		-*)
-			echo "Invalid argument: ${1}" >&2
-			exit 2
-			;;
-		*)
+		release|security|updates|proposed|none)
 			if [ -z "${POCKET}" ] ; then
 				POCKET=${1}
 			else
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
 			;;
 	esac
 	shift
