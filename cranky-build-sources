@@ -21,7 +21,9 @@ Usage: cranky-build-sources [-h] POCKET
 Build a set of kernel packages.
 
 Positional arguments:
-  POCKET      The pocket that contains the previously released package set.
+  POCKET      The pocket to get the versions of the previous kernel packages
+              from. If set to 'none', uses the version from the previous
+              changelog entries.
 
 Optional arguments:
   -h, --help  Show this help text and exit.
@@ -36,7 +38,7 @@ while [ "${#}" -gt 0 ] ; do
 			usage
 			exit
 			;;
-		updates|release|security|proposed)
+		updates|release|security|proposed|none)
 			if [ -z "${pocket}" ] ; then
 				pocket=${1}
 			else
@@ -64,9 +66,36 @@ fi
 
 trap out EXIT
 
+# Get the previous package versions
+if [ "${pocket}" = "none" ] ; then
+	# From the package changelogs
+	cwd=${PWD}
+	previous=()
+	while IFS= read -r src_dir ; do
+		cd "${src_dir}"
+		DEBIAN=debian
+		if [ -e debian/debian.env ] ; then
+			# shellcheck disable=SC1091
+			. debian/debian.env
+		fi
+		src=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+		prev_version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
+										   -S Version -o 1 -c 1)
+		previous+=("${src} ${prev_version}")
+	done < <(cranky shell-helper source-packages-path)
+	cd "${cwd}"
+else
+	# From the provided pocket
+	readarray -t previous < <(cranky rmadison -s -p "${pocket}")
+fi
+
 build_opts=()
 # shellcheck disable=SC2034
-while IFS=' ' read -r package version rest ; do
+for prev in "${previous[@]}" ; do
+	package=${prev%% }
+	version=${prev#* }
+	version=${version%% *}
+
 	case "${package}" in
 		linux-meta*)
 			build_opts+=("--build-opts" "meta:-v${version}")
@@ -81,7 +110,7 @@ while IFS=' ' read -r package version rest ; do
 			echo "Unsupported package: ${package}" >&2
 			exit 1
 	esac
-done < <(cranky rmadison -s -p "${pocket}")
+done
 
 echo "cranky build-sources ${build_opts[*]}"
 cranky build-sources "${build_opts[@]}"
