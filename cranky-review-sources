@@ -41,7 +41,7 @@ function out()
 function review_src()
 {
 	local src_dir=$1
-	local cwd DEBIAN src version debdiff changes
+	local cwd DEBIAN src version debdiff changes prev_version prev_dsc
 
 	cwd=${PWD}
 
@@ -71,23 +71,17 @@ function review_src()
 	if ! [ -e ../"${debdiff}" ] ; then
 		if [ -z "${TMPD}" ] ; then
 			TMPD=$(mktemp -d)
-
-			# Get and cache the previous versions from the provided pocket
-			if [ "${POCKET}" != "none" ] ; then
-				while read -r prev_src prev_version rest ; do
-					PREVIOUS[${prev_src}]=${prev_version}
-				done < <(cranky rmadison -s -p "${POCKET}")
-			fi
 		fi
 
-		if [ "${POCKET}" = "none" ] ; then
-			# No pocket, hence no cached previous version, so get it from the
-			# previous changelog entry
-			PREVIOUS[${src}]=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
-												   -S Version -o 1 -c 1)
+		# Figure out the previous package version
+		if [ "${#PREVIOUS[@]}" -eq 0 ] ; then
+			prev_version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
+											   -S Version -o 1 -c 1)
+		else
+			prev_version=${PREVIOUS[${src}]}
 		fi
 
-		prev_dsc="${src}"_"${PREVIOUS[${src}]}".dsc
+		prev_dsc="${src}"_"${prev_version}".dsc
 		if ! [ -e ../"${prev_dsc}" ] ; then
 			echo "No previous .dsc found: ${prev_dsc}" >&2
 			return
@@ -152,7 +146,7 @@ EOF
 }
 
 FORCE=0
-POCKET=
+pocket=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -164,8 +158,8 @@ while [ ${#} -gt 0 ] ; do
 			exit
 			;;
 		release|security|updates|proposed|none)
-			if [ -z "${POCKET}" ] ; then
-				POCKET=${1}
+			if [ -z "${pocket}" ] ; then
+				pocket=${1}
 			else
 				echo "Invalid argument: ${1}" >&2
 				exit 2
@@ -179,7 +173,7 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
-if [ -z "${POCKET}" ] ; then
+if [ -z "${pocket}" ] ; then
 	usage
 	exit 2
 fi
@@ -192,7 +186,14 @@ if [ "${#srcs[@]}" -eq 0 ] ; then
 	exit 1
 fi
 
-declare -A PREVIOUS
+declare -A PREVIOUS=()
+# Get the previous versions from the provided pocket
+if [ "${pocket}" != "none" ] ; then
+	while read -r src version rest ; do
+		PREVIOUS[${src}]=${version}
+	done < <(cranky rmadison -s -p "${pocket}")
+fi
+
 for src in "${srcs[@]}" ; do
 	review_src "${src}"
 done

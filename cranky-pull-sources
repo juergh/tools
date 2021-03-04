@@ -57,8 +57,11 @@ fi
 
 trap out EXIT INT TERM HUP
 
-# Get the source package versions
-readarray -t versions < <(cranky rmadison -s -p "${pocket}")
+# Get the source package versions from the provided pocket
+declare -a versions
+while IFS=' ' read -r package version rest ; do
+	versions[${package}]=${version}
+done < <(cranky rmadison -s -p "${pocket}")
 
 # Walk through the package set
 use_series=0
@@ -75,30 +78,19 @@ while read -r path ; do
 			changelog=debian/changelog
 		fi
 		series=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
-		source=$(dpkg-parsechangelog -l "${changelog}" -S Source)
+		package=$(dpkg-parsechangelog -l "${changelog}" -S Source)
 
 		# Get the package version
-		version=
-		for tmp in "${versions[@]}" ; do
-			if [ "${tmp%% *}" = "${source}" ] ; then
-				version=${tmp#* }
-				version=${version%% *}
-				break
-			fi
-		done
-		if [ -z "${version}" ] ; then
-			echo "Unable to find souce package version for: ${series}:${source}" >&2
-			exit 1
-		fi
+		version=${versions[${package}]}
 
 		if [ "${use_series}" -eq 0 ] ; then
-			if ! cranky pull-source "${source}" "${version}" ; then
+			if ! cranky pull-source "${package}" "${version}" ; then
 				use_series=1
 			fi
 		fi
 
 		if [ "${use_series}" -eq 1 ] ; then
-			cranky pull-source "${source}" "${version}" "${series}"
+			cranky pull-source "${package}" "${version}" "${series}"
 		fi
 	)
 done < <(cranky shell-helper source-packages-path)
