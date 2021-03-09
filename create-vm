@@ -181,13 +181,18 @@ function download_ubuntu_image()
 
 function download_core_image()
 {
-	local num name build url
+	local channel num name build url
+
+	if [ -n "${GRADE}" ] ; then
+		channel="${GRADE#-}"
+	else
+		channel="stable"
+	fi
 
 	num=${RELEASE#core}
-
 	name=ubuntu-core-${num}-${ARCH}.img.xz
-	for build in current pending beta/pending ; do
-		url=http://cdimage.ubuntu.com/ubuntu-core/${num}/${build}/${name}
+	for build in current pending ; do
+		url=http://cdimage.ubuntu.com/ubuntu-core/${num}/${channel}/${build}/${name}
 		run download_image "${url}"
 		if [ "${RC}" -eq 0 ] ; then
 			return
@@ -483,8 +488,8 @@ function define_vm()
 function usage()
 {
 	cat <<EOF
-Usage: create-vm [-a ARCH] [-d] [-f] [-h] [-m SIZE ] [-o] [-r] [-s SIZE]
-                 [-t TYPE] [-u] [-y] DIST [NAME]
+Usage: create-vm [-a ARCH] [-d] [-f] [-g GRADE] [-h] [-m SIZE] [-o] [-r]
+                 [-s SIZE] [-t TYPE] [-u] [-y] DIST [NAME]
 
 Create a libvirt guest VM.
 
@@ -499,6 +504,7 @@ Optional arguments:
                      host architecture.
   -d, --debug        Enable debugging (set -x).
   -f, --force        Force the recreation of an existing VM.
+  -g, --grade GRADE  Image grade (beta, edge, edge-dangerous, ...).
   -h, --help         Show this help text and exit.
   -i, --image IMAGE  Use the image IMAGE as the base image.
   -m, --memory SIZE  Memory size in KB. If not specified, defaults to 1024(KB).
@@ -519,6 +525,7 @@ EOF
 
 ARCH=
 FORCE=0
+GRADE=
 DOWNLOAD=0
 REBOOT=1
 SIZE=8
@@ -544,6 +551,10 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-f|--force)
 			FORCE=1
+			;;
+		-g|--grade)
+			shift
+			GRADE=-${1}
 			;;
 		-h|--help)
 			usage
@@ -671,7 +682,7 @@ esac
 
 # The name of the VM
 if [ -z "${NAME}" ] ; then
-	NAME=${VENDOR}-${RELEASE}
+	NAME=${VENDOR}-${RELEASE}${GRADE}
 	if [ "${ARCH}" != "${host_arch}" ] ; then
 		NAME=${NAME}-${ARCH}
 	fi
@@ -726,7 +737,7 @@ CONFIG_DIR=$(dirname "$(readlink -e "${0}")")/config
 
 # The full path of the (cached) base image
 if [ -z "${BASE_IMAGE}" ] ; then
-	BASE_IMAGE=${IMAGES_DIR}/${VENDOR}-${RELEASE}-${ARCH}.img
+	BASE_IMAGE=${IMAGES_DIR}/${VENDOR}-${RELEASE}${GRADE}-${ARCH}.img
 fi
 
 # The OS and config drive image names
@@ -746,7 +757,7 @@ else
 	INITRD=
 fi
 
-print_var NAME VCPU VCPU_THREADS MEMORY ARCH VENDOR DIST RELEASE \
+print_var NAME VCPU VCPU_THREADS MEMORY ARCH VENDOR DIST RELEASE GRADE \
 		  OS_IMAGE CONFIG_DRIVE BOOT_MODE KERNEL INITRD BASE_IMAGE
 
 echo
