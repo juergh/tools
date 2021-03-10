@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+#
+# Set the distro of a pi-kernel snap recipe
+#
+
+from launchpadlib.launchpad import Launchpad
+
+def show(item):
+    print(item)
+    print('attributes:  {}'.format(sorted(item.lp_attributes)))
+    print('collections: {}'.format(sorted(item.lp_collections)))
+    print('entries:     {}'.format(sorted(item.lp_entries)))
+    print('operations:  {}'.format(sorted(item.lp_operations)))
+
+lp = Launchpad.login_with('tools', 'production', version='devel')
+
+team = lp.people['canonical-kernel-snaps']
+focal = lp.distributions['ubuntu'].getSeries(name_or_version='focal')
+snap = lp.snaps.getByName(name='pi-kernel--uc20+test', owner=team)
+
+# Set the distro to Focal (which can't be done through the web UI)
+snap.distro_series = focal
+snap.lp_save()
