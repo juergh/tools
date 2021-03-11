@@ -52,8 +52,10 @@ function set_globals()
 			distro=${distro:0:1}
 			distro=${distro^^}
 			DERIVATIVE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
-			DERIVATIVE=${DERIVATIVE#linux}
-			DERIVATIVE=${DERIVATIVE#-}
+			if [ "${DERIVATIVE}" != "linux-firmware" ] ; then
+				DERIVATIVE=${DERIVATIVE#linux}
+				DERIVATIVE=${DERIVATIVE#-}
+			fi
 			if [ -n "${DERIVATIVE}" ] ; then
 				RELEASE=${distro}/${DERIVATIVE}
 			else
