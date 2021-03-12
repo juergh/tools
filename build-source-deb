@@ -3,15 +3,55 @@
 # Build a Debian source package in a schroot
 #
 
+function usage()
+{
+	cat <<EOF
+Usage: build-source-deb [-h] [-o] [-r RELEASE]
+
+Build a Debian source package in a schroot.
+
+Optional arguments:
+  -h, --help             Show this help text and exit.
+  -o, --orig             Include the original source tarball.
+  -r, --release RELEASE  Use RELEASE rather than querying the changelog.
+EOF
+}
+
+orig=0
+release=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-o|--orig)
+			orig=1
+			;;
+		-r|--release)
+			shift
+			release=${1}
+			;;
+		*)
+			echo "Invalid argument: ${1}" 2>/dev/null
+			exit 2
+			;;
+	esac
+	shift
+done
+
 if [ -n "$(git status --porcelain)" ] ; then
 	echo "Repo is unclean"
 	exit 1
 fi
 
-release=$(dpkg-parsechangelog -SDistribution)
-if [ "${release}" = "UNRELEASED" ] ; then
-	echo "Release is UNRELEASED"
-	exit 1
+if [ -z "${release}" ] ; then
+	release=$(dpkg-parsechangelog -SDistribution)
+	if [ "${release}" = "UNRELEASED" ] ; then
+		echo "Release is UNRELEASED"
+		exit 1
+	fi
 fi
 
 run-chroot "${release}" -- fakeroot ./debian/rules clean
@@ -24,4 +64,9 @@ opts=(
 	"-us"  # Don't sign the source package
 	"-d"   # Don't check build dependencies
 )
+
+if [ ${orig} -eq 1 ] ; then
+	opts+=("-sa")  # Include the original source tarball
+fi
+
 run-chroot "${release}" -- dpkg-buildpackage "${opts[@]}" "${@}"
