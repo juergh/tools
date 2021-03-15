@@ -306,7 +306,12 @@ EOF
 
 do_tag()
 {
-	true
+	local version tag
+
+	version=$(dpkg-parsechangelog -S Version)
+	tag=v${version}
+
+	git tag -s -m "${tag}" "${tag}"
 }
 
 function usage()
@@ -323,6 +328,7 @@ Supported commands:
   send-patch [COMMIT]       Send the commit COMMIT as a patch email. If COMMIT
                             is not provided, defaults to HEAD.
   request-pull [COMMIT]     Create a pull request.
+  tag                       Tag the HEAD commit.
 
 Optional arguments:
   -c, --cover-letter        Add a cover letter.
@@ -390,7 +396,7 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			VERSION=${1}
 			;;
-		info|format-patch|send-patch|request-pull)
+		info|format-patch|send-patch|request-pull|tag)
 			cmd=${1//-/_}
 			;;
 		*)
