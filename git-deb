@@ -227,8 +227,8 @@ function do_send_patch()
 function do_request_pull()
 {
 	local start=${1:-}
-	local refs_heads start commit branch remote ref _remote _branch buglink
-	local subject name email
+	local refs_heads commit branch remote ref _remote _branch buglink
+	local url bug subject blurb name email
 
 	if [ -z "${start}" ] ; then
 		# Get the start commit for this pull request
@@ -275,10 +275,12 @@ function do_request_pull()
 		# Try to query launchpad
 		bug=${buglink##*/}
 		subject="$(_query_lp_bug "${bug}" title) (LP: #${bug})"
+		blurb=$(_query_lp_bug "${bug}" description)
 	else
 		# Buglink contains a subject, so must be a private bug
 		subject=${buglink#* }
 		subject=${subject:1:-1}
+		blurb=
 	fi
 
 	name=$(git config user.name)
@@ -294,6 +296,10 @@ Content-Transfer-Encoding: 8bit
 
 EOF
 	git log --format=%b "${start}".. | grep '^BugLink: ' | sort -r -u
+	if [ -n "${blurb}" ] ; then
+		echo
+		echo "${blurb}"
+	fi
 	cat <<EOF
 
 Signed-off-by: ${name} <${email}>
