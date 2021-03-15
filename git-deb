@@ -195,6 +195,7 @@ function do_format_patch()
 			fi
 		fi
 		if [ -n "${subject}" ] ; then
+			# shellcheck disable=SC2016
 			sed -e 's,\*\*\* SUBJECT HERE \*\*\*,${SUBJECT},' \
 				-e 's,\*\*\* BLURB HERE \*\*\*,${BLURB},' \
 				.outgoing/0000-cover-letter.patch | \
