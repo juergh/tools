@@ -33,7 +33,6 @@ function set_globals()
 	remote=$(git remote get-url origin)
 	repo=${remote##*/}
 
-	DERIVATIVE=
 	if [ "${repo}" = kteam-tools ] ; then
 		SUBJECT_PREFIX="kteam-tools][PATCH"
 	else
@@ -44,8 +43,6 @@ function set_globals()
 			if [ -e debian/debian.env ] ; then
 				# shellcheck disable=SC1091
 				. debian/debian.env
-			else
-				DEBIAN=debian
 			fi
 			distro=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
 										 -S Distribution)
@@ -94,6 +91,16 @@ function set_globals()
 
 	# Remove leading '][' from the subject prefix
 	SUBJECT_PREFIX=${SUBJECT_PREFIX#][}
+}
+
+function do_info()
+{
+	local var
+
+	for var in COVER_LETTER DEBIAN DERIVATIVE DRY_RUN IN_REPLY_TO RELEASE \
+			   RESEND SRU SUBJECT_PREFIX TOKEN VERSION ; do
+		printf "%-14s : %s\n" "${var}" "${!var}"
+	done
 }
 
 function send_patch()
@@ -297,6 +304,11 @@ EOF
 		"${branch}" | sed -e 's,git+ssh://.*@git,git://git,'
 }
 
+do_tag()
+{
+	true
+}
+
 function usage()
 {
 	cat <<EOF
@@ -305,6 +317,7 @@ Usage: git-deb [-c] [-d] [-h] [-i MSG_ID] [-r RELEASE] [-v NUM] COMMAND [OPTS]
 Helper script for managing Ubuntu package git repos.
 
 Supported commands:
+  info                      Show repo information.
   format-patch [OPTS]       Create a patch (series). OPTS are additional
                             options for 'git format-patch'.
   send-patch [COMMIT]       Send the commit COMMIT as a patch email. If COMMIT
@@ -330,14 +343,16 @@ EOF
 # Main entry point
 
 COVER_LETTER=0
+DEBIAN=debian
+DERIVATIVE=
 DRY_RUN=0
 IN_REPLY_TO=
 RELEASE=
 RESEND=0
 SRU=1
-VERSION=0
 SUBJECT_PREFIX=
 TOKEN=
+VERSION=0
 
 cmd=
 
@@ -375,7 +390,7 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			VERSION=${1}
 			;;
-		format-patch|send-patch|request-pull)
+		info|format-patch|send-patch|request-pull)
 			cmd=${1//-/_}
 			;;
 		*)
