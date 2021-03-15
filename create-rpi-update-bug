@@ -25,10 +25,9 @@ print(title)
 description = """
 Upstream raspberrypi patchset {}
 
-   Ported from the following raspberrypi branch:
-      {}
-
-from https://github.com/raspberrypi/linux.git
+  Ported from the following raspberrypi branch:
+    {}
+  from https://github.com/raspberrypi/linux.git
 
 """.format(date, branch)
 
