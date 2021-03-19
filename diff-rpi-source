@@ -3,30 +3,74 @@
 # Diff the current branch against the relevant raspberrypi branch
 #
 
+function usage()
+{
+	cat <<EOF
+Usage: diff-rpi-source [-h] [-v] [TAG]
+
+Diff the current branch against the relevant raspberrypi branch.
+
+Postional arguments:
+  TAG            Diff the current branch against tag TAG. If not provided,
+                 determines the tag automatically.
+
+Optional arguments:
+  -h, --help     Show this help text and exit.
+  -v, --verbose  Verbose output.
+EOF
+}
+
+verbose=0
+rpi_tag=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-v|--verbose)
+			verbose=1
+			;;
+		*)
+			if [ -z "${rpi_tag}" ] ; then
+				rpi_tag=${1}
+			else
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
 # Determine the 'start' of the derivative
 master_version=$(dpkg-parsechangelog -l debian.master/changelog -S Version)
 master_source=$(dpkg-parsechangelog -l debian.master/changelog -S Source)
 master_source=${master_source#linux}
-tmp=$(git log --oneline -1000 | \
-		  grep -m1 -P "^[0-9a-f]{12} UBUNTU: Ubuntu${master_source}-${master_version}$" || \
-		  true)
+master_tag=Ubuntu${master_source}-${master_version}
+tmp=$(git log --oneline -2000 | \
+		  grep -m1 -P "^[0-9a-f]{12} UBUNTU: ${master_tag}$" || true)
 master_commit=${tmp%% *}
 if [ -z "${master_commit}" ] ; then
-	echo "Failed to determine Ubuntu master commit" >&2
+	echo "Failed to determine Ubuntu master commit: ${master_tag}" >&2
 	exit 1
 fi
 
 # Determine the last raspberrypi update tag
-tmp=$(git log --oneline -1000 | \
-		  grep -m1 -P "^[0-9a-f]{12} UBUNTU:.* Update to upstream raspberrypi" || \
-		  true)
-rpi_tag=${tmp#* upstream raspberrypi }
-rpi_tag=${rpi_tag%\)*}
-rpi_tag=${rpi_tag/ \(/-}
 if [ -z "${rpi_tag}" ] ; then
-	echo "Failed to determine raspberrypi update tag" >&2
-	exit 1
+	tmp=$(git log --oneline -1000 | \
+			  grep -m1 -P "^[0-9a-f]{12} UBUNTU:.* Update to upstream raspberrypi" || \
+			  true)
+	rpi_tag=${tmp#* upstream raspberrypi }
+	rpi_tag=${rpi_tag%\)*}
+	rpi_tag=${rpi_tag/ \(/-}
+	if [ -z "${rpi_tag}" ] ; then
+		echo "Failed to determine raspberrypi update tag" >&2
+		exit 1
+	fi
 fi
+
 if ! git rev-parse "${rpi_tag}" >/dev/null 2>&1 ; then
 	echo "No such tag: ${rpi_tag}" >&2
 	exit 1
@@ -34,8 +78,11 @@ fi
 
 # Collect the list of modified files
 while IFS= read -r name ; do
-	echo
-	echo -e "\e[93m${name}\e[0m"
-	git --no-pager diff --color=always "${rpi_tag}" -- "${name}" || true
+	git --no-pager diff --color=always "${rpi_tag}" -- "${name}" > .tmp || true
+	if [ ${verbose} -eq 1 ] || [ -s .tmp ] ; then
+		echo
+		echo -e "\e[93m${name}\e[0m"
+		cat .tmp
+	fi
 done < <(git log --format= --name-only "${master_commit}".. | \
 			 grep -vP '^(debian|ubuntu|\.)' | sort -u)
