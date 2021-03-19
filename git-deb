@@ -185,7 +185,7 @@ function do_format_patch()
 			if [ "${url}" = "${buglink}" ] ; then
 				# Try to query launchpad
 				bug=${buglink##*/}
-				subject=$(_query_lp_bug "${bug}" title)
+				subject="$(_query_lp_bug "${bug}" title) (LP: #${bug})"
 				blurb=$(_query_lp_bug "${bug}" description)
 			else
 				# Buglink contains a subject, so must be a private bug
