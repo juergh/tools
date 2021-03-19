@@ -16,26 +16,31 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: cranky-build-sources [-h] POCKET
+Usage: cranky-build-sources [-f] [-h] [-o] POCKET
 
 Build a set of kernel packages.
 
 Positional arguments:
-  POCKET      The pocket to get the versions of the previous kernel packages
-              from. If set to 'none', uses the version from the previous
-              changelog entries.
+  POCKET       The pocket to get the versions of the previous kernel packages
+               from. If set to 'none', uses the version from the previous
+               changelog entries.
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
-  -o, --orig  Include the orig source tarball in the upload.
+  -f, --force  Force the build even if the repos are unclean.
+  -h, --help   Show this help text and exit.
+  -o, --orig   Include the orig source tarball in the upload.
 EOF
 }
 
+force=0
 pocket=
 build_opts=()
 
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
+		-f|--force)
+			force=1
+			;;
 		-h|--help)
 			usage
 			exit
@@ -64,8 +69,9 @@ if [ -z "${pocket}" ] ; then
 	exit 2
 fi
 
-if [ -n "$(git status --porcelain)" ] ; then
+if [ "${force}" -eq 0 ] && [ -n "$(git status --porcelain)" ] ; then
 	echo "Repo is unclean" >&2
+	echo "Use -f, --force to auto-clean before the build" >&2
 	exit 1
 fi
 
