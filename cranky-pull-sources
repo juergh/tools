@@ -84,6 +84,9 @@ while read -r path ; do
 		# Get the package version
 		version=${versions[${package}]}
 
+		# Download the source package into the parent directory
+		cd ..
+
 		if [ "${use_series}" -eq 0 ] ; then
 			if ! cranky pull-source "${package}" "${version}" ; then
 				use_series=1
