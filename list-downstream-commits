@@ -85,7 +85,8 @@ fi
 # Create a temp file for filtering reverted commits
 if [ "${filter_revert}" -eq 1 ] ; then
 	TMPF=$(mktemp)
-	git log --format='%h __MARK__%s__MARK__' "${rev_range[@]}" > "${TMPF}"
+	git log --no-merges --format='%h __MARK__%s__MARK__' "${rev_range[@]}" > \
+		"${TMPF}"
 fi
 
 # Process the rev range
@@ -129,4 +130,4 @@ while IFS= read -r line ; do
 	fi
 
 	echo "${line}"
-done < <(git log --format='%h %s' "${rev_range[@]}")
+done < <(git log --no-merges --format='%h %s' "${rev_range[@]}")
