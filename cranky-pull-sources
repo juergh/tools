@@ -50,6 +50,7 @@ while [ ${#} -gt 0 ] ; do
 	esac
 	shift
 done
+
 if [ -z "${pocket}" ] ; then
 	usage
 	exit 2
@@ -58,7 +59,7 @@ fi
 trap out EXIT INT TERM HUP
 
 # Get the source package versions from the provided pocket
-declare -a versions
+declare -A versions=()
 while IFS=' ' read -r package version rest ; do
 	versions[${package}]=${version}
 done < <(cranky rmadison -s -p "${pocket}")
