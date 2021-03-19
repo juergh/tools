@@ -81,6 +81,9 @@ if [ "${pocket}" != "none" ] ; then
 			linux-signed*)
 				build_opts+=("--build-opts" "signed:-v${version}")
 				;;
+			linux-restricted-modules*)
+				build_opts+=("--build-opts" "restricted-modules:-v${version}")
+				;;
 			linux*)
 				build_opts+=("--build-opts" "main:-v${version}")
 				;;
