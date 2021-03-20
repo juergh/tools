@@ -28,77 +28,76 @@ function pr_warn()
 
 function set_globals()
 {
-	local remote repo distro
+	local remote repo_name distro
+
+	if ! [ -d .git ] ; then
+		pr_error "Not a git repo"
+		exit 1
+	fi
 
 	remote=$(git remote get-url origin)
-	repo=${remote##*/}
+	repo_name=${remote##*/}
+	repo_name=${repo_name%.git}
 
-	if [ "${repo}" = kteam-tools ] ; then
-		SUBJECT_PREFIX="kteam-tools][PATCH"
-	else
-		SUBJECT_PREFIX=
-
-		# Determine the release name
-		if [ -z "${RELEASE}" ] ; then
-			if [ -e debian/debian.env ] ; then
-				# shellcheck disable=SC1091
-				. debian/debian.env
-			fi
-			distro=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
-										 -S Distribution)
-			distro=${distro:0:1}
-			distro=${distro^^}
-			DERIVATIVE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
-			if [ "${DERIVATIVE}" != "linux-firmware" ] ; then
-				DERIVATIVE=${DERIVATIVE#linux}
+	# Figure out what type of repo this is
+	if [ "${repo_name}" = kteam-tools ] ; then
+		REPO="kteam-tools"
+		CHANGELOG=
+		SOURCE=
+		DERIVATIVE=
+	elif [ -e debian/debian.env ] ; then
+		REPO="ubuntu-kernel-main"
+		# shellcheck disable=SC1091
+		. debian/debian.env
+		CHANGELOG=${DEBIAN}/changelog
+		SOURCE=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Source)
+		DERIVATIVE=${SOURCE#linux}
+		DERIVATIVE=${DERIVATIVE#-}
+	elif [ -e debian/changelog ] ; then
+		CHANGELOG=debian/changelog
+		SOURCE=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Source)
+		case "${SOURCE}" in
+			linux-meta*|linux-signed*|linux-restricted-modules*)
+				REPO="ubuntu-kernel-dependent"
+				DERIVATIVE=${SOURCE#linux}
 				DERIVATIVE=${DERIVATIVE#-}
-			fi
-			if [ -n "${DERIVATIVE}" ] ; then
-				RELEASE=${distro}/${DERIVATIVE}
-			else
-				RELEASE=${distro}
-			fi
-		fi
-
-		# [SRU]
-		if [ "${SRU}" -eq 1 ] ; then
-			SUBJECT_PREFIX="${SUBJECT_PREFIX}][SRU"
-		fi
-
-		# [RELEASE]
-		if [ -n "${RELEASE}" ] ; then
-			SUBJECT_PREFIX="${SUBJECT_PREFIX}][${RELEASE}"
-		fi
-
-		# [TOKEN]
-		if [ -n "${TOKEN}" ] ; then
-			SUBJECT_PREFIX="${SUBJECT_PREFIX}][${TOKEN}"
-		fi
-
-		# [PATCH]
-		SUBJECT_PREFIX="${SUBJECT_PREFIX}][PATCH"
+				;;
+			*)
+				REPO="debian-generic"
+				DERIVATIVE=
+				;;
+		esac
+	else
+		REPO="unknown"
+		CHANGELOG=
+		SOURCE=
+		DERIVATIVE=
 	fi
 
-	# Patch version
-	if [ "${VERSION}" -gt 0 ] ; then
-		SUBJECT_PREFIX="${SUBJECT_PREFIX} v${VERSION}"
+	# Determine the distro
+	DISTRO=
+	if [ -n "${CHANGELOG}" ] ; then
+		DISTRO=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Distribution)
 	fi
 
-	# Patch resend
-	if [ "${RESEND}" -eq 1 ] ; then
-		SUBJECT_PREFIX="${SUBJECT_PREFIX} RESEND"
+	# Set the abbreviated release
+	RELEASE=
+	if [ -n "${DISTRO}" ] ; then
+		distro=${DISTRO:0:1}
+		distro=${distro^^}
+		RELEASE=${distro}
+		if [ -n "${DERIVATIVE}" ] ; then
+			RELEASE=${RELEASE}/${DERIVATIVE}
+		fi
 	fi
-
-	# Remove leading '][' from the subject prefix
-	SUBJECT_PREFIX=${SUBJECT_PREFIX#][}
 }
 
-function do_info()
+function print_globals()
 {
 	local var
 
-	for var in COVER_LETTER DEBIAN DERIVATIVE DRY_RUN IN_REPLY_TO RELEASE \
-			   RESEND SRU SUBJECT_PREFIX TOKEN VERSION ; do
+	for var in REPO CHANGELOG SOURCE DERIVATIVE DISTRO RELEASE COVER_LETTER \
+					DRY_RUN IN_REPLY_TO SUBJECT_PREFIX; do
 		printf "%-14s : %s\n" "${var}" "${!var}"
 	done
 }
@@ -324,7 +323,8 @@ do_tag()
 function usage()
 {
 	cat <<EOF
-Usage: git-deb [-c] [-d] [-h] [-i MSG_ID] [-r RELEASE] [-v NUM] COMMAND [OPTS]
+Usage: git-deb [-c] [-d] [-h] [-i MSG_ID] [-r RELEASE] [-s] [-t TOKEN] [-ns]
+               [-v NUM] COMMAND [OPTS]
 
 Helper script for managing Ubuntu package git repos.
 
@@ -346,7 +346,7 @@ Optional arguments:
   -s, --resend              Add RESEND to the subject prefix.
   -t, --token TEXT          Add an additional token [TEXT] to the subject
                             prefix.
-  -u, --no-sru              Don't include [SRU] in the subject prefix.
+  -ns, --no-sru             Don't include [SRU] in the subject prefix.
   -v, --version NUM         The revision number of the patch to include in the
                             subject prefix.
 EOF
@@ -355,18 +355,16 @@ EOF
 # -----------------------------------------------------------------------------
 # Main entry point
 
+# Set the default globals
+set_globals
+
 COVER_LETTER=0
-DEBIAN=debian
-DERIVATIVE=
 DRY_RUN=0
 IN_REPLY_TO=
-RELEASE=
-RESEND=0
-SRU=1
-SUBJECT_PREFIX=
-TOKEN=
-VERSION=0
-
+resend=0
+sru=1
+token=
+version=0
 cmd=
 
 while [ ${#} -gt 0 ] ; do
@@ -390,18 +388,18 @@ while [ ${#} -gt 0 ] ; do
 			RELEASE=${1}
 			;;
 		-s|--resend)
-			RESEND=1
+			resend=1
 			;;
 		-t|--token)
 			shift
-			TOKEN=${1}
+			token=${1}
 			;;
-		-u|--no-sru)
-			SRU=0
+		-ns|--no-sru)
+			sru=0
 			;;
 		-v|--version)
 			shift
-			VERSION=${1}
+			version=${1}
 			;;
 		info|format-patch|send-patch|request-pull|tag)
 			cmd=${1//-/_}
@@ -422,5 +420,46 @@ if [ -z "${cmd}" ] ; then
 	exit 2
 fi
 
-set_globals
+# Set the default email subject prefix
+SUBJECT_PREFIX=
+if [ "${REPO}" = "kteam-tools" ] ; then
+	SUBJECT_PREFIX="kteam-tools"
+elif [ "${REPO}" != "unknown" ] ; then
+	# [SRU]
+	if [ "${sru}" -eq 1 ] ; then
+		SUBJECT_PREFIX="${SUBJECT_PREFIX}][SRU"
+	fi
+
+	# [RELEASE]
+	if [ -n "${RELEASE}" ] ; then
+		SUBJECT_PREFIX="${SUBJECT_PREFIX}][${RELEASE}"
+	fi
+
+	# [TOKEN]
+	if [ -n "${token}" ] ; then
+		SUBJECT_PREFIX="${SUBJECT_PREFIX}][${token}"
+	fi
+fi
+
+# Append [PATCH]
+SUBJECT_PREFIX="${SUBJECT_PREFIX}][PATCH"
+
+# Append patch version
+if [ "${version}" -gt 0 ] ; then
+	SUBJECT_PREFIX="${SUBJECT_PREFIX} v${version}"
+fi
+
+# Append resend
+if [ "${resend}" -eq 1 ] ; then
+	SUBJECT_PREFIX="${SUBJECT_PREFIX} resend"
+fi
+
+# Remove leading '][' from the subject prefix
+SUBJECT_PREFIX=${SUBJECT_PREFIX#][}
+
+print_globals
+
+if [ "${cmd}" = "info" ] ; then
+	exit
+fi
 do_"${cmd}" "${@}"
