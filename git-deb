@@ -39,12 +39,18 @@ function set_globals()
 	repo_name=${remote##*/}
 	repo_name=${repo_name%.git}
 
+	# Defaults
+	REPO="unknown"
+	CHANGELOG=
+	SOURCE=
+	DERIVATIVE=
+	SRU=0
+	RELEASE=
+
 	# Figure out what type of repo this is
 	if [ "${repo_name}" = kteam-tools ] ; then
 		REPO="kteam-tools"
-		CHANGELOG=
-		SOURCE=
-		DERIVATIVE=
+		RELEASE="kteam-tools"
 	elif [ -e debian/debian.env ] ; then
 		REPO="ubuntu-kernel-main"
 		# shellcheck disable=SC1091
@@ -53,6 +59,7 @@ function set_globals()
 		SOURCE=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Source)
 		DERIVATIVE=${SOURCE#linux}
 		DERIVATIVE=${DERIVATIVE#-}
+		SRU=1
 	elif [ -e debian/changelog ] ; then
 		CHANGELOG=debian/changelog
 		SOURCE=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Source)
@@ -61,17 +68,13 @@ function set_globals()
 				REPO="ubuntu-kernel-dependent"
 				DERIVATIVE=${SOURCE#linux}
 				DERIVATIVE=${DERIVATIVE#-}
+				SRU=1
 				;;
 			*)
 				REPO="debian-generic"
-				DERIVATIVE=
+				RELEASE="none"
 				;;
 		esac
-	else
-		REPO="unknown"
-		CHANGELOG=
-		SOURCE=
-		DERIVATIVE=
 	fi
 
 	# Determine the distro
@@ -80,9 +83,8 @@ function set_globals()
 		DISTRO=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Distribution)
 	fi
 
-	# Set the abbreviated release
-	RELEASE=
-	if [ -n "${DISTRO}" ] ; then
+	# Set the release
+	if [ -z "${RELEASE}" ] && [ -n "${DISTRO}" ] ; then
 		distro=${DISTRO:0:1}
 		distro=${distro^^}
 		RELEASE=${distro}
@@ -362,7 +364,6 @@ COVER_LETTER=0
 DRY_RUN=0
 IN_REPLY_TO=
 resend=0
-sru=1
 token=
 version=0
 cmd=
@@ -395,7 +396,7 @@ while [ ${#} -gt 0 ] ; do
 			token=${1}
 			;;
 		-ns|--no-sru)
-			sru=0
+			SRU=0
 			;;
 		-v|--version)
 			shift
@@ -422,39 +423,22 @@ fi
 
 # Set the default email subject prefix
 SUBJECT_PREFIX=
-if [ "${REPO}" = "kteam-tools" ] ; then
-	SUBJECT_PREFIX="kteam-tools"
-elif [ "${REPO}" != "unknown" ] ; then
-	# [SRU]
-	if [ "${sru}" -eq 1 ] ; then
-		SUBJECT_PREFIX="${SUBJECT_PREFIX}][SRU"
-	fi
-
-	# [RELEASE]
-	if [ -n "${RELEASE}" ] ; then
-		SUBJECT_PREFIX="${SUBJECT_PREFIX}][${RELEASE}"
-	fi
-
-	# [TOKEN]
-	if [ -n "${token}" ] ; then
-		SUBJECT_PREFIX="${SUBJECT_PREFIX}][${token}"
-	fi
+if [ "${SRU}" -eq 1 ] ; then
+	SUBJECT_PREFIX="${SUBJECT_PREFIX}][SRU"
 fi
-
-# Append [PATCH]
+if [ -n "${RELEASE}" ] && [ "${RELEASE}" != "none" ] ; then
+	SUBJECT_PREFIX="${SUBJECT_PREFIX}][${RELEASE}"
+fi
+if [ -n "${token}" ] ; then
+	SUBJECT_PREFIX="${SUBJECT_PREFIX}][${token}"
+fi
 SUBJECT_PREFIX="${SUBJECT_PREFIX}][PATCH"
-
-# Append patch version
 if [ "${version}" -gt 0 ] ; then
 	SUBJECT_PREFIX="${SUBJECT_PREFIX} v${version}"
 fi
-
-# Append resend
 if [ "${resend}" -eq 1 ] ; then
 	SUBJECT_PREFIX="${SUBJECT_PREFIX} resend"
 fi
-
-# Remove leading '][' from the subject prefix
 SUBJECT_PREFIX=${SUBJECT_PREFIX#][}
 
 print_globals
