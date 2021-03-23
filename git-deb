@@ -98,8 +98,8 @@ function print_globals()
 {
 	local var
 
-	for var in REPO CHANGELOG SOURCE DERIVATIVE DISTRO RELEASE COVER_LETTER \
-					DRY_RUN IN_REPLY_TO SUBJECT_PREFIX; do
+	for var in REPO CHANGELOG SOURCE DERIVATIVE SRU RELEASE DISTRO \
+					COVER_LETTER DRY_RUN IN_REPLY_TO ORIG SUBJECT_PREFIX; do
 		printf "%-14s : %s\n" "${var}" "${!var}"
 	done
 }
@@ -322,6 +322,32 @@ do_tag()
 	git tag -s -m "${tag}" "${tag}"
 }
 
+do_build_source()
+{
+	local opts
+
+	if [ -n "$(git status --porcelain)" ] ; then
+		echo "Repo is unclean" >&2
+		exit 1
+	fi
+
+	# Source package build options
+	opts=(
+		"-S"   # Build sources
+		"-i"   # Exclude revision control files and directories (diff)
+		"-I"   # Exclude revision control files and directories (tarball)
+		"-uc"  # Don't sign .buildinfo and .changes files
+		"-us"  # Don't sign the source package
+		"-d"   # Don't check build dependencies
+	)
+
+	if [ "${ORIG}" -eq 1 ] ; then
+		opts+=("-sa")  # Include the original source tarball
+	fi
+
+	dpkg-buildpackage "${opts[@]}"
+}
+
 function usage()
 {
 	cat <<EOF
@@ -331,6 +357,7 @@ Usage: git-deb [-c] [-d] [-h] [-i MSG_ID] [-r RELEASE] [-s] [-t TOKEN] [-ns]
 Helper script for managing Ubuntu package git repos.
 
 Supported commands:
+  build-source              Build Debian source package.
   info                      Show repo information.
   format-patch [OPTS]       Create a patch (series). OPTS are additional
                             options for 'git format-patch'.
@@ -344,6 +371,7 @@ Optional arguments:
   -d, --dry-run             Don't send the email.
   -h, --help                Show this help text.
   -i, --in-reply-to MSG_ID  Reply to the given MSG_ID.
+  -o, --orig                Include the original source tarball.
   -r, --release RELEASE     The release to include in the subject prefix.
   -s, --resend              Add RESEND to the subject prefix.
   -t, --token TEXT          Add an additional token [TEXT] to the subject
@@ -363,6 +391,7 @@ set_globals
 COVER_LETTER=0
 DRY_RUN=0
 IN_REPLY_TO=
+ORIG=0
 resend=0
 token=
 version=0
@@ -384,6 +413,9 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			IN_REPLY_TO=${1}
 			;;
+		-o|--orig)
+			ORIG=1
+			;;
 		-r|--release)
 			shift
 			RELEASE=${1}
@@ -402,7 +434,7 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			version=${1}
 			;;
-		info|format-patch|send-patch|request-pull|tag)
+		build-source|info|format-patch|send-patch|request-pull|tag)
 			cmd=${1//-/_}
 			;;
 		*)
