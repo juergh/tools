@@ -77,6 +77,13 @@ function set_globals()
 		esac
 	fi
 
+	# Unstable is special
+	if [ "${DERIVATIVE}" = "unstable" ] ; then
+		DERIVATIVE=
+		SRU=0
+		RELEASE=Unstable
+	fi
+
 	# Determine the distro
 	DISTRO=
 	if [ -n "${CHANGELOG}" ] ; then
