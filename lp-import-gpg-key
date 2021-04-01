@@ -23,7 +23,7 @@ except:
 '
 }
 
-function lp_get_gpg_keyids()
+function lp_get_gpg_fingerprints()
 {
 	local user=${1}
 
@@ -32,7 +32,7 @@ function lp_get_gpg_keyids()
 import json,sys
 try:
     obj = json.load(sys.stdin)
-    print("\n".join([o["keyid"] for o in obj["entries"]]))
+    print("\n".join([o["fingerprint"] for o in obj["entries"]]))
 except:
     pass
 '
@@ -85,12 +85,12 @@ for user in "${@}" ; do
 		# Assume it's an email, so lookup the LP username
 		user=$(lp_get_user "${user}")
 	fi
-	for keyid in $(lp_get_gpg_keyids "${user}") ; do
+	for fp in $(lp_get_gpg_fingerprints "${user}") ; do
+		echo "-- ${user}: ${fp}"
 		if [ ${dry_run} -eq 1 ] ; then
-			echo "${user}: ${keyid}"
-			gpg --no-tty --search-keys "${keyid}" 2>/dev/null || true
+			gpg --no-tty --search-keys "${fp}" 2>/dev/null || true
 		else
-			gpg --recv-key --keyserver keyserver.ubuntu.com "${keyid}" || true
+			gpg --keyserver keyserver.ubuntu.com --recv-keys "${fp}" || true
 		fi
 	done
 done
