@@ -99,3 +99,59 @@ local function archive_messages(account, age)
       move_messages(_messages, account['__Archive/' .. _mailbox])
    end
 end
+
+-------------------------------------------------------------------------------
+-- Return a list of messages that are related to the provided message.
+-- Related in this context means that they're part of the same thread. The
+-- returned list is an associative array rather than an imapfilter Set() of
+-- messages so that the check if a message has already been processed is a
+-- simple lookup rather than a search through a list.
+--
+function _find_related(message, list)
+   local mbox, uid, key, message_id
+
+   -- Initialize the list of already processed messages if it's undefined
+   list = list or {}
+
+   -- Unpack the message
+   mbox, uid = table.unpack(message)
+
+   -- Check if the message has already been processed
+   key = mbox._string .. ':' .. tostring(uid)
+   if list[key] then
+      return list
+   end
+   list[key] = message
+
+   -- Process the replies to the current message
+   message_id = mbox[uid]:fetch_field("Message-Id"):match("<.+>")
+   for _, msg in ipairs(mbox:contain_field('In-Reply-To', message_id)) do
+      list = _find_related(msg, list)
+   end
+
+   -- Process the parent(s) of the current message
+   for in_reply_to in mbox[uid]:fetch_field("In-Reply-To"):gmatch("<[^>]+>") do
+      for _, msg in ipairs(mbox:contain_field('Message-Id', in_reply_to)) do
+	 list = _find_related(msg, list)
+      end
+   end
+
+   return list
+end
+
+-------------------------------------------------------------------------------
+-- Return all messages related to a provided set of messages.
+--
+function find_related(messages)
+   local results
+
+   results = {}
+   for _, msg in ipairs(messages) do
+      for _, related in pairs(_find_related(msg)) do
+	 table.insert(results, related)
+      end
+   end
+
+   -- Convert the list of messages to an imapfilter Set()
+   return Set(results)
+end
