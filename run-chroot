@@ -15,36 +15,54 @@ function pr_error()
 
 function session_exists()
 {
-	schroot -r -c "${1}" /bin/true >/dev/null 2>&1
+	schroot -l --all | grep -q "^session:${1}$"
+}
+
+function chroot_exists()
+{
+	schroot -l --all | grep -q "^chroot:${1}$"
+}
+
+function hostarch()
+{
+	case "${1#*-}" in
+		fedora*|centos*)
+			dpkg-architecture -q DEB_HOST_GNU_CPU
+			;;
+		*)
+			dpkg-architecture -q DEB_HOST_ARCH
+			;;
+	esac
 }
 
 function usage()
 {
 	cat <<EOF
-Usage: run-chroot [-d] [-h] [-l] [-npe] [-r] [-u USER] CHROOT [--]
+Usage: run-chroot [-d] [-h] [-l] [-p] [-r] [-u USER] CHROOT [--]
        [COMMAND [ARGS]]
 
-Run a chroot session.
+Run a chroot session. Create it first, if it doesn't exist.
 
 Positional arguments:
-  CHROOT                   Name of the base chroot to use for the session.
+  CHROOT                 Name of the existing session or the name of the base
+                         chroot for new sessions.
 
 Optional 
-  -d, --destroy            Destroy a session.
-  -h, --help               Show this help text and exit.
-  -l, --list               List existing sessions.
-  -npe, --no-preserve-env  Don't preserve the user's environment inside the
-                           chroot.
-  -r, --recreate           Recreate an already existing session.
-  -u, --user USER          Run the session as the user USER.
+  -d, --destroy          Destroy a session.
+  -h, --help             Show this help text and exit.
+  -l, --list             List existing sessions.
+  -p, --no-preserve-env  Don't preserve the user's environment inside the
+                         chroot.
+  -r, --recreate         Recreate an already existing session.
+  -u, --user USER        Run the session as the user USER.
 EOF
 }
 
 destroy=0
 preserve_env=1
 recreate=0
-chroot=
 user=${USER}
+chroot=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -56,11 +74,10 @@ while [ $# -gt 0 ] ; do
 			exit
 			;;
 		-l|--list)
-			schroot -l --all-sessions | grep "^session:${USER}-" | \
-				sed 's/^session://'
+			schroot -l --all | grep "^session:" | sed 's/^session://'
 			exit
 			;;
-		-npe|--no-preserve-env)
+		-p|--no-preserve-env)
 			preserve_env=0
 			;;
 		-r|--recreate)
@@ -75,7 +92,7 @@ while [ $# -gt 0 ] ; do
 			break
 			;;
 		-*)
-			pr_error "Unexprected argument: ${1}"
+			pr_error "Invalid argument: ${1}"
 			exit 2
 			;;
 		*)
@@ -94,40 +111,43 @@ if [ -z "${chroot}" ] ; then
 	exit 2
 fi
 
-# Check if the chroot exists
-if ! schroot -l | grep -q "^chroot:${chroot}$" ; then
-	# Append the host arch to the chroot name, if necessary
-	case "${chroot}" in
-		*-amd64|*-i386|*-powerpc|*-s390x|*-x86_64|*-armhf|*-arm64)
-			_chroot=${chroot}
-			;;
-		fedora*|centos*)
-			_chroot=${chroot}-$(dpkg-architecture -q DEB_HOST_GNU_CPU)
-			;;
-		*)
-			_chroot=${chroot}-$(dpkg-architecture -q DEB_HOST_ARCH)
-			;;
-	esac
-	# Check if the chroot exists
-	if ! schroot -l | grep -q "^chroot:${_chroot}$" ; then
-		pr_error "No such chroot: ${chroot}"
-		exit 1
-	fi
-	chroot=${_chroot}
-fi
+# Generate the session name from the provided chroot name. The naming
+# convention is <user>-<name>-<arch>
+dashes="${chroot//[^-]}"
+case "${#dashes}" in
+	0)
+		# Chroot name contains no dashes
+		session=${USER}-${chroot}-$(hostarch "${chroot}")
+		;;
+	1)
+		# Chroot name contains a single dash
+		case "${chroot}" in
+			*-amd64|*-i386|*-powerpc|*-s390x|*-x86_64|*-armhf|*-arm64)
+				session=${USER}-${chroot}
+				;;
+			*)
+				session=${chroot}-$(hostarch "${chroot}")
+				;;
+		esac
+		;;
+	*)
+		# Chroot name contains two or more dashes
+		session=${chroot}
+		;;
+esac
 
-session=${USER}-${chroot}
+# Generate the base chroot name from the session name
+chroot=${session#*-}
 
 # Destroy an existing session if -d, --destroy is provided
 if [ "${destroy}" -eq 1 ] ; then
-	if session_exists "${session}" ; then
-		pr_info "Destroy existing session ${session}"
-		schroot -e -c "${session}"
-		exit
-	else
+	if ! session_exists "${session}" ; then
 		pr_error "Not such session: ${session}"
 		exit 1
 	fi
+	pr_info "Destroy existing session ${session}"
+	schroot -e -c "${session}"
+	exit
 fi
 
 # Destroy an existing session if -r, --recreate is provided
@@ -138,6 +158,10 @@ fi
 
 # Create the session if it doesn't exist
 if ! session_exists "${session}" ; then
+	if ! chroot_exists "${chroot}" ; then
+		pr_error "Not such chroot: ${chroot}"
+		exit 1
+	fi
 	pr_info "Create new session ${session}"
 	schroot -b -n "${session}" -c "${chroot}"
 	schroot -u root -r -c "${session}" -- apt-get update
