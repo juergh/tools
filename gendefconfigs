@@ -1,0 +1,48 @@
+#!/bin/bash -eu
+#
+# Generate defconfigs
+#
+
+function out()
+{
+	if [ -d CONFIGS.orig ] ; then
+		rm -rf CONFIGS
+		mv CONFIGS.orig CONFIGS
+	fi
+}
+
+if ! [ -f debian/debian.env ] ; then
+	echo "Not an Ubuntu kernel tree" >&2
+	exit 1
+fi
+
+trap out EXIT INT TERM HUP
+
+if [ -d CONFIGS ] ; then
+	mv CONFIGS CONFIGS.orig
+fi
+
+cranky fdr clean genconfigs
+
+mkdir -p DEFCONFIGS
+for config in CONFIGS/* ; do
+	echo "-- Process ${config}"
+	config=${config#*/}
+	arch=${config%%-*}
+	case "${arch}" in
+		ppc64|ppc64el) kernarch="powerpc" ;;
+		amd64)         kernarch="x86_64"  ;;
+		lpia)          kernarch="x86"     ;;
+		sparc)         kernarch="sparc64" ;;
+		armel|armhf)   kernarch="arm"     ;;
+		s390x)         kernarch="s390"    ;;
+		riscv64)       kernarch="riscv"   ;;
+		*)             kernarch="${arch}" ;;
+    esac
+
+	rm -rf buildd
+	mkdir buildd
+	cp CONFIGS/"${config}" buildd/.config
+	ARCH=${kernarch} cranky chroot run -- make O=buildd savedefconfig
+	mv buildd/defconfig DEFCONFIGS/"${config}"
+done
