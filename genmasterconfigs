@@ -1,0 +1,22 @@
+#!/bin/bash -eu
+#
+# Generate the master kernel configs
+#
+
+if ! [ -f debian/debian.env ] ; then
+	echo "Not an Ubuntu kernel tree" >&2
+	exit 1
+fi
+
+cur_branch=$(git rev-parse --abbrev-ref HEAD)
+tmp_branch=tmp-genmasterconfigs
+
+master_version=$(dpkg-parsechangelog -l debian.master/changelog -S Version)
+master_subject="UBUNTU: Ubuntu-${master_version}"
+master_oneline=$(git log --oneline | grep -m1 -P "^[0-9a-h]{12} ${master_subject//./\\.}$")
+
+echo "Checking out ${master_oneline}"
+git checkout -b "${tmp_branch}" "${master_oneline%% *}"
+cranky fdr clean genconfigs
+git checkout "${cur_branch}"
+git branch -d "${tmp_branch}"
