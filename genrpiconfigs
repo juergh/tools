@@ -1,0 +1,28 @@
+#!/bin/bash -eu
+#
+# Generate the Raspberry Pi kernel configs
+#
+
+if ! [ -f debian/debian.env ] ; then
+	echo "Not an Ubuntu kernel tree" >&2
+	exit 1
+fi
+
+configs=(
+	arm-bcm2709_defconfig
+	arm-bcm2711_defconfig
+	arm64-bcm2711_defconfig
+)
+
+mkdir -p RPICONFIGS
+for config in "${configs[@]}" ; do
+	arch=${config%%-*}
+	defconfig=${config#*-}
+
+	rm -rf buildd
+	mkdir buildd
+	ARCH=${arch} make O=buildd "${defconfig}"
+	localversion=$(grep '^CONFIG_LOCALVERSION=' buildd/.config | \
+					   sed 's/.*=//' | tr -d '"')
+	mv buildd/.config RPICONFIGS/"${config}.${localversion#-}"
+done
