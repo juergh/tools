@@ -3,16 +3,22 @@
 # Read all GPIOs
 #
 
-import RPi.GPIO as gpio
+import gpiod
 
-# Use board pin numbers
-gpio.setmode(gpio.BOARD)
+# Mapping of header pins to gpio lines
+header_gpio_map = {
+     '3':  2,  '5':  3,  '7':  4,  '8': 14, '10': 15, '11': 17, '12': 18,
+    '13': 27, '15': 22, '16': 23, '18': 24, '19': 10, '21':  9, '22': 25,
+    '23': 11, '24':  8, '26':  7, '27':  0, '28':  1, '29':  5, '31':  6,
+    '32': 12, '33': 13, '35': 19, '36': 16, '37': 26, '38': 20, '40': 21,
+}
 
-for pin in (3, 5, 7, 8, 10, 11, 12, 13, 15, 16, 18, 19, 21, 22, 23, 24, 26,
-            29, 31, 32, 33, 35, 36, 37, 38, 40):
-    func = gpio.gpio_function(pin)
-    gpio.setup(pin, gpio.IN)
-    val = gpio.input(pin)
-    print('pin {:02d}, func {}, val {}'.format(pin, func, val))
-
-gpio.cleanup()
+with gpiod.Chip('gpiochip0') as chip:
+    for pin in sorted(header_gpio_map.keys(), key=int):
+        line = chip.get_line(header_gpio_map[pin])
+        try:
+            line.request(consumer='read-rpi-gpios',
+                         type=gpiod.LINE_REQ_DIR_AS_IS)
+            print('{:2}: {}'.format(pin, line.get_value()))
+        except OSError as e:
+            print('{:2}: {}'.format(pin, e))
