@@ -12,7 +12,7 @@ function out()
 }
 
 if ! [ -f debian/debian.env ] ; then
-	echo "Not an Ubuntu kernel tree" >&2
+	echo "-- Not an Ubuntu kernel tree" >&2
 	exit 1
 fi
 
@@ -26,23 +26,25 @@ cranky fdr clean genconfigs
 
 mkdir -p DEFCONFIGS
 for config in CONFIGS/* ; do
+	echo
 	echo "-- Process ${config}"
 	config=${config#*/}
 	arch=${config%%-*}
 	case "${arch}" in
-		ppc64|ppc64el) kernarch="powerpc" ;;
-		amd64)         kernarch="x86_64"  ;;
-		lpia)          kernarch="x86"     ;;
-		sparc)         kernarch="sparc64" ;;
-		armel|armhf)   kernarch="arm"     ;;
-		s390x)         kernarch="s390"    ;;
-		riscv64)       kernarch="riscv"   ;;
-		*)             kernarch="${arch}" ;;
+		amd64)   kernarch="x86_64"  ; ccompile=""                       ;;
+		arm64)   kernarch="arm64"   ; ccompile="aarch64-linux-gnu-"     ;;
+		armhf)   kernarch="arm"     ; ccompile="arm-linux-gnueabihf-"   ;;
+		ppc64el) kernarch="powerpc" ; ccompile="powerpc64le-linux-gnu-" ;;
+		s390x)   kernarch="s390"    ; ccompile="s390x-linux-gnu-"       ;;
+		riscv64) kernarch="riscv"   ; ccompile="riscv64-linux-gnu-"     ;;
+		*)       echo "-- Invalid architecture: ${arch}" >&2 ; exit 1   ;;
     esac
 
 	rm -rf buildd
 	mkdir buildd
 	cp CONFIGS/"${config}" buildd/.config
-	ARCH=${kernarch} cranky chroot run -- make O=buildd savedefconfig
+	ARCH=${kernarch} CROSS_COMPILE=${ccompile} \
+		cranky chroot run -- make O=buildd savedefconfig
+
 	mv buildd/defconfig DEFCONFIGS/"${config}"
 done
