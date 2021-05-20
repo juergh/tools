@@ -1,0 +1,49 @@
+#!/bin/bash -eu
+#
+# Check defconfigs
+#
+
+fail=0
+for config in DEFCONFIGS/* ; do
+	echo
+	echo "-- Process ${config}"
+	config=${config#*/}
+	arch=${config%%-*}
+	case "${arch}" in
+		amd64)   kernarch="x86_64"  ; ccompile=""                       ;;
+		arm64)   kernarch="arm64"   ; ccompile="aarch64-linux-gnu-"     ;;
+		armhf)   kernarch="arm"     ; ccompile="arm-linux-gnueabihf-"   ;;
+		ppc64el) kernarch="powerpc" ; ccompile="powerpc64le-linux-gnu-" ;;
+		s390x)   kernarch="s390"    ; ccompile="s390x-linux-gnu-"       ;;
+		riscv64) kernarch="riscv"   ; ccompile="riscv64-linux-gnu-"     ;;
+		*)       echo "-- Invalid architecture: ${arch}" >&2 ; exit 1   ;;
+    esac
+
+	if ! [ -f CONFIGS/"${config}" ] ; then
+		echo "-- No such file: CONFIGS/${config}" >&2
+		exit 1
+	fi
+
+	rm -rf buildd
+	mkdir buildd
+	cp DEFCONFIGS/"${config}" buildd/.config
+	ARCH=${kernarch} CROSS_COMPILE=${ccompile} \
+		cranky chroot run -- make O=buildd olddefconfig
+
+	diff buildd/.config CONFIGS/"${config}" > buildd/diff || true
+	if [ -s buildd/diff ] ; then
+		echo "-- Generated config file does not match CONFIGS/${config}" >&2
+		echo "-- Begin of diff" >&2
+		cat buildd/diff >&2
+		echo "-- End of diff" >&2
+		fail=$((fail + 1))
+	else
+		echo "-- Generated config file matches CONFIGS/${config}"
+	fi
+done
+
+if [ ${fail} -ne 0 ] ; then
+	echo
+	echo "-- ${fail} config file check(s) failed" >&2
+	exit 1
+fi
