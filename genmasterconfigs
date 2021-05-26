@@ -3,20 +3,66 @@
 # Generate the master kernel configs
 #
 
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	if [ "${BRANCHED}" -eq 1 ] ; then
+		git checkout "${CUR_BRANCH}"
+		git branch -d "${TMP_BRANCH}"
+	fi
+
+	if [ "${STASHED}" -eq 1 ] ; then
+		git stash pop
+	fi
+
+	if [ -d CONFIGS.bak ] ; then
+		rm -rf CONFIGS
+		mv CONFIGS.bak CONFIGS
+	fi
+
+	if [ ${rc} -ne 0 ] ; then
+		echo "-- Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
 if ! [ -f debian/debian.env ] ; then
-	echo "Not an Ubuntu kernel tree" >&2
+	echo "-- Not an Ubuntu kernel tree" >&2
 	exit 1
 fi
 
-cur_branch=$(git rev-parse --abbrev-ref HEAD)
-tmp_branch=tmp-genmasterconfigs
-
 master_version=$(dpkg-parsechangelog -l debian.master/changelog -S Version)
-master_subject="UBUNTU: Ubuntu-${master_version}"
-master_oneline=$(git log --oneline | grep -m1 -P "^[0-9a-h]{12} ${master_subject//./\\.}$")
+master_subject="UBUNTU: Ubuntu-(unstable-)?${master_version}"
+master_oneline=$(git log --oneline | \
+					 grep -m1 -P "^[0-9a-h]{12} ${master_subject//./\\.}$")
 
-echo "Checking out ${master_oneline}"
-git checkout -b "${tmp_branch}" "${master_oneline%% *}"
+CUR_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+TMP_BRANCH=tmp-genmasterconfigs
+
+STASHED=0
+BRANCHED=0
+
+trap out EXIT INT TERM HUP
+
+if [ -n "$(git status --porcelain)" ] ; then
+	echo "-- Stashing local changes"
+	git stash
+	STASHED=1
+fi
+
+echo "-- Checking out ${master_oneline}"
+git checkout -b "${TMP_BRANCH}" "${master_oneline%% *}"
+BRANCHED=1
+
+if [ -d CONFIGS ] ; then
+	echo "-- Backing up CONFIGS"
+	mv CONFIGS CONFIGS.bak
+fi
+
+echo "-- Creating configs"
 cranky fdr clean genconfigs
-git checkout "${cur_branch}"
-git branch -d "${tmp_branch}"
+mv CONFIGS MASTERCONFIGS
