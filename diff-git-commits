@@ -83,7 +83,7 @@ else
 fi
 
 if [ -z "${commit2}" ] ; then
-	commit2=$(grep -P '(cherry picked|backported) from commit [0-9a-f]{40}' \
+	commit2=$(grep -P '(cherry picked|(back|forward )ported) from commit [0-9a-f]{40}' \
 				   "${patch1}" | grep -oP '[0-9a-f]{40}' || true)
 	if [ -z "${commit2}" ] ; then
 		echo "Unable to find second commit hash in first commit message" >&2
