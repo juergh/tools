@@ -38,7 +38,7 @@ for config in CONFIGS/* ; do
 		s390x)   kernarch="s390"    ; ccompile="s390x-linux-gnu-"       ;;
 		riscv64) kernarch="riscv"   ; ccompile="riscv64-linux-gnu-"     ;;
 		*)       echo "-- Invalid architecture: ${arch}" >&2 ; exit 1   ;;
-    esac
+	esac
 
 	rm -rf buildd
 	mkdir buildd

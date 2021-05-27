@@ -4,7 +4,7 @@
 #
 
 if ! [ -f debian/debian.env ] ; then
-	echo "Not an Ubuntu kernel tree" >&2
+	echo "-- Not an Ubuntu kernel tree" >&2
 	exit 1
 fi
 
@@ -16,6 +16,8 @@ configs=(
 
 mkdir -p RPICONFIGS
 for config in "${configs[@]}" ; do
+	echo
+	echo "-- Process ${config}"
 	arch=${config%%-*}
 	defconfig=${config#*-}
 

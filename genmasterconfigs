@@ -49,20 +49,20 @@ BRANCHED=0
 trap out EXIT INT TERM HUP
 
 if [ -n "$(git status --porcelain)" ] ; then
-	echo "-- Stashing local changes"
+	echo "-- Stash local changes"
 	git stash
 	STASHED=1
 fi
 
-echo "-- Checking out ${master_oneline}"
+echo "-- Checkout ${master_oneline}"
 git checkout -b "${TMP_BRANCH}" "${master_oneline%% *}"
 BRANCHED=1
 
 if [ -d CONFIGS ] ; then
-	echo "-- Backing up CONFIGS"
+	echo "-- Backup CONFIGS"
 	mv CONFIGS CONFIGS.bak
 fi
 
-echo "-- Creating configs"
+echo "-- Create configs"
 cranky fdr clean genconfigs
 mv CONFIGS MASTERCONFIGS
