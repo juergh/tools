@@ -98,8 +98,9 @@ def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, color=NONE):
         # Get the index of the last 'cherry picked/backported from' line
         idx = 0
         for i, m in enumerate(msg):
-            if (("cherry picked from commit" in m or
-                 "backported from commit" in m)):
+            if (("(cherry picked from commit" in m or
+                 "(forward ported from commit" in m or
+                 "(backported from commit" in m)):
                 idx = i
 
         # Add the provenance to the line
@@ -128,8 +129,9 @@ def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, color=NONE):
     # Get the index of the last 'cherry picked/backported from' line
     idx = 0
     for i, m in enumerate(msg):
-        if (("cherry picked from commit" in m or
-             "backported from commit" in m)):
+        if (("(cherry picked from commit" in m or
+             "(forward ported from commit" in m or
+             "(backported from commit" in m)):
             idx = i
 
     if msg[idx - 1] != "":
