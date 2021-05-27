@@ -1,0 +1,47 @@
+#!/bin/bash -eu
+#
+# Generate the new kernel configs
+#
+
+if ! [ -f debian/debian.env ] ; then
+    echo "-- Not an Ubuntu kernel tree" >&2
+    exit 1
+fi
+
+# shellcheck disable=SC1091
+. debian/debian.env
+
+mkdir -p NEWCONFIGS
+
+for config in "${DEBIAN}"/config/*/config.flavour.* ; do
+	echo
+	echo "-- Process ${config}"
+
+	flavor=${config##*.}
+	arch=${config%/*}
+	arch=${arch##*/}
+
+    case "${arch}" in
+        amd64)   kernarch="x86_64"  ; ccompile=""                       ;;
+        arm64)   kernarch="arm64"   ; ccompile="aarch64-linux-gnu-"     ;;
+        armhf)   kernarch="arm"     ; ccompile="arm-linux-gnueabihf-"   ;;
+        ppc64el) kernarch="powerpc" ; ccompile="powerpc64le-linux-gnu-" ;;
+        s390x)   kernarch="s390"    ; ccompile="s390x-linux-gnu-"       ;;
+        riscv64) kernarch="riscv"   ; ccompile="riscv64-linux-gnu-"     ;;
+        *)       echo "-- Invalid architecture: ${arch}" >&2 ; exit 1   ;;
+    esac
+
+	rm -rf buildd
+    mkdir buildd
+
+	# Assemble the config file
+	cat \
+		"${DEBIAN}"/config/config.common.ubuntu \
+		"${DEBIAN}"/config/"${arch}"/config.common."${arch}" \
+		"${DEBIAN}"/config/"${arch}"/config.flavour."${flavor}" \
+		2>/dev/null > buildd/.config || true
+
+	ARCH=${kernarch} CROSS_COMPILE=${ccompile} \
+		cranky chroot run -- make O=buildd listnewconfig | grep '^CONFIG_' > \
+		NEWCONFIGS/"${arch}"-config.flavour."${flavor}"
+done
