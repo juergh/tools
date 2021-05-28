@@ -164,11 +164,22 @@ if ! session_exists "${session}" ; then
 	fi
 	pr_info "Create new session ${session}"
 	schroot -b -n "${session}" -c "${chroot}"
+
+	# Generate /etc/hosts
+	schroot -u root -r -c "${session}" -- bash -c "cat << EOF > /etc/hosts
+127.0.0.1  localhost
+127.0.1.1  $(hostname)
+EOF
+"
+
+	# Upgrade packages
 	schroot -u root -r -c "${session}" -- apt-get update
 	schroot -u root -r -c "${session}" -- apt-get -y dist-upgrade
+
 	# Install additional packages
-	schroot -u root -r -c "${session}" -- apt-get -y \
-			install sudo less debhelper git
+	schroot -u root -r -c "${session}" -- apt-get -y install \
+			bc bison debhelper flex gawk git kernel-wedge less libssl-dev \
+			openssl sudo
 fi
 
 # Assemble the PS1 prefix
