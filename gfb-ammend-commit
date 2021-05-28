@@ -26,7 +26,7 @@ def run_cmd(cmd):
     return proc.returncode, stdout
 
 
-def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, color=NONE):
+def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, note, color=NONE):
     """
     Modify a commit message
     """
@@ -124,6 +124,19 @@ def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, color=NONE):
         msg.append(color[0] + "Signed-off-by: {}".format(sob) + color[1])
 
     # -------------------------------------------------------------------------
+    # Add note
+
+    if note:
+        # Get the index of the last 'Signed-off-by' line
+        idx = 0
+        for i, m in enumerate(msg):
+            if "Signed-off-by: " in m:
+                idx = i
+
+        # Insert the note
+        msg.insert(idx, color[0] + note + color[1])
+
+    # -------------------------------------------------------------------------
     # Insert an empty line before the last 'cherry picked/backported from' line
 
     # Get the index of the last 'cherry picked/backported from' line
@@ -202,6 +215,8 @@ def main():
     parser.add_argument("-c", "--cve", metavar="cve[,cve,...]",
                         help="CVE number. Can be a comma separated list of "
                         "multiple cve numbers.")
+    parser.add_argument("-n", "--note", metavar="note",
+                        help="Add a note before the last sob line.")
     parser.add_argument("rev_list_opts", nargs="*", metavar="rev-list-options",
                         help="Arguments for git rev-list. All positive refs "
                         "included by these options are rewritten.")
@@ -237,7 +252,8 @@ def main():
             msg.append(line.rstrip("\n"))
 
         # Modify the message and print it
-        msg = modify_msg(msg, reqs, acks, sobs, args.provenance, bugs, cves)
+        msg = modify_msg(msg, reqs, acks, sobs, args.provenance, bugs, cves,
+                         args.note)
         print("\n".join(msg))
 
         return 0
@@ -245,7 +261,8 @@ def main():
     # Construct the message filter command
     mf_cmd = [sys.argv[0]]
     for key, val in vars(args).items():
-        if key in ("req", "ack", "sob", "provenance", "bug", "cve") and val:
+        if key in ("req", "ack", "sob", "provenance", "bug", "cve",
+                   "note") and val:
             mf_cmd.extend(["--" + key, "'" + val + "'"])
 
     # Construct the git-filter-branch command
@@ -277,7 +294,7 @@ def main():
         # Modify the commit message and print it
         _, msg = run_cmd(["git", "log", "--format=%B", commit, "-1"])
         msg = modify_msg(msg, reqs, acks, sobs, args.provenance, bugs, cves,
-                         color=GREEN)
+                         args.note, color=GREEN)
         for m in msg:
             print("    {}".format(m))
         print()
