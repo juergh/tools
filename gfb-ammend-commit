@@ -21,7 +21,7 @@ def run_cmd(cmd):
     """
     Run a command and return the exit status and stdout
     """
-    proc = run(cmd, stdout=PIPE, universal_newlines=True)
+    proc = run(cmd, stdout=PIPE, universal_newlines=True, check=False)
     stdout = proc.stdout.split("\n")[:-1]
     return proc.returncode, stdout
 
@@ -182,7 +182,7 @@ def resolve_nicks(kteam_rc, nicks):
             print(RED[0] +
                   "Nick '{}' not found in ~/.kteam.rc".format(nick) +
                   RED[1])
-            exit(1)
+            sys.exit(1)
     return result
 
 
@@ -271,7 +271,7 @@ def main():
 
     # Do run git-filter-branch
     if args.force:
-        run(gfb_cmd)
+        run(gfb_cmd, check=True)
         return 0
 
     # Do a dry-run, i.e., print the modified commit message(s) to stdout
