@@ -16,7 +16,7 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: cranky-build-sources [-f] [-h] [-o] POCKET
+Usage: cranky-build-sources [-f] [-h] [-n] [-o] POCKET
 
 Build a set of kernel packages.
 
@@ -26,15 +26,21 @@ Positional arguments:
                changelog entries.
 
 Optional arguments:
-  -f, --force  Force the build even if the repos are unclean.
-  -h, --help   Show this help text and exit.
-  -o, --orig   Include the orig source tarball in the upload.
+  -f, --force    Force the build even if the repos are unclean.
+  -h, --help     Show this help text and exit.
+  -n, --no-orig  Don't require an orig source tarball.
+  -o, --orig     Include the orig source tarball in the upload.
 EOF
 }
 
 force=0
 pocket=
 build_opts=()
+
+bo_meta=()
+bo_signed=()
+bo_restricted_modules=()
+bo_main=()
 
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
@@ -45,8 +51,11 @@ while [ "${#}" -gt 0 ] ; do
 			usage
 			exit
 			;;
+		-n|--no-orig)
+			build_opts+=("--no-orig")
+			;;
 		-o|--orig)
-			build_opts+=("--build-opts" "main:-sa")
+			bo_main+=("-sa")
 			;;
 		updates|release|security|proposed|none)
 			if [ -z "${pocket}" ] ; then
@@ -82,22 +91,35 @@ if [ "${pocket}" != "none" ] ; then
 	while IFS=' ' read -r package version rest ; do
 		case "${package}" in
 			linux-meta*)
-				build_opts+=("--build-opts" "meta:-v${version}")
+				bo_meta+=("-v${version}")
 				;;
 			linux-signed*)
-				build_opts+=("--build-opts" "signed:-v${version}")
+				bo_signed+=("-v${version}")
 				;;
 			linux-restricted-modules*)
-				build_opts+=("--build-opts" "restricted-modules:-v${version}")
+				bo_restricted_modules+=("-v${version}")
 				;;
 			linux*)
-				build_opts+=("--build-opts" "main:-v${version}")
+				bo_main+=("-v${version}")
 				;;
 			*)
 				echo "Unsupported package: ${package}" >&2
 				exit 1
 		esac
 	done < <(cranky rmadison -s -p "${pocket}")
+fi
+
+if [ ${#bo_meta[@]} -ne 0 ] ; then
+	build_opts+=("--build-opts" "meta:${bo_meta[*]}")
+fi
+if [ ${#bo_signed[@]} -ne 0 ] ; then
+	build_opts+=("--build-opts" "signed:${bo_signed[*]}")
+fi
+if [ ${#bo_restricted_modules[@]} -ne 0 ] ; then
+	build_opts+=("--build-opts" "restricted-modules:${bo_restricted_modules[*]}")
+fi
+if [ ${#bo_main[@]} -ne 0 ] ; then
+	build_opts+=("--build-opts" "main:${bo_main[*]}")
 fi
 
 echo "cranky build-sources ${build_opts[*]}"
