@@ -74,7 +74,7 @@ fi
 # Determine the rev range to process
 if [ "${#rev_range[@]}" -eq 0 ] ; then
 	if [ "${is_ubuntu}" -eq 1 ] ; then
-		subject="^[0-9a-f]{12} UBUNTU: Ubuntu-\d+\.\d+\.\d+"
+		subject="^[0-9a-f]{12} UBUNTU: Ubuntu-(unstable-)?\d+\.\d+\.\d+"
 	else
 		subject="^[0-9a-f]{12} Linux \d+\.\d+"
 	fi
@@ -102,6 +102,7 @@ while IFS= read -r line ; do
 		   UBUNTU:\ link-to-tracker*|\
 		   UBUNTU:\ Ubuntu"${deriv}"-[0-9]*\.[0-9]*\.[0-9]*|\
 		   UBUNTU:\ Ubuntu-unstable-[0-9]*\.[0-9]*\.[0-9]*|\
+		   UBUNTU:\ *Update\ to\ upstream*|\
 		   UBUNTU:\ \[[cC]onfig\]*|\
 		   UBUNTU:\ \[[pP]ackaging\]*|\
 		   UBUNTU:\ \[[dD]ebian\]*)
