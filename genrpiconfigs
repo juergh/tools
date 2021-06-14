@@ -3,10 +3,10 @@
 # Generate the Raspberry Pi kernel configs
 #
 
-if ! [ -f debian/debian.env ] ; then
-	echo "-- Not an Ubuntu kernel tree" >&2
-	exit 1
-fi
+#if ! [ -f debian/debian.env ] ; then
+#	echo "-- Not an Ubuntu kernel tree" >&2
+#	exit 1
+#fi
 
 configs=(
 	arm-bcm2709_defconfig
