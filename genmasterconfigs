@@ -60,6 +60,7 @@ BRANCHED=1
 
 if [ -d CONFIGS ] ; then
 	echo "-- Backup CONFIGS"
+	rm -rf CONFIGS.bak
 	mv CONFIGS CONFIGS.bak
 fi
 
