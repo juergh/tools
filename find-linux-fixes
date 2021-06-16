@@ -28,96 +28,79 @@ function find_fixes()
 
 function find_upstream_ref()
 {
-	local path=${1} commit=${2}
-    local pattern_list pattern found
+	local commit=${1}
+	local pattern_list pattern found
 
-    pattern_list=(
-        "commit [0-9a-f]* upstream"
-        "upstream commit [0-9a-f]*"
-        "cherry[ -]?picked from .*\b[0-9a-f]*"
-        "back[ -]?ported from .*\b[0-9a-f]*"
-    )
-    pattern=$(printf "|%s" "${pattern_list[@]}")
-    pattern=${pattern:1}
+	pattern_list=(
+		"commit [0-9a-f]* upstream"
+		"upstream commit [0-9a-f]*"
+		"cherry[ -]?picked from .*\b[0-9a-f]*"
+		"back[ -]?ported from .*\b[0-9a-f]*"
+	)
+	pattern=$(printf "|%s" "${pattern_list[@]}")
+	pattern=${pattern:1}
 
-    found=$(git -C "${path}" log --format="%b" "${commit}" -1 | \
-                grep -iP "${pattern}" | \
-                grep -oP '[0-9a-f]{12,}' | head -1 | tr -d '\n' || true)
+	found=$(git log --format="%b" "${commit}" -1 | \
+				grep -m1 -iP "${pattern}" | \
+				grep -oP '[0-9a-f]{12,}' | \
+				cut -c 1-12)
 
-    echo "${found}"
+	echo "${found}"
 }
 
 function usage()
 {
 	cat <<EOF
-Usage: find-linux-fixes [-h] [-d DIR] COMMIT [COMMIT ...]
+Usage: find-linux-fixes [-h] COMMIT [COMMIT ...]
 
-Find 'Fixes:' commits in the main Linux repo (Linus' repo) for the specified
-COMMIT(s).
+Find 'Fixes:' commits in the main Linux repo (Linus' repo) for the provided
+commit hash(es). The provided commits can either be upstream commits or
+commits from the current repo.
 
 Optional arguments:
-  -h, --help     Show this help text and exit.
-  -d, --dir DIR  If a provided commit is not found in Linus' repo, try to look
-                 it up in <DIR> and parse its commit message for a reference to
-                 the original upstream commit. If found, find 'Fixes:' commits
-                 for that upstream commit.
+  -h, --help   Show this help text and exit.
 EOF
 }
 
-path=
 commits=()
 
 while [ $# -gt 0 ] ; do
-    case "${1}" in
-        -h|--help)
-            usage
-            exit
-            ;;
-		-d|--dir)
-			shift
-			path=${1}
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
 			;;
-        -*)
-            echo "Unexpected argument: ${1}" 1>&2
-            exit 1
-            ;;
-        *)
+		*)
 			commits=("${@}")
 			break
-            ;;
+			;;
     esac
     shift
 done
 
-# Verify that path is a valid git repo
-if [ -n "${path}" ] && \
-   ! git -C "${path}" rev-parse --inside-work-tree >/dev/null 2>&1 ; then
-	echo "Error: ${path} is not a valid git repo"
-	exit
+if [ ${#commits[@]} -eq 0 ] ; then
+	usage
+	exit 2
 fi
 
 for commit in "${commits[@]}" ; do
+	commit=${commit::12}
 	ONELINE=$(git --git-dir="${LINUX_REPO}" log --format='%h %s' \
 				  "${commit}" -1 2>/dev/null || true)
 
 	if [ -z "${ONELINE}" ] ; then
-		if [ -z "${path}" ] ; then
-			echo "Error: Commit ${commit} not found in Linus' repo"
-			continue
-		fi
-
-		# Check if the commit exists in the provided repo
-		if ! git -C "${path}" cat-file -e "${commit}^{commit}" 2>/dev/null ; then
-			echo "Error: Commit ${commit} not found in Linus' repo nor in" \
-				 "'${path}'"
+		# Check if the commit exists in the current repo
+		if ! git cat-file -e "${commit}^{commit}" 2>/dev/null ; then
+			echo "Error: Commit ${commit} not found neither in Linus' nor in" \
+				 "the current repo" >&2
 			continue
 		fi
 
 		# Try to find an upstream commit reference in the commit message
-		upstream=$(find_upstream_ref "${path}" "${commit}")
+		upstream=$(find_upstream_ref "${commit}")
 		if [ -z "${upstream}" ] ; then
-			echo "Error: Commit ${commit} found in '${path}' but doesn't" \
-				 "contain an upstream reference"
+			echo "Error: Commit ${commit} found in the current repo but" \
+				 "doesn't contain an upstream reference" >&2
 			continue
 		fi
 
@@ -125,14 +108,14 @@ for commit in "${commits[@]}" ; do
 		ONELINE=$(git --git-dir="${LINUX_REPO}" log --format='%h %s' \
 					  "${upstream}" -1 2>/dev/null || true)
 		if [ -z "${ONELINE}" ] ; then
-			echo "Error: Commit ${commit} found in '${path}' and contains" \
-				 "an upstream reference (${upstream::12}) which is not found" \
-				 "in Linus' repo"
+			echo "Error: Commit ${commit} from the current repo contains an" \
+				 "upstream reference (${upstream::12}) which is not found" \
+				 "in Linus' repo" >&2
 			continue
 		fi
 
 		# Make it clear that we're processing a different commit
-		ONELINE="${commit::12} -> [upstream] ${ONELINE}"
+		ONELINE="${commit} -> [upstream] ${ONELINE}"
 		commit=${upstream}
 	fi
 
