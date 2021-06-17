@@ -8,44 +8,36 @@ LINUX_REPO=/srv/git/linux.git
 
 function find_fixes()
 {
-	local commit=${1} indent=${2}
+	local commit=${1} indent=${2:-2}
 	local fixes fix
 
 	readarray -t fixes < <(grep -P "__FIXES__\s+${commit::12}" "${LINUX_FIXES}")
 
 	for fix in "${fixes[@]}" ; do
-		# We found a match so print the original commit
-		if [ -n "${ONELINE}" ] ; then
-			echo "${ONELINE}"
-			ONELINE=
-		fi
-
 		printf "%0.s " $(seq "${indent}")
 		echo "${fix%% __FIXES__*}"
 		find_fixes "${fix%% *}" "$((indent + 2))"
 	done
 }
 
-function find_upstream_ref()
+function get_upstream_commit()
 {
 	local commit=${1}
-	local pattern_list pattern found
+	local pattern_list pattern upstream
 
 	pattern_list=(
-		"commit [0-9a-f]* upstream"
-		"upstream commit [0-9a-f]*"
-		"cherry[ -]?picked from .*\b[0-9a-f]*"
-		"back[ -]?ported from .*\b[0-9a-f]*"
+		"commit [0-9a-f]{12,} upstream"
+		"upstream commit [0-9a-f]{12,}"
+		"cherry[ -]?picked from .*\b[0-9a-f]{12,}"
+		"back[ -]?ported from .*\b[0-9a-f]{12,}"
 	)
 	pattern=$(printf "|%s" "${pattern_list[@]}")
 	pattern=${pattern:1}
 
-	found=$(git log --format="%b" "${commit}" -1 | \
-				grep -m1 -iP "${pattern}" | \
-				grep -oP '[0-9a-f]{12,}' | \
-				cut -c 1-12)
-
-	echo "${found}"
+	upstream=$(git log --format="%b" "${commit}" -1 | \
+				   grep -m1 -iP "${pattern}" |\
+				   grep -oP "[0-9a-f]{12,}" || true)
+	echo "${upstream::12}"
 }
 
 function usage()
@@ -53,9 +45,9 @@ function usage()
 	cat <<EOF
 Usage: find-linux-fixes [-h] COMMIT [COMMIT ...]
 
-Find 'Fixes:' commits in the main Linux repo (Linus' repo) for the provided
-commit hash(es). The provided commits can either be upstream commits or
-commits from the current repo.
+Find 'Fixes:' commits in the upstream linux repo for the provided commit
+hash(es). The provided commits can either be upstream commits or commits from
+the current repo.
 
 Optional arguments:
   -h, --help   Show this help text and exit.
@@ -85,39 +77,38 @@ fi
 
 for commit in "${commits[@]}" ; do
 	commit=${commit::12}
-	ONELINE=$(git --git-dir="${LINUX_REPO}" log --format='%h %s' \
+	subject=$(git --git-dir="${LINUX_REPO}" log --format="%s" \
 				  "${commit}" -1 2>/dev/null || true)
 
-	if [ -z "${ONELINE}" ] ; then
+	if [ -n "${subject}" ] ; then
+		# Commit found in then upstream linux repo, so process it
+		echo "${commit} ${subject}"
+		find_fixes "${commit}"
+
+	else
 		# Check if the commit exists in the current repo
 		if ! git cat-file -e "${commit}^{commit}" 2>/dev/null ; then
-			echo "Error: Commit ${commit} not found neither in Linus' nor in" \
-				 "the current repo" >&2
+			echo "Error: Commit ${commit} not found" >&2
 			continue
 		fi
 
 		# Try to find an upstream commit reference in the commit message
-		upstream=$(find_upstream_ref "${commit}")
+		upstream=$(get_upstream_commit "${commit}")
 		if [ -z "${upstream}" ] ; then
-			echo "Error: Commit ${commit} found in the current repo but" \
-				 "doesn't contain an upstream reference" >&2
+			echo "Error: No upstream commit found for commit ${commit}" >&2
 			continue
 		fi
 
-		# Get the subject of the upstream commit from Linus' repo
-		ONELINE=$(git --git-dir="${LINUX_REPO}" log --format='%h %s' \
+		# Get the subject of the upstream commit
+		subject=$(git --git-dir="${LINUX_REPO}" log --format="%s" \
 					  "${upstream}" -1 2>/dev/null || true)
-		if [ -z "${ONELINE}" ] ; then
-			echo "Error: Commit ${commit} from the current repo contains an" \
-				 "upstream reference (${upstream::12}) which is not found" \
-				 "in Linus' repo" >&2
+		if [ -z "${subject}" ] ; then
+			echo "Error: Upstream commit ${commit} not found" >&2
 			continue
 		fi
 
-		# Make it clear that we're processing a different commit
-		ONELINE="${commit} -> [upstream] ${ONELINE}"
-		commit=${upstream}
+		# Finally process the upstream commit
+		echo "${commit} -> ${upstream} ${subject}"
+		find_fixes "${upstream}"
 	fi
-
-	find_fixes "${commit}" 2
 done
