@@ -7,26 +7,25 @@ function out()
 {
 	local rc=${?}
 
+	trap - EXIT
+
 	if [ -n "${TMPF}" ] ; then
 		rm -f "${TMPF}"
 	fi
 
-	if [ "${rc}" -ne 0 ] ; then
-		echo "Failure" >&2
+	if [ ${rc} -ne 0 ] ; then
+		echo "Error: Script failed" >&2
 	fi
+
+	exit "${rc}"
 }
 
 function usage()
 {
 	cat <<EOF
-Usage: list-downstream-commits [-f] [-h] [-r] [REV_RANGE]
+Usage: list-downstream-commits [-h] [-r] [-u] [BRANCH]
 
-List the downstream patches on the current branch.
-
-Postional arguments:
-  REV_RANGE     The git commit revision range to process. If not provided,
-                determine the starting commit and process
-                <starting_commit>..HEAD.
+List the downstream commits on the current (or provided) branch.
 
 Optional arguments:
   -h, --help    Show this help text and exit.
@@ -37,7 +36,7 @@ EOF
 
 filter_ubuntu=0
 filter_revert=0
-rev_range=()
+branch=
 
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
@@ -52,12 +51,19 @@ while [ "${#}" -gt 0 ] ; do
 			filter_revert=1
 			;;
 		*)
-			rev_range=("${@}")
-			break
+			if [ -n "${branch}" ] ; then
+				echo "Error: Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			branch=${1}
 			;;
 	esac
 	shift
 done
+
+if [ -z "${branch}" ] ; then
+	branch=HEAD
+fi
 
 TMPF=
 trap out EXIT
@@ -72,21 +78,22 @@ if [ -e debian/debian.env ] ; then
 fi
 
 # Determine the rev range to process
-if [ "${#rev_range[@]}" -eq 0 ] ; then
-	if [ "${is_ubuntu}" -eq 1 ] ; then
-		subject="^[0-9a-f]{12} UBUNTU: Ubuntu-(unstable-)?\d+\.\d+\.\d+"
-	else
-		subject="^[0-9a-f]{12} Linux \d+\.\d+"
-	fi
-	commit=$(git log --oneline | grep -m1 -P "${subject}")
-	rev_range=("${commit%% *}..")
+if [ "${is_ubuntu}" -eq 1 ] ; then
+	subject="^[0-9a-f]{12} UBUNTU: Ubuntu-(unstable-)?\d+\.\d+\.\d+"
+else
+	subject="^[0-9a-f]{12} Linux \d+\.\d+"
 fi
+commit=$(git log --oneline "${branch}" | grep -m1 -P "${subject}")
+if [ -z "${commit}" ] ; then
+	echo "Error: Unable to determine rev range to process" >&2
+	exit 1
+fi
+rev_range="${commit%% *}..${branch}"
 
 # Create a temp file for filtering reverted commits
 if [ "${filter_revert}" -eq 1 ] ; then
 	TMPF=$(mktemp)
-	git log --no-merges --format='%h __MARK__%s__MARK__' "${rev_range[@]}" > \
-		"${TMPF}"
+	git log --no-merges --format='%h __MARK__%s__MARK__' "${rev_range}" > "${TMPF}"
 fi
 
 # Process the rev range
@@ -131,4 +138,4 @@ while IFS= read -r line ; do
 	fi
 
 	echo "${line}"
-done < <(git log --no-merges --format='%h %s' "${rev_range[@]}")
+done < <(git log --no-merges --format='%h %s' "${rev_range}")
