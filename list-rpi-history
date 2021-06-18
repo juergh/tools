@@ -1,0 +1,92 @@
+#!/bin/bash -eu
+#
+# List the history and evolution of downstream raspberrypi commits
+#
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	rm -rf "${TMPD}"
+
+	if [ ${rc} -ne 0 ] ; then
+		echo "Error: Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: list-rpi-history [-h] BRANCH
+
+List the history and evolution of downstream raspberrypi commits.
+
+Positional arguments:
+  BRANCH      Raspberry Pi branch name, like rpi-5.10.y.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+branch=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${branch}" ] ; then
+				echo "Error: Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			branch=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${branch}" ] ; then
+	usage
+	exit 2
+fi
+
+TMPD=$(mktemp -d)
+trap out EXIT INT TERM HUP
+
+echo "Collecting downstream commits..."
+while IFS= read -r tag ; do
+	list-downstream-commits "${tag}" > "${TMPD}"/"${tag}"
+done < <(git tag | grep "${branch}"-20)
+
+if ! ls  "${TMPD}"/"${branch}"-20* >/dev/null 2>&1 ; then
+	echo "Error: No commits found" >&2
+	exit 1
+fi
+
+echo "Processing commits..."
+prev_f=
+for f in "${TMPD}"/"${branch}"-20* ; do
+	{
+		echo "${f##*/}:"
+		if [ -z "${prev_f}" ] ; then
+			cat "${f}"
+		else
+			diff-commit-lists "${prev_f}" "${f}" | grep -e '-        ' || true
+			echo
+			cat "${TMPD}"/tmp
+		fi
+	} > "${TMPD}"/tmp2
+	mv "${TMPD}"/tmp2 "${TMPD}"/tmp
+	prev_f=${f}
+done
+
+mv "${TMPD}"/tmp "${branch}".history
+
+echo "Generated ${branch}".history
