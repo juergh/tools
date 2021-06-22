@@ -1,0 +1,91 @@
+#!/bin/bash -eu
+#
+# Update new Ubuntu raspi kernel configs using values from the master kernel
+#
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	if [ ${rc} -ne 0 ] ; then
+		echo "-- Error: Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function update_config()
+{
+	local builddir=${1} configfile=${2}
+	local newconfig default config
+
+	cranky chroot run -- make O="${builddir}" listnewconfig | tee .tmp
+	readarray -t newconfig < <(grep '^CONFIG_' .tmp || true)
+
+	if [ "${#newconfig[@]}" -eq 0 ] ; then
+		# No new configs, all done
+		return
+	fi
+
+	# Look up the new configs in the provided config file or use the defaults
+	for default in "${newconfig[@]}" ; do
+		{ grep -P "^(# )?${default%%=*}[= ]" "${configfile}" || \
+		  echo "${default}" ; } >> "${builddir}"/.config
+	done
+
+	update_config "${builddir}" "${configfile}"
+}
+
+trap out EXIT INT TERM HUP
+
+declare -A kernel_arch=(
+	[arm64]=arm64
+	[armhf]=arm
+)
+
+declare -A cross_compile=(
+	[arm64]=aarch64-linux-gnu-
+	[armhf]=arm-linux-gnueabihf-
+)
+
+declare -A master_config=(
+	[arm64/raspi]=MASTERCONFIGS/arm64-config.flavour.generic
+	[armhf/raspi]=MASTERCONFIGS/armhf-config.flavour.generic-lpae
+	[armhf/raspi-nolpae]=MASTERCONFIGS/armhf-config.flavour.generic
+)
+
+. debian/debian.env
+
+builddir=.buildd
+
+for config in "${DEBIAN}"/config/*/config.flavour.* ; do
+	arch=${config%/*}
+	arch=${arch##*/}
+	flavor=${config##*.}
+
+	echo
+	echo "-- arch=${arch}, flavor=${flavor}"
+
+	rm -rf "${builddir}"
+	mkdir "${builddir}"
+
+	cat "${DEBIAN}"/config/config.common.ubuntu \
+		"${DEBIAN}"/config/"${arch}"/config.common."${arch}" \
+		"${DEBIAN}"/config/"${arch}"/config.flavour."${flavor}" > \
+		"${builddir}"/.config
+
+	export ARCH=${kernel_arch[${arch}]}
+	export CROSS_COMPILE=${cross_compile[${arch}]}
+
+	update_config "${builddir}" "${master_config[${arch}/${flavor}]}"
+
+	mv "${builddir}"/.config \
+	   "${DEBIAN}"/config/"${arch}"/config.flavour."${flavor}"
+done
+
+rm -f "${DEBIAN}"/config/config.common.ubuntu \
+   "${DEBIAN}"/config/*/config.common.*
+
+cranky updateconfigs
