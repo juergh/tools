@@ -1,0 +1,17 @@
+#!/bin/bash
+#
+# Build a Raspberry Pi kernel package that is installable on Ubuntu
+#
+
+export ARCH=arm64
+export CROSS_COMPILE=aarch64-linux-gnu-
+
+defconfig=bcm2711_defconfig
+
+mkdir -p buildd
+
+make O=buildd "${defconfig}"
+sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=""/' buildd/.config
+
+version=$(cat buildd/.version || echo 1)
+make O=buildd LOCALVERSION="-${version}-raspi" -j8 bindeb-pkg
