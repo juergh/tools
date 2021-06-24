@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -u
 #
 # Update git repo mirrors
 #
@@ -6,32 +6,28 @@
 fetch_repo()
 {
 	date -R
-	echo "Fetching ${1}"
+	echo "-- Fetching $(pwd)/${1}"
 
-	git -C "${1}" fetch --prune
+	git -C "${1}" fetch --prune --all --tags
 	date -R > "${1}"/.fetched
 }
 
-fetch_all()
-{
-	# Fetch the main linux repo first (since all the others use it as a
-	# reference)
-	fetch_repo linux.git
+if ! cd "${1}" ; then
+	echo "-- Failed to cd to ${1}" >&2
+	exit 1
+fi
 
-	# Update the fixes file
-	echo "Finding fixes commits"
-	./find-fixes linux.git linux.fixes
+# Fetch the main linux repo first (since all the others use it as a
+# reference)
+fetch_repo linux.git
 
-	# Fetch the remaining repos
-	for git_dir in *.git ; do
-		if [ -d "${git_dir}" ] && [ "${git_dir}" != "linux.git" ] ; then
-			fetch_repo "${git_dir}"
-		fi
-	done
-}
+# Update the fixes file
+echo "Finding fixes commits"
+find-fixes linux.git linux.fixes
 
-# Current working directory
-cwd=$(dirname "$(readlink -e "${0}")")
-cd "${cwd}"
-
-fetch_all 2>&1 | tee git-fetch-daily.log
+# Fetch the remaining repos
+for git_dir in *.git ; do
+	if [ -d "${git_dir}" ] && [ "${git_dir}" != "linux.git" ] ; then
+		fetch_repo "${git_dir}"
+	fi
+done

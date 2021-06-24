@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -u
 #
 # Update git repo clones
 #
@@ -6,24 +6,20 @@
 fetch_repo()
 {
 	date -R
-	echo "Fetching ${1}"
+	echo "-- Fetching $(pwd)/${1}"
 
 	git -C "${1}" fetch --prune
 	git -C "${1}" reset --hard FETCH_HEAD
 	date -R > "${1}"/.fetched
 }
 
-fetch_all()
-{
-	for git_dir in * ; do
-		if [ -d "${git_dir}/.git" ] ; then
-			fetch_repo "${git_dir}"
-		fi
-	done
-}
+if ! cd "${1}" ; then
+	echo "-- Failed to cd to ${1}" >&2
+	exit 1
+fi
 
-# Current working directory
-cwd=$(dirname "$(readlink -e "${0}")")
-cd "${cwd}"
-
-fetch_all 2>&1 | tee git-fetch-hourly.log
+for git_dir in * ; do
+	if [ -d "${git_dir}/.git" ] ; then
+		fetch_repo "${git_dir}"
+	fi
+done
