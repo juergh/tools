@@ -27,22 +27,22 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: partmount [-h] [-ro] [-s] [-v] DEVICE PARTITION [MOUNTPOINT]
+Usage: partmount [-h] [-rw] [-s] [-v] DEVICE PARTITION [MOUNTPOINT]
 
 Mount a partition of a disk image.
 
 Optional arguments:
-  -h, --help        Show this help text and exit.
-  -ro, --read-only  Mount the partition read-only.
-  -s, --silent      Only print the mountpoint.
-  -v, --verbose     Enable verbose output. Can be provided multiple times to
-                    increase verbosity.
+  -h, --help         Show this help text and exit.
+  -rw, --read-write  Mount the partition read-write (default is read-only).
+  -s, --silent       Only print the mountpoint.
+  -v, --verbose      Enable verbose output. Can be provided multiple times to
+                     increase verbosity.
 EOF
 }
 
 silent=0
 verbose=0
-read_only=0
+read_write=0
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -50,8 +50,8 @@ while [ $# -gt 0 ] ; do
 			usage
 			exit
 			;;
-		-ro|--read-only)
-			read_only=1
+		-rw|--read-write)
+			read_write=1
 			;;
 		-s|--silent)
 			silent=1
@@ -162,7 +162,7 @@ else
 
 	# Mount the partition
 	mount_opts="loop,offset=${start_bytes},sizelimit=${sectors_bytes}"
-	if [ "${read_only}" -eq 1 ] ; then
+	if [ "${read_write}" -eq 0 ] ; then
 		mount_opts="ro,${mount_opts}"
 	fi
 	if ! sudo mount -o "${mount_opts}" "${image}" "${MOUNTPOINT}" ; then
