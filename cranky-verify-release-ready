@@ -1,0 +1,2 @@
+#!/bin/bash
+${KTEAM_TOOLS}/maintscripts/verify-release-ready
