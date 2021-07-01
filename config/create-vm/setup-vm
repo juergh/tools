@@ -85,7 +85,10 @@ function main()
 		apt-get --yes update
 	fi
 
-	if [ "${REBOOT}" -eq 1 ] ; then
+	if [ "${SHUTDOWN}" -eq 1 ] ; then
+		echo "-- Shutting down"
+		poweroff
+	elif [ "${REBOOT}" -eq 1 ] ; then
 		echo "-- Rebooting"
 		reboot
 	fi

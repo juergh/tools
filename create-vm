@@ -361,6 +361,7 @@ EOF
 	cp "${CONFIG_DIR}"/create-vm/setup-vm "${tmp_dir}"
 	cat <<EOF >"${tmp_dir}"/setup-vm.config
 REBOOT=${REBOOT}
+SHUTDOWN=${SHUTDOWN}
 EOF
 
 	# Copy the APT ESM sources list
@@ -490,7 +491,7 @@ function define_vm()
 function usage()
 {
 	cat <<EOF
-Usage: create-vm [-a ARCH] [-d] [-f] [-g GRADE] [-h] [-m SIZE] [-o] [-r]
+Usage: create-vm [-a ARCH] [-d] [-f] [-g GRADE] [-h] [-m SIZE] [-o]
                  [-s SIZE] [-t TYPE] [-u] [-y] DIST [NAME]
 
 Create a libvirt guest VM.
@@ -512,11 +513,10 @@ Optional arguments:
   -m, --memory SIZE  Memory size in KB. If not specified, defaults to 1024(KB).
   -o, --download     Download and use a new cloud image rather than using an
                      already cached image.
-  -r, --no-reboot    Configure the VM to *not* automatically reboot after the
-                     first boot initialization is done.
   -s, --size SIZE    Image size in GB. If not specified, defaults to 8(GB).
   -t, --type TYPE    Create a VM of type <TYPE>. Valid types are:
                        dep8:  For dep8 kernel testing.
+                       adt:   For ADT testing.
   -u, --uefi         Configure the VM to boot from UEFI.
   -y, --dry-run
 EOF
@@ -529,7 +529,6 @@ ARCH=
 FORCE=0
 GRADE=
 DOWNLOAD=0
-REBOOT=1
 SIZE=8
 TYPE=
 BOOT_MODE=
@@ -540,6 +539,10 @@ MEMORY=1024
 BASE_IMAGE=
 VCPU=1
 VCPU_THREADS=1
+
+START=0
+SHUTDOWN=0
+REBOOT=1
 
 while [ ${#} -gt 0 ] ; do
 	case ${1} in
@@ -572,9 +575,6 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-o|--download)
 			DOWNLOAD=1
-			;;
-		-r|--no-reboot)
-			REBOOT=0
 			;;
 		-s|--size)
 			shift
@@ -614,8 +614,7 @@ if [ -z "${DIST}" ] ; then
 fi
 
 case "${TYPE}" in
-	""|dep8)
-	;;
+	""|dep8|adt) ;;
 	*)
 		pr_error "Invalid type: ${TYPE}"
 		exit 1
@@ -697,11 +696,21 @@ if [ -z "${NAME}" ] ; then
 fi
 
 # Type-specific special handling
-if [ "${TYPE}" = "dep8" ] ; then
-	VCPU=2
-	VCPU_THREADS=2
-	MEMORY=2048
-fi
+case "${TYPE}" in
+	dep8)
+		VCPU=2
+		VCPU_THREADS=2
+		MEMORY=2048
+		;;
+	adt)
+		VCPU=2
+		VCPU_THREADS=2
+		MEMORY=2048
+		NAME=adt-${RELEASE}-${ARCH}
+		START=1
+		SHUTDOWN=1
+		;;
+esac
 
 # Ubuntu core special handling
 config_drive=1
@@ -798,3 +807,9 @@ create_config_drive
 
 # Define the VM
 define_vm
+
+# Start the VM
+if [ "${START}" -eq 1 ] ; then
+	pr_info "Starting VM"
+	virsh start "${NAME}"
+fi
