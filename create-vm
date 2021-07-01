@@ -357,9 +357,11 @@ runcmd:
     fi
 EOF
 
-	# Copy the setup-vm init script
+	# Copy the setup-vm init script and create its config file
 	cp "${CONFIG_DIR}"/create-vm/setup-vm "${tmp_dir}"
-	sed -i -e "s,__REBOOT__,${REBOOT}," "${tmp_dir}"/setup-vm
+	cat <<EOF >"${tmp_dir}"/setup-vm.config
+REBOOT=${REBOOT}
+EOF
 
 	# Copy the APT ESM sources list
 	if [ -e "${CONFIG_DIR}/${RELEASE}-esm-ppa.list" ] ; then

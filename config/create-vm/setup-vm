@@ -3,6 +3,13 @@
 # Setup script for create-vm which is run at first boot
 #
 
+function purge_packages()
+{
+	echo "-- Purging packages"
+
+	apt-get --yes purge unattended-upgrades
+}
+
 function fix_grub()
 {
 	local serial
@@ -10,6 +17,8 @@ function fix_grub()
 	if ! [ -e /etc/default/grub ] ; then
 		return
 	fi
+
+	echo "-- Fixing grub"
 
 	# Figure out the serial console
 	for serial in hvc0 ttyAMA0 ttyS0 ; do
@@ -33,12 +42,16 @@ __EOF__
 
 function setup_esm_repo()
 {
-	if ! [ -e /etc/cloud/cidata/esm-ppa.list ] ; then
+	local keyid
+
+	if ! [ -e "${HERE}"/esm-ppa.list ] ; then
 		return
 	fi
 
+	echo "-- Setting up ESM repo"
+
 	# Copy the ESM PPA list file
-	cp /etc/cloud/cidata/esm-ppa.list /etc/apt/sources.list.d/
+	cp "${HERE}"/esm-ppa.list /etc/apt/sources.list.d/
 
 	# Download the PPA public keys
 	while IFS= read -r keyid ; do
@@ -46,28 +59,33 @@ function setup_esm_repo()
 	done < <(awk '/PPA public key/ { print $NF }' \
 				 /etc/apt/sources.list.d/*.list)
 
-	# Update the package index files
-	apt-get --yes update
+	APT_UPDATE=1
 }
 
-function do_init()
+function main()
 {
+	# Globals
+	APT_UPDATE=0
+	HERE=$(dirname "$(readlink -f "${0}")")
+
+	echo "-- Sourcing setup-vm.config"
+	# shellcheck disable=SC1090
+	. "${HERE}"/setup-vm.config
+
 	echo "-- Waiting for cloud-init to finish"
 	while ! [ -e /var/lib/cloud/instance/boot-finished ] ; do
 		sleep 1
 	done
 
-	echo "-- Purging packages"
-	apt-get --yes purge unattended-upgrades
-
-	echo "-- Fixing grub"
+	purge_packages
 	fix_grub
-
-	echo "-- Setting up ESM repo"
 	setup_esm_repo
 
-	# shellcheck disable=SC2170,SC2050
-	if [ __REBOOT__ -eq 1 ] ; then
+	if [ "${APT_UPDATE}" -eq 1 ] ; then
+		apt-get --yes update
+	fi
+
+	if [ "${REBOOT}" -eq 1 ] ; then
 		echo "-- Rebooting"
 		reboot
 	fi
@@ -76,6 +94,6 @@ function do_init()
 # -----------------------------------------------------------------------------
 # Main entry point
 
-do_init 2>&1 | \
+main 2>&1 | \
 	awk '{ print strftime("%Y-%m-%d %H:%M:%S -"), $0 }' | \
 	tee -a /var/log/setup-vm.log
