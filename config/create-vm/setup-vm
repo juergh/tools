@@ -40,7 +40,7 @@ __EOF__
 	update-grub
 }
 
-function setup_esm_repo()
+function add_esm_repo()
 {
 	local keyid
 
@@ -48,7 +48,7 @@ function setup_esm_repo()
 		return
 	fi
 
-	echo "-- Setting up ESM repo"
+	echo "-- Adding ESM repo"
 
 	# Copy the ESM PPA list file
 	cp "${HERE}"/esm-ppa.list /etc/apt/sources.list.d/
@@ -62,24 +62,35 @@ function setup_esm_repo()
 	APT_UPDATE=1
 }
 
+function setup_type()
+{
+	if [ "${TYPE}" = "adt" ] ; then
+		echo "-- Adding source repos"
+		grep '^deb ' /etc/apt/sources.list /etc/apt/sources.list.d/*.list | \
+			sed 's/^deb /deb-src /' >> /etc/apt/sources.list.d/deb-src.list
+		APT_UPDATE=1
+	fi
+}
+
 function main()
 {
 	# Globals
 	APT_UPDATE=0
 	HERE=$(dirname "$(readlink -f "${0}")")
 
-	echo "-- Sourcing setup-vm.config"
-	# shellcheck disable=SC1090
-	. "${HERE}"/setup-vm.config
-
 	echo "-- Waiting for cloud-init to finish"
 	while ! [ -e /var/lib/cloud/instance/boot-finished ] ; do
 		sleep 1
 	done
 
+	echo "-- Sourcing setup-vm.config"
+	# shellcheck disable=SC1090
+	. "${HERE}"/setup-vm.config
+
 	purge_packages
 	fix_grub
-	setup_esm_repo
+	add_esm_repo
+	setup_type
 
 	if [ "${APT_UPDATE}" -eq 1 ] ; then
 		apt-get --yes update

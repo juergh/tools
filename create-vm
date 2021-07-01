@@ -362,6 +362,7 @@ EOF
 	cat <<EOF >"${tmp_dir}"/setup-vm.config
 REBOOT=${REBOOT}
 SHUTDOWN=${SHUTDOWN}
+TYPE=${TYPE}
 EOF
 
 	# Copy the APT ESM sources list
