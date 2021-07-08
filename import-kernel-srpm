@@ -73,6 +73,7 @@ if ! [ -d .git ] ; then
 fi
 
 gitd=$(readlink -e .)
+mkdir -p ~/.rpmbuild/{BUILD,SOURCES,SPECS}
 rpmbuildd=$(readlink -e ~/.rpmbuild)
 
 # Parse the SRPM
