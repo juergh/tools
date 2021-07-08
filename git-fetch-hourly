@@ -18,8 +18,8 @@ if ! cd "${1}" ; then
 	exit 1
 fi
 
-for git_dir in * ; do
-	if [ -d "${git_dir}/.git" ] ; then
-		fetch_repo "${git_dir}"
+for repo in * ; do
+	if [ -d "${repo}/.git" ] && [ "${repo%.git}" = "${repo}" ] ; then
+		fetch_repo "${repo}"
 	fi
 done
