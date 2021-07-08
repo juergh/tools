@@ -40,7 +40,7 @@ function install_source_pkg()
 	echo -n "Installing source package ${pkg_file##*/} ... "
 	rm -rf "${inst_dir}"
 	mkdir -p  "${inst_dir%/*}"
-	dpkg-source -x "${pkg_file}" "${inst_dir}" > /dev/null
+	dpkg-source --no-check -x "${pkg_file}" "${inst_dir}" > /dev/null
 	echo "done"
 }
 
@@ -54,12 +54,30 @@ function install_binary_pkg()
 	version=$(dpkg-deb --field "${pkg_file}" Version)
 	arch=$(dpkg-deb --field "${pkg_file}" Architecture)
 
+	case "${source}" in
+		linux-signed*)
+			echo "Error: Invalid source package: ${source}" >&2
+			exit 1
+			;;
+	esac
+
 	case "${package}" in
+		linux-image-unsigned-*-dbgsym)
+			flavor=${package#linux-image-unsigned-*-}
+			flavor=${flavor#*-}
+			flavor=${flavor%-dbgsym}
+			stamp=.dbg
+			;;
 		linux-image-*-dbgsym)
 			flavor=${package#linux-image-*-}
 			flavor=${flavor#*-}
 			flavor=${flavor%-dbgsym}
 			stamp=.dbg
+			;;
+		linux-image-unsigned-*)
+			flavor=${package#linux-image-unsigned-*-}
+			flavor=${flavor#*-}
+			stamp=.img
 			;;
 		linux-image-*)
 			flavor=${package#linux-image-*-}
@@ -117,11 +135,11 @@ function list_pkgs()
 {
 	local fmt num inst_dir source version arch flavor
 
-	fmt="%3s   %-12s   %-20s   %-10s   %3s   %3s   %3s   %3s\n"
+	fmt="%3s   %-20s   %-20s   %-10s   %3s   %3s   %3s   %3s\n"
 
 	# shellcheck disable=SC2059
 	printf "${fmt}" "Idx" "Source" "Version" "Flavor" "Dbg" "Img" "Mod" "Src"
-    printf "%0.s-" {1..78}
+	printf "%0.s-" {1..86}
 	echo
 
 	num=1
@@ -191,8 +209,9 @@ function do_remove()
 		usage
 		exit 2
 	fi
+	pkg_index=${1}
 
-	verify_pkg_index "${1}"
+	verify_pkg_index "${pkg_index}"
 
 	# shellcheck disable=SC2012
 	inst_dir=$(ls -1d "${UPKG_DIR}"/*/* | head -"${pkg_index}" | tail -1)

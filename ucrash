@@ -20,7 +20,7 @@ function pr_error()
 
 function lookup_arch()
 {
-	local arch=${1} errmsg=${2}
+	local arch=${1}
 
 	case "${arch,,}" in
 		*s/390*|s390x)
@@ -33,18 +33,28 @@ function lookup_arch()
 			echo "amd64"
 			;;
 		*)
-			pr_error "${errmsg}"
+			pr_error "Unknown architecture: ${arch}"
 			;;
 	esac
 }
 
 function lookup_source()
 {
-	local flavor=${1}
+	local version=${1} flavor=${2}
+	local major suffix
+
+	suffix=
+	if [ "${version/\~/}" != "${version}" ] ; then
+		major=${version%.0-*}
+		suffix="-hwe-${major}"
+	fi
 
 	case "${flavor}" in
 		ibm-gt)
 			echo "linux-ibm-gt"
+			;;
+		generic)
+			echo "linux${suffix}"
 			;;
 		*)
 			pr_error "Unknown kernel flavor: ${flavor}"
@@ -73,7 +83,7 @@ function parse_linux_version()
 
 	DUMP_VERSION=${DUMP_ABI}.${DUMP_UPLOAD}
 
-	DUMP_SOURCE=$(lookup_source "${DUMP_FLAVOR}")
+	DUMP_SOURCE=$(lookup_source "${DUMP_VERSION}" "${DUMP_FLAVOR}")
  }
 
 function parse_debug_kernel()
@@ -84,13 +94,12 @@ function parse_debug_kernel()
 	arch=$(file "${DEBUG_KERNEL}")
 	arch=${arch%%, version *}
 	arch=${arch##*, }
-	DUMP_ARCH=$(lookup_arch "${arch}" \
-				"Unknown architecture found in debug kernel: ${arch}")
+	DUMP_ARCH=$(lookup_arch "${arch}")
 
 	# Get the Linux version from the debug kernel
-    if ! linux_version=$(strings "${DEBUG_KERNEL}" | \
+	if ! linux_version=$(strings "${DEBUG_KERNEL}" | \
 							 grep -m 1 '^Linux version ') ; then
-        pr_error "No Linux version found in debug kernel"
+		pr_error "No Linux version found in debug kernel"
 	fi
 
 	parse_linux_version "${linux_version}"
@@ -103,8 +112,7 @@ function parse_kdump()
 
 	# Determine the architecture
 	arch=${header[5]}
-	DUMP_ARCH=$(lookup_arch "${arch}" \
-				"Unknown architecture found in dumpfile: ${arch}")
+	DUMP_ARCH=$(lookup_arch "${arch}")
 
 	DUMP_RELEASE=${header[3]}
 
@@ -121,7 +129,7 @@ function parse_kdump()
 
 	DUMP_VERSION=${DUMP_ABI}.${DUMP_UPLOAD}
 
-	DUMP_SOURCE=$(lookup_source "${DUMP_FLAVOR}")
+	DUMP_SOURCE=$(lookup_source "${DUMP_VERSION}" "${DUMP_FLAVOR}")
 }
 
 function parse_core()
@@ -132,8 +140,7 @@ function parse_core()
 	arch=$(file "${DUMP_FILE}")
 	arch=${arch%%, version *}
 	arch=${arch##*, }
-	DUMP_ARCH=$(lookup_arch "${arch}" \
-				"Unknown architecture found in dumpfile: ${arch}")
+	DUMP_ARCH=$(lookup_arch "${arch}")
 
 	# Get the Linux version from the debug kernel
 	if ! linux_version=$(strings "${DUMP_FILE}" | \
@@ -151,8 +158,7 @@ function parse_makedumpfile()
 
 	# Determine the architecture
 	arch=${header[2]}
-	DUMP_ARCH=$(lookup_arch "${arch}" \
-				"Unknown architecture found in dumpfile: ${arch}")
+	DUMP_ARCH=$(lookup_arch "${arch}")
 }
 
 function parse_dump_file()
@@ -253,7 +259,7 @@ function run_crash()
 	# so that gdb can find the source
 	if [ -n "${kernel_source}" ] ; then
 		# Get the build path of the kernel
-		build_path=$(objdump --dwarf=decodedline "${debug_kernel}" | \
+		build_path=$(objdump --dwarf=decodedline "${debug_kernel}" 2>/dev/null | \
 						 grep -m1 '^/.*/init/main\.c:$' | \
 						 sed -e 's,/init/main\.c:,,')
 
