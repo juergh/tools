@@ -124,7 +124,8 @@ function parse_kdump()
 
 	DUMP_FLAVOR=${DUMP_RELEASE#${DUMP_ABI}-}
 
-	DUMP_UPLOAD=${header[4]%%-*}
+	DUMP_UPLOAD=${header[4]%% *}
+	DUMP_UPLOAD=${DUMP_UPLOAD%-*}
 	DUMP_UPLOAD=${DUMP_UPLOAD:1}
 
 	DUMP_VERSION=${DUMP_ABI}.${DUMP_UPLOAD}
@@ -265,14 +266,18 @@ function run_crash()
 
 		pr_info "kernel build path" "${build_path}"
 
-		# Create a temporary commands file that crash loads on start
-		infile=$(mktemp --tmpdir ucrash-XXXXXXXX)
-		# shellcheck disable=SC2064
-		trap "rm -f ${infile}" INT TERM EXIT HUP
-		echo "gdb set substitute-path ${build_path} ${kernel_source}" > \
-			 "${infile}"
+		if [ "${INFO}" -eq 0 ] ; then
+			# Create a temporary commands file that crash loads on start
+			infile=$(mktemp --tmpdir ucrash-XXXXXXXX)
+			# shellcheck disable=SC2064
+			trap "rm -f ${infile}" INT TERM EXIT HUP
+			echo "gdb set substitute-path ${build_path} ${kernel_source}" > \
+				 "${infile}"
 
-		crash_opts+=("-i" "${infile}")
+			crash_opts+=("-i" "${infile}")
+		else
+			crash_opts+=("-i" "/tmp/ucrash-12345678")
+		fi
 	fi
 
 	# Final crash command options
@@ -281,11 +286,6 @@ function run_crash()
 #		crash_opts+=("${system_map}")
 #	fi
     
-	# Return if --info is specified
-	if [ "${INFO}" -eq 1 ] ; then
-		return
-	fi
-
 	# Set the crash exports
 	if [ -n "${debug_modules}" ] ; then
 		export CRASH_MODULE_PATH=${debug_modules}
@@ -302,7 +302,9 @@ function run_crash()
 	pr_info "crash version" "${crash_version}"
 
 	# Finally run crash
-	"${crash_cmd[@]}" "${crash_opts[@]}"
+	if [ "${INFO}" -eq 0 ] ; then
+		"${crash_cmd[@]}" "${crash_opts[@]}"
+	fi
 }
 
 function usage()
