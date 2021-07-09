@@ -1,0 +1,212 @@
+#!/bin/bash -eu
+#
+# This is an autopkgtest-virt-ssh setup script that sets up a libvirt instance
+# to use as an autopkg testbed.
+# See man autopkgtest-virt-ssh for details.
+#
+
+# Add testbed capabilities here (possibly dynamically), see
+# doc/README.virtualisation-server.rst
+CAPABILITIES="isolation-machine,reboot,revert,revert-full-system"
+
+# The SSH username
+SSH_USER=ubuntu
+
+function domain_running()
+{
+	virsh list | grep -qE "\s${DOMAIN}\s+running"
+}
+
+function now()
+{
+	date +%s
+}
+
+# Create a testbed (if necessary), configure ssh, copy ssh key into it,
+# configure sudo, etc.; print a list of "key=value" parameters to stdout on
+# success
+# Required: login, hostname, and one of identity or password
+# Optional: port, options, capabilities
+function open()
+{
+	local extraopts ip_addr
+
+	extraopts=("--domain" "${DOMAIN}")
+	if [ -n "${CLONE}" ] ; then
+		extraopts+=("--clone" "${CLONE}")
+		echo "-- Cloning domain ${CLONE}" >&2
+		virt-clone --auto-clone --original "${CLONE}" --name "${DOMAIN}"
+		virt-sysprep --hostname "${DOMAIN}".localdomain --domain "${DOMAIN}"
+	fi
+
+	echo "-- Starting domain ${DOMAIN}" >&2
+	virsh start "${DOMAIN}"
+
+	# Wait for the instance to get an IP address
+	echo "-- Waiting for an IP address" >&2
+	timeout=$(($(now) + 300))
+	while true ; do
+		if [ "$(now)" -gt ${timeout} ] ; then
+			echo "-- Error: Timed out waiting for an IP address" >&2
+			cleanup
+			exit 1
+		fi
+		while IFS= read -r ip_addr ; do
+			ip_addr=${ip_addr%/*}
+			if ping -c 1 -W 1 "${ip_addr}" >/dev/null 2>&1 ; then
+				break
+			fi
+		done < <(virsh net-dhcp-leases default | tac | \
+					 awk '$6 == "'"${DOMAIN}"'" { print $5 }' ; echo)
+		if [ -n "${ip_addr}" ] ; then
+			break
+		fi
+		sleep 2
+	done
+
+	# Wait for SSH access
+	echo "-- Waiting for SSH access" >&2
+	ssh_args=("-q" "-l" "${SSH_USER}" "-o" "UserKnownHostsFile=/dev/null"
+			  "-o" "StrictHostKeyChecking=no" "${ip_addr}")
+	timeout=$(($(now) + 300))
+	while ! ssh "${ssh_args[@]}" true ; do
+		if [ "$(now)" -gt ${timeout} ] ; then
+			echo "-- Error: Timed out waiting for SSH access" >&2
+			cleanup
+			exit 1
+		fi
+		sleep 5
+	done
+
+	# Wait for cloud-init to finish
+	echo "-- Waiting for cloud-init to finish" >&2
+	if ! timeout 10m ssh "${ssh_args[@]}" \
+		 "while [ ! -e /var/lib/cloud/instance/boot-finished ] ; do sleep 1 ; done" ; then
+		echo "-- Error: Timed out waiting for cloud-init to finish" >&2
+		cleanup
+		exit 1
+	fi
+
+	cat <<EOF
+
+login=${SSH_USER}
+hostname=${ip_addr}
+capabilities=${CAPABILITIES}
+extraopts=${extraopts[*]}
+EOF
+}
+
+function cleanup()
+{
+	echo "-- Stopping domain ${DOMAIN}" >&2
+	if ! domain_running ; then
+		echo "-- Domain not running" >&2
+		return
+	fi
+	virsh shutdown "${DOMAIN}"
+
+	echo "-- Waiting for domain to shut down" >&2
+	retry=60
+	while domain_running ; do
+		retry=$((retry - 1))
+		if [ ${retry} -le 0 ] ; then
+			echo "-- Error: Timed out waiting for domain to shut down" >&2
+			virsh destroy "${DOMAIN}"
+			break
+		fi
+		sleep 2
+	done
+}
+
+function revert()
+{
+	cleanup
+	open
+}
+
+function wait_reboot()
+{
+	echo "-- wait_reboot not implemented" >&2
+}
+
+function debug_failure()
+{
+	echo "-- debug_failure not implemented" >&2
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: autopkgtest-virt-ssh-virsh [-c DOMAIN] [-d DOMAIN] [-h] COMMAND
+
+Set up a libvirt instance to use as an autopkg testbed.
+
+Positional arguments:
+  COMMAND              The autopkgtest command: open, cleanup, revert,
+                       wait-reboot or debug-failure.
+
+Optional arguments:
+  -c, --clone DOMAIN   The name of the domain to clone.
+  -d, --domain DOMAIN  The name of the domain to use for the test.
+  -h, --help           Show this help text and exit.
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+cmd=
+CLONE=
+DOMAIN=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-c|--clone)
+			shift
+			CLONE=${1}
+			;;
+		-d|--domain)
+			shift
+			DOMAIN=${1}
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -z "${cmd}" ] ; then
+				cmd=${1,,}
+			else
+				echo "-- Error: Invalid argument: ${1}" >&2
+				exit 2
+			fi
+	esac
+	shift
+done
+
+if [ -z "${cmd}" ] || [ -z "${DOMAIN}" ] ; then
+	usage
+	exit 2
+fi
+
+case "${cmd}" in
+	open)
+		open
+		;;
+	cleanup)
+		cleanup
+		;;
+	revert)
+		revert
+		;;
+	wait-reboot)
+		wait_reboot
+		;;
+	debug-failure)
+		debug_failure
+		;;
+	*)
+		echo "-- Error: Invalid command: ${cmd}" >&2
+		exit 1
+		;;
+esac
