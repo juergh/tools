@@ -5,9 +5,18 @@
 
 function purge_packages()
 {
+	local pkgs pkg
+
 	echo "-- Purging packages"
 
-	apt-get --yes purge unattended-upgrades
+	pkgs=("unattended-upgrades")
+	if [ "${TYPE}" = "adt" ] ; then
+		pkgs+=("lxd" "lxd-client" "snapd")
+	fi
+
+	for pkg in "${pkgs[@]}" ; do
+		apt-get purge --yes --auto-remove "${pkg}"
+	done
 }
 
 function fix_grub()
@@ -93,7 +102,7 @@ function main()
 	setup_type
 
 	if [ "${APT_UPDATE}" -eq 1 ] ; then
-		apt-get --yes update
+		apt-get update --yes
 	fi
 
 	if [ "${SHUTDOWN}" -eq 1 ] ; then
