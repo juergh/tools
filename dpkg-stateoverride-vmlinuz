@@ -1,0 +1,10 @@
+#!/bin/sh
+#
+# Change the permission of /boot/vmlinuz-<foo> to 0644
+# Copy to /etc/kernel/postinst.d/
+#
+
+version=${1}
+[ -z "${version}" ] && exit 0
+
+dpkg-statoverride --update --add root root 0644 /boot/vmlinuz-"${version}"
