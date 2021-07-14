@@ -41,7 +41,7 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
-if [ -n "$(git status --porcelain)" ] ; then
+if [ -d .git ] && [ -n "$(git status --porcelain)" ] ; then
 	echo "Repo is unclean"
 	exit 1
 fi
