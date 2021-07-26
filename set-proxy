@@ -1,0 +1,18 @@
+#!/bin/bash
+
+if [ "${BASH_SOURCE[0]}" = "${0}" ] ; then
+	echo "Script needs to be sourced, not executed"
+	exit 1
+fi
+
+for host in squid.internal 91.189.89.216 10.245.64.1 ; do
+	if echo "" | nc -w 2 "${host}" 3128 >/dev/null 2>&1; then
+		export http_proxy="http://${host}:3128"
+		export https_proxy="http://${host}:3128"
+		echo "Proxy set to ${http_proxy}"
+		return 0
+	fi
+done
+
+echo "Proxy not set"
+return 1
