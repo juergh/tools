@@ -1,0 +1,155 @@
+#!/bin/bash -eu
+#
+# Run basic fio profiles
+#
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	rm -f "${FIO}"
+	sudo rm -rf "${DIR}"
+	if [ -n "${MNT}" ] ; then
+		sudo umount "${MNT}"
+		sudo rmdir "${MNT}"
+	fi
+
+	if [ ${rc} -ne 0 ] ; then
+		echo "Error: Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function gen_profile_randrw()
+{
+	local directory=${1}
+
+	cat <<EOF
+; Four threads, two query, two writers.
+
+[global]
+rw=randread
+size=256m
+directory=${directory}
+ioengine=libaio
+iodepth=4
+invalidate=1
+direct=1
+
+[bgwriter]
+rw=randwrite
+iodepth=32
+
+[queryA]
+iodepth=1
+ioengine=mmap
+direct=0
+thinktime=3
+
+[queryB]
+iodepth=1
+ioengine=mmap
+direct=0
+thinktime=5
+
+[bgupdater]
+rw=randrw
+iodepth=16
+thinktime=40
+size=32m
+EOF
+}
+
+function gen_profile_randr()
+{
+	local directory=${1}
+
+	cat <<EOF
+[random-read]
+rw=randread
+size=256m
+directory=${directory}
+EOF
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: run-fio [-h] [-l] PROFILE DEVICE|DIRECTORY
+
+Positional arguments:
+  PROFILE           A valid profile name: randrw, randr.
+  DEVICE|DIRECTORY  A block device or a directory name to use for testing.
+
+Optional arguments:
+  -h, --help        Show this help.
+  -l, --loop        Loop forever.
+EOF
+}
+
+loop=0
+profile=
+dev_dir=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-l|--loop)
+			loop=1
+			;;
+		*)
+			if [ -z "${profile}" ] ; then
+				profile=${1}
+			elif [ -z "${dev_dir}" ] ; then
+				dev_dir=${1}
+			else
+				echo "Error: Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${profile}" ] || [ -z "${dev_dir}" ] ; then
+	usage
+	exit 2
+fi
+
+case "${profile}" in
+	randrw|randr) ;;
+	*) usage ; exit 2 ;;
+esac
+
+FIO=/tmp/do-fio.$$.fio
+MNT=
+DIR=
+trap out EXIT INT TERM HUP
+
+if [ -b "${dev_dir}" ] ; then
+	MNT=/tmp/do-fio.$$.mnt
+	sudo mkdir -p "${MNT}"
+	sudo mount "${dev_dir}" "${MNT}"
+	DIR=${MNT}/do-fio.$$.dat
+elif [ -d "${dev_dir}" ] ; then
+	DIR=${dev_dir}/do-fio.$$.dat
+else
+	echo "Error: Neither a block device nor a directory: ${dev_dir}" >&2
+	exit 1
+fi
+
+sudo mkdir -p "${DIR}"
+sudo chmod 777 "${DIR}"
+
+gen_profile_"${profile}" "${DIR}" > "${FIO}"
+
+while true ; do
+	fio "${FIO}"
+	[ ${loop} -eq 1 ] || break
+done
