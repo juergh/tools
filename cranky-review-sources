@@ -61,7 +61,7 @@ function review_src()
 		return
 	fi
 
-	if [ "${FORCE}" -eq 1 ] ; then
+	if [ -n "${POCKET}" ] ; then
 		rm -f ../"${debdiff}"
 	fi
 
@@ -72,11 +72,11 @@ function review_src()
 		fi
 
 		# Figure out the previous package version
-		if [ "${#PREVIOUS[@]}" -eq 0 ] ; then
+		if [ "${POCKET}" = "none" ] ; then
 			prev_version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
 											   -S Version -o 1 -c 1)
 		else
-			prev_version=${PREVIOUS[${src}]}
+			prev_version=${PREV_VERSION[${src}]}
 		fi
 
 		prev_dsc="${src}"_"${prev_version}".dsc
@@ -127,7 +127,7 @@ function review_src()
 function usage()
 {
 	cat <<EOF
-Usage: cranky review-sources [-f] [-h] POCKET
+Usage: cranky review-sources [-f] [-h] [POCKET]
 
 Review the differences between the current kernel source packages and the
 previous source packages from pocket <POCKET>.
@@ -135,29 +135,25 @@ previous source packages from pocket <POCKET>.
 Positional arguments:
   POCKET       The name of the pocket that contains the previous kernel
                packages to compare against. If set to 'none', uses the version
-               from the previous changelog entry.
+               from the previous changelog entry. If not provided, process
+               the exisiting debdiff.
 
 Optional arguments:
-  -f, --force  Force the recreation of the .debdiff files.
   -h, --help   Show this help message and exit.
 EOF
 }
 
-FORCE=0
-pocket=
+POCKET=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
-		-f|--force)
-			FORCE=1
-			;;
 		-h|--help)
 			usage
 			exit
 			;;
 		release|security|updates|proposed|none)
-			if [ -z "${pocket}" ] ; then
-				pocket=${1}
+			if [ -z "${POCKET}" ] ; then
+				POCKET=${1}
 			else
 				echo "Invalid argument: ${1}" >&2
 				exit 2
@@ -171,27 +167,22 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
-if [ -z "${pocket}" ] ; then
-	usage
-	exit 2
-fi
-
 TMPD=
 trap out EXIT
 
-readarray -t srcs < <(cranky shell-helper source-packages-path)
-if [ "${#srcs[@]}" -eq 0 ] ; then
+readarray -t src_dirs < <(cranky shell-helper source-packages-path)
+if [ "${#src_dirs[@]}" -eq 0 ] ; then
 	exit 1
 fi
 
-declare -A PREVIOUS=()
+declare -A PREV_VERSION=()
 # Get the previous versions from the provided pocket
-if [ "${pocket}" != "none" ] ; then
+if [ -n "${POCKET}" ] && [ "${POCKET}" != "none" ] ; then
 	while read -r src version rest ; do
-		PREVIOUS[${src}]=${version}
-	done < <(cranky rmadison -s -p "${pocket}")
+		PREV_VERSION[${src}]=${version}
+	done < <(cranky rmadison -s -p "${POCKET}")
 fi
 
-for src in "${srcs[@]}" ; do
-	review_src "${src}"
+for src_dir in "${src_dirs[@]}" ; do
+	review_src "${src_dir}"
 done
