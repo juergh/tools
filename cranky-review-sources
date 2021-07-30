@@ -71,25 +71,25 @@ function review_src()
 
 		# Previous and current dsc
 		echo
-		echo -e "\e[96m*** ${src} [1/4]: head -2 ${debdiff} ***\e[0m"
+		echo -e "\e[96m*** SOURCE ${src} *** head -2 ${debdiff} ***\e[0m"
 		echo
 		head -2 ../"${debdiff}"
 
 		# lsdiff .debdiff
 		echo
-		echo -e "\e[96m*** ${src} [2/4]: lsdiff ${debdiff} ***\e[0m"
+		echo -e "\e[96m*** SOURCE ${src} *** lsdiff ${debdiff} ***\e[0m"
 		echo
 		lsdiff -s ../"${debdiff}" | do_colordiff
 
 		# filterdiff .debdiff
 		echo
-		echo -e "\e[96m*** ${src} [3/4]: filterdiff ${debdiff} ***\e[0m"
+		echo -e "\e[96m*** SOURCE ${src} *** filterdiff ${debdiff} ***\e[0m"
 		echo
 		filterdiff -x '*/abi/*' "../${debdiff}" | do_colordiff
 
 		# Content of .changes
 		echo
-		echo -e "\e[96m*** ${src} [4/4]: cat ${changes} ***\e[0m"
+		echo -e "\e[96m*** SOURCE ${src} *** cat ${changes} ***\e[0m"
 		echo
 		cat ../"${changes}"
 
