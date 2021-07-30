@@ -39,7 +39,7 @@ function out()
 function review_src()
 {
 	local src_dir=$1
-	local cwd DEBIAN src version debdiff changes prev_version prev_dsc
+	local cwd DEBIAN src version debdiff changes dsc prev_version prev_dsc
 
 	cwd=${PWD}
 
@@ -55,18 +55,46 @@ function review_src()
 	version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Version)
 	debdiff=${src}_${version}.debdiff
 	changes=${src}_${version}_source.changes
+	dsc=${src}_${version}.dsc
 
 	if ! [ -f ../"${changes}" ] ; then
 		echo "No .changes file found: ${changes}" >&2
 		return
 	fi
 
-	if [ -n "${POCKET}" ] ; then
-		rm -f ../"${debdiff}"
-	fi
+	if [ -z "${POCKET}" ] ; then
+		# Review an existing debdiff
+		if ! [ -e ../"${debdiff}" ] ; then
+			echo "No .debdiff file found: ${debdiff}" >&2
+			return
+		fi
 
-	# Create the debdiff if it doesn't exist
-	if ! [ -e ../"${debdiff}" ] ; then
+		# Previous and current dsc
+		echo
+		echo -e "\e[96m*** ${src} [1/4]: head -2 ${debdiff} ***\e[0m"
+		echo
+		head -2 ../"${debdiff}"
+
+		# lsdiff .debdiff
+		echo
+		echo -e "\e[96m*** ${src} [2/4]: lsdiff ${debdiff} ***\e[0m"
+		echo
+		lsdiff -s ../"${debdiff}" | do_colordiff
+
+		# filterdiff .debdiff
+		echo
+		echo -e "\e[96m*** ${src} [3/4]: filterdiff ${debdiff} ***\e[0m"
+		echo
+		filterdiff -x '*/abi/*' "../${debdiff}" | do_colordiff
+
+		# Content of .changes
+		echo
+		echo -e "\e[96m*** ${src} [4/4]: cat ${changes} ***\e[0m"
+		echo
+		cat ../"${changes}"
+
+	else
+		# Create the debdiff
 		if [ -z "${TMPD}" ] ; then
 			TMPD=$(mktemp -d)
 		fi
@@ -85,9 +113,7 @@ function review_src()
 			return
 		fi
 
-		echo
-		echo -e "\e[96m*** ${src} [0/3]: Diffing against ${prev_dsc} ***\e[0m"
-		echo
+		echo "Diffing against ${prev_dsc}"
 
 		# Populate TMPD with symlinks to the previous package files
 		( cd "${TMPD}" && dcmd "${cwd}"/../"${prev_dsc}" | \
@@ -95,31 +121,15 @@ function review_src()
 
 		# Finally call cranky review against TMPD
 		( cd ../ && cranky review -p "${TMPD}" "${changes}" )
+
+		# Add a 'header' that identifies the previous and current dsc
+		{
+			echo "# Previous: ${prev_dsc}"
+			echo "# Current:  ${dsc}"
+			cat ../"${debdiff}"
+		} > ../"${debdiff}".tmp
+		mv  ../"${debdiff}".tmp ../"${debdiff}"
 	fi
-
-	# Bail out if the debdiff doesn't exists
-	if ! [ -e ../"${debdiff}" ] ; then
-		echo "No .debdiff file found: ${debdiff}" >&2
-		return
-	fi
-
-	# lsdiff .debdiff
-	echo
-	echo -e "\e[96m*** ${src} [1/3]: lsdiff ${debdiff} ***\e[0m"
-	echo
-	lsdiff -s ../"${debdiff}" | do_colordiff
-
-	# filterdiff .debdiff
-	echo
-	echo -e "\e[96m*** ${src} [2/3]: filterdiff ${debdiff} ***\e[0m"
-	echo
-	filterdiff -x '*/abi/*' "../${debdiff}" | do_colordiff
-
-	# Content of .changes
-	echo
-	echo -e "\e[96m*** ${src} [3/3]: cat ${changes} ***\e[0m"
-	echo
-	cat ../"${changes}"
 
 	cd "${cwd}"
 }
