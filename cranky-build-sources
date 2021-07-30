@@ -122,5 +122,5 @@ if [ ${#bo_main[@]} -ne 0 ] ; then
 	build_opts+=("--build-opts" "main:${bo_main[*]}")
 fi
 
-echo "cranky build-sources ${build_opts[*]}"
+echo -e "\e[33mcranky build-sources ${build_opts[*]}\e[0m"
 cranky build-sources "${build_opts[@]}"
