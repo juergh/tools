@@ -1,0 +1,46 @@
+#!/bin/bash
+#
+# Retry openstack commands
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: openstack-retry ARG...
+
+Run the 'openstack' command and retry failures.
+
+Recognized environment variables:
+  RETRIES  Number of retries. If not defined, defaults to 5.
+EOF
+}
+
+if [ "${#}" -eq 0 ] ; then
+	usage
+	exit 2
+fi
+
+# Environment variables
+RETRIES=${RETRIES:-5}
+
+stdout=$(mktemp)
+
+count=0
+while [ ${count} -lt "${RETRIES}" ] ; do
+	if [ ${count} -gt 0 ] ; then
+		echo "+++ Retry #${count}" >&2
+	fi
+	openstack "${@}" > "${stdout}"
+	rc=${?}
+	if [ "${rc}" -ne 0 ] ; then
+		echo "+++ Failure (rc=${rc})" >&2
+	fi
+	if [ "${rc}" -eq 0 ] || [ "${rc}" -eq 2 ] ; then
+		break
+	fi
+	((count++))
+done
+
+cat "${stdout}"
+rm "${stdout}"
+exit "${rc}"
