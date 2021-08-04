@@ -26,7 +26,7 @@ function out()
 
 function pr_error()
 {
-	echo -e "\e[31m${*}\e[0m" 1>&2
+	echo -e "\e[31m${*}\e[0m" >&2
 
 }
 
@@ -353,6 +353,11 @@ Optional arguments:
 EOF
 }
 
+if [ "$(id -u)" != "0" ] ; then
+	pr_error "This script needs to be run as root"
+	exit 1
+fi
+
 ARCH=$(dpkg --print-architecture)
 DOWNLOAD=0
 FORCE=0
@@ -379,14 +384,14 @@ while [ ${#} -gt 0 ] ; do
 			RECONFIG=1
 			;;
 		-*)
-			pr_error "Error: Unexpected argument: ${1}" >&2
+			pr_error "Error: Unexpected argument: ${1}"
 			exit 2
 			;;
 		*)
 			if [ -z "${RELEASE}" ] ; then
 				RELEASE=${1}
 			else
-				pr_error "Error: Unexpected argument: ${1}" >&2
+				pr_error "Error: Unexpected argument: ${1}"
 				exit 2
 			fi
 			;;
@@ -415,6 +420,12 @@ LV_BOOT=/dev/mapper/${VG_NAME}-boot
 CONFIG_DIR=config/create-cloud-lv/$(hostname)/${RELEASE}
 
 trap out EXIT INT TERM HUP
+
+# Check if the vg exists
+if ! vgdisplay "${VG_NAME}" >/dev/null 2>&1 ; then
+	pr_error "No such volume group: ${VG_NAME}"
+	exit 1
+fi
 
 if [ "${RECONFIG}" -eq 0 ] ; then
 	# Download the cloud image
