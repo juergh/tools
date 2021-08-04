@@ -1,0 +1,239 @@
+#!/bin/bash -eu
+#
+# Create an ADT base image in OpenStack from an existing OpenStack image
+#
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	if [ -n "${USER_DATA}" ] ; then
+		rm -f "${USER_DATA}"
+	fi
+
+	if [ -n "${SERVER_NAME}" ] ; then
+		echo "+++ Delete server ${SERVER_NAME}"
+		openstack-retry server delete "${SERVER_NAME}"
+	fi
+
+	if [ ${rc} -ne 0 ] ; then
+		echo "+++ Error: Script failed (rc=${rc})" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function wait_for()
+{
+	local timeout=${1} type=${2} name=${3} status=${4}
+	local abs_timeout cur_status
+
+	abs_timeout=$(($(date +%s) + timeout))
+	while [ "$(date +%s)" -lt "${abs_timeout}" ] ; do
+		cur_status=$(openstack-retry "${type}" show "${name}" | \
+						 awk '$2 == "status" { print $4 }')
+		echo "+++ ${type^} status: ${cur_status}"
+		if [ "${cur_status}" = "${status}" ] ; then
+			return 0
+		fi
+		sleep 10
+	done
+
+	echo "+++ Error: Timeout" >&2
+	return 1
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [-i IMAGE] [-k KEYNAME] RELEASE ARCH
+
+Create a base Ubuntu ADT image in OpenStack from an existing Ubuntu OpenStack
+image.
+
+Postional arguments:
+  RELEASE                 Image release name (bionic, focal, ...).
+  ARCH                    Image architecture (amd64, armhf, ...).
+
+Optional arguments:
+  -h, --help              Show this help text and exit.
+  -i, --image IMAGE       An existing Openstack image to use as the base image
+                          for the ADT image. If not provided, uses the latest
+                          available daily image for the provided release and
+                          architecture.
+  -k, --key-name KEYNAME  An existing OpenStack SSH keyname. If not provided,
+                          uses the current username as the keyname.
+EOF
+}
+
+declare -A release_map=(
+	["impish"]="21.10"
+	["hirsute"]="21.04"
+	["focal"]="20.04"
+	["bionic"]="18.04"
+	["xenial"]="16.04"
+	["trusty"]="14.04"
+)
+
+image=
+key_name=${USER}
+release=
+arch=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-i|--image)
+			shift
+			image=${1}
+			;;
+		-k|--key-name)
+			shift
+			key_name=${1}
+			;;
+		*)
+			if [ -z "${release}" ] ; then
+				release=${1}
+				release_num=${release_map[${release}]:-}
+				if [ -z "${release_num}" ] ; then
+					echo "+++ Error: Invalid release: ${release}" >&2
+					exit 2
+				fi
+			elif [ -z "${arch}" ] ; then
+				arch=${1}
+			else
+				echo "+++ Error: Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${release}" ] || [ -z "${arch}" ] ; then
+	usage
+	exit 2
+fi
+
+net_name=net_instances
+setup_testbed=${AUTOPKGTEST}/setup-commands/setup-testbed
+setup_canonical=${AUTOPKGTEST_CLOUD}/charms/focal/autopkgtest-cloud-worker/autopkgtest-cloud/worker-config-production/setup-canonical.sh
+
+# Globals
+USER_DATA=
+SERVER_NAME=
+trap out EXIT INT TERM HUP
+
+if [ -z "${image}" ] ; then
+	# Get the latest daily image for the provided release and arch
+	image=$(openstack-retry image list \
+					  --status active \
+					  --property product_name=com.ubuntu.cloud.daily:server:"${release_num}":"${arch}" \
+					  --sort name:asc \
+					  --format value \
+					  --column Name \
+				| tail -1)
+	if [ -z "${image}" ] ; then
+		echo "+++ Error: Unable to find a base image" >&2
+		exit 1
+	fi
+	echo "+++ Base image: ${image}"
+fi
+
+# Get the network ID
+net_id=$(openstack-retry network show "${net_name}" | \
+			 awk '$2 == "id" { print $4 }')
+echo "+++ Net ID: ${net_id}"
+
+# Create cloud-init userdata
+USER_DATA=$(mktemp)
+cat << EOF > "${USER_DATA}"
+#cloud-config
+
+manage_etc_hosts: true
+package_update: true
+
+packages:
+  - linux-generic
+EOF
+
+if [ "${arch}" = amd64 ] && [ "${release_num%.*}" -ge 20 ] ; then
+	cat << EOF >> "${USER_DATA}"
+apt:
+  primary:
+    - arches: [amd64, i386]
+runcmd:
+    - dpkg --add-architecture i386
+EOF
+fi
+
+# Create a server
+SERVER_NAME=adt-${release}-${arch}-$(date +%Y%m%d-%H%M%S)
+echo "+++ Server name: ${SERVER_NAME}"
+server_id=$(openstack-retry server create --flavor m1.small \
+							--image "${image}" --user-data "${USER_DATA}" \
+							--key-name "${key_name}" --nic net-id="${net_id}" \
+							"${SERVER_NAME}" | \
+				tee /dev/stderr | awk '$2 == "id" { print $4 }')
+echo "+++ Server ID: ${server_id}"
+wait_for 300 server "${server_id}" ACTIVE
+
+# Get the server's IP address
+ip_addr=$(openstack-retry server show "${server_id}" | \
+			  awk '$2 == "addresses" { print $4 }')
+ip_addr=${ip_addr#*=}
+echo "+++ Server IP address: ${ip_addr}"
+
+ssh_cmd=(
+	"ssh"
+	"-o" "UserKnownHostsFile=/dev/null"
+	"-o" "StrictHostKeyChecking=no"
+	"ubuntu@${ip_addr}"
+)
+
+echo "+++ Wait for SSH"
+timeout 300 sh -c "while ! ${ssh_cmd[*]} true ; do sleep 5 ; done"
+
+echo "+++ Wait until cloud-init is done"
+timeout 25m "${ssh_cmd[@]}" "while [ ! -e /var/lib/cloud/instance/boot-finished ] ; do sleep 1 ; done"
+
+echo "+++ Run setup_testbed script"
+# shellcheck disable=SC2002
+cat "${setup_testbed}" | \
+	"${ssh_cmd[@]}" "sudo env MIRROR='${MIRROR:-}' RELEASE='${release}' sh -"
+
+echo "+++ Run setup_canonical script"
+# shellcheck disable=SC2002
+cat "${setup_canonical}" | \
+	"${ssh_cmd[@]}" "sudo env MIRROR='${MIRROR:-}' RELEASE='${release}' sh -"
+
+echo "+++ Stop server"
+"${ssh_cmd[@]}" "( sudo poweroff >/dev/null 2>&1 & ) &"
+wait_for 300 server "${server_id}" SHUTOFF
+
+echo "+++ Start server"
+openstack-retry server start "${server_id}"
+
+echo "+++ Wait for SSH"
+timeout 300 sh -c "while ! ${ssh_cmd[*]} true ; do sleep 5 ; done"
+
+echo "+++ Clean systemd journal"
+"${ssh_cmd[@]}" "sudo journalctl --rotate --vacuum-time=12h" || true
+
+echo "+++ Stop server"
+"${ssh_cmd[@]}" "( sudo poweroff >/dev/null 2>&1 & ) &"
+wait_for 300 server "${server_id}" SHUTOFF
+
+# Create the image
+image_name=adt-${release}-${arch}.img
+echo "+++ Image name: ${image_name}"
+image_id=$(openstack-retry server image create --name "${image_name}" \
+						   "${server_id}" | \
+			   tee /dev/stderr | awk '$2 == "id" { print $4 }')
+echo "+++ Image ID: ${image_id}"
+wait_for 300 image "${image_id}" active
