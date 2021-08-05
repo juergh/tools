@@ -16,7 +16,7 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: cranky-build-sources [-f] [-h] [-n] [-o] POCKET
+Usage: cranky-build-sources [-c] [-f] [-h] [-n] [-o] POCKET
 
 Build a set of kernel packages.
 
@@ -26,6 +26,7 @@ Positional arguments:
                changelog entries.
 
 Optional arguments:
+  -c, --current  Only build the source package for the current directory.
   -f, --force    Force the build even if the repos are unclean.
   -h, --help     Show this help text and exit.
   -n, --no-orig  Don't require an orig source tarball.
@@ -44,6 +45,9 @@ bo_main=()
 
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
+		-c|--current)
+			build_opts+=("--current")
+			;;
 		-f|--force)
 			force=1
 			;;
