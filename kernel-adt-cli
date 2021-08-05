@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+#
+# Manage ADT tests and results
+#
+
+import argparse
+import json
+import sys
+
+import natsort
+import requests
+
+try:
+    import browser_cookie3
+except ModuleNotFoundError:
+    print('Failed to import browser_cookie3. Consider installing it like:\n' +
+          '  $ pip3 install browser_cookie3', file=sys.stderr)
+    sys.exit(1)
+
+# -----------------------------------------------------------------------------
+# Helper functions
+
+def _dec(name, *args, **kwargs):
+    def _decorator(func):
+        # Because of the sematics of decorator composition if we just append
+        # to the options list positional options will appear to be backwards.
+        func.__dict__.setdefault(name, []).insert(0, (args, kwargs))
+        return func
+    return _decorator
+
+def add_help(*args, **kwargs):
+    return _dec('help', *args, **kwargs)
+
+def add_arg(*args, **kwargs):
+    return _dec('arg', *args, **kwargs)
+
+def error(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+def get_browser_cookies():
+    '''
+    Return the browser cookies for autopkgtest.ubuntu.com
+    '''
+    cookies = browser_cookie3.firefox(domain_name='autopkgtest.ubuntu.com')
+    #    try:
+    #        cookies = browser_cookie3.chrome(domain_name=domain)
+    #    except AttributeError:
+    #        cookies = None
+    return cookies
+
+def handle_to_series_source(handle):
+    '''
+    Return a (series, source) tuple for the provided handle
+    '''
+    for delim in (':', '/'):
+        if delim in handle:
+            series, source = args.handle.split(delim, 1)
+            if not source.startswith('linux-'):
+                source = 'linux-' + source
+            return series, source
+    # No delimiter in handle so assume handle is just the series
+    return handle, 'linux'
+
+def print_header(series, source, version):
+    print('Series:  {}'.format(series))
+    print('Source:  {}'.format(source))
+    print('Version: {}'.format(version))
+
+# -----------------------------------------------------------------------------
+# ADT test results class
+
+class ADTResults():
+    def __init__(self, series, source):
+        self.series = series
+        self.source = source
+
+        self.results = None       # ADT test results in dict form
+        self.results_list = None  # ADT test results in list form
+        self.versions = None      # List of all kernel versions
+        self.packages = None      # List of all packages
+        self.arches = None        # List of all architectures
+
+        self._get_results()
+
+    def _get_results(self):
+        '''
+        Get the ADT results and do some preliminary processing
+        '''
+        url = ('https://people.canonical.com/~kernel/status/' +
+               'adt-matrix/{}-{}-detail-results-data.json').format(
+                   self.series, self.source)
+        resp = requests.get(url)
+        if resp.status_code != 200:
+            error('Failed to download results ({})'.format(resp.status_code))
+            sys.exit(1)
+        results = resp.json()
+        # print(json.dumps(results, indent=4, sort_keys=True))
+
+        # Sanity check
+        if ((results['series'] != self.series or
+             results['source'] != self.source)):
+            error('Mismatched series and/or source')
+            sys.exit(1)
+
+        # Rearrange the test results and determine all versions, packages and
+        # architectures
+        self.results = {}
+        all_versions = {}
+        all_packages = {}
+        all_arches = {}
+        for version, arches in results['history'].items():
+            all_versions[version] = 1
+            self.results[version] = {}
+            for arch, results in arches.items():
+                all_arches[arch] = 1
+                for result in results:
+                    package = result['package']
+                    all_packages[package] = 1
+                    if package not in self.results[version]:
+                        self.results[version][package] = {}
+                    self.results[version][package][arch] = result
+
+        # TODO: This needs to be Debian package version sorted
+        self.versions = natsort.natsorted(list(all_versions.keys()))
+        self.packages = natsort.natsorted(list(all_packages.keys()))
+        self.arches = natsort.natsorted(list(all_arches.keys()))
+
+        # Fill in missing test results and create the test results list
+        self.results_list = {}
+        for version in self.versions:
+            self.results_list[version] = []
+            for package in self.packages:
+                if package not in self.results[version]:
+                    self.results[version][package] = {}
+                for arch in self.arches:
+                    if arch not in self.results[version][package]:
+                        self.results[version][package][arch] = {
+                            'arch': arch,
+                            'package': package,
+                            'status': '----',
+                        }
+                    self.results_list[version].append(self.results[version][package][arch])
+
+# -----------------------------------------------------------------------------
+# Subcommands
+
+@add_help('Show ADT test results.')
+@add_arg('version', nargs='?',
+         help='Show ADT test results for the provided kernel version. ' +
+         'If no version is provided, shows the results for the last ' +
+         '(newest) version. Can also be an index (0: first version, -1: ' +
+         'last version, ...)')
+def do_results(results, args):
+    if args.version:
+        found = False
+        for version in results.results:
+            if args.version == version:
+                found = True
+                break
+        if not found:
+            try:
+                version = results.versions[int(args.version)]
+                found = True
+            except (ValueError, IndexError):
+                pass
+        if not found:
+            error('Invalid version: {}'.format(args.version))
+            sys.exit(1)
+    else:
+        version = results.versions[-1]
+
+    print_header(results.series, results.source, version)
+    print('Test results:')
+    for result in results.results_list[version]:
+        print('  {:28} {} {}'.format(result['package'], result['arch'],
+                                     result['status']))
+
+@add_help('Trigger ADT tests.',
+          help='Trigger all ADT tests that show a \'MISS\' status.')
+@add_arg('-d', '--dry-run', action='store_true',
+         help='Only show which tests would be tirggered.')
+def do_trigger(results, args):
+    # Get the autopkgtest.ubuntu.com cookies from the browser(s)
+    cookies = get_browser_cookies()
+
+    version = results.versions[-1]
+    print_header(results.series, results.source, version)
+    print('Triggering the following tests:')
+    for result in results.results_list[version]:
+        if result['status'] != 'MISS':
+            continue
+        print('  {:28} {} {}'.format(result['package'], result['arch'],
+                                     result['status']))
+        if not args.dry_run:
+            arch = result['arch']
+            package = result['package']
+            params = {
+                'arch': arch,
+                'package': package,
+                'release': results.series,
+                'trigger': '{}/{}'.format(results.source, version),
+            }
+            resp = requests.get(result['retry_url'], params=params,
+                                cookies=cookies)
+            if resp.status_code != 200:
+                error('Failed to trigger test for {}/{} ({})'.format(
+                    package, arch, resp.status_code))
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("handle", help='Kernel handle in the form ' +
+                        '\'series:source\'.')
+
+    # Add subparsers for the subcommands and walk through the 'do_' functions
+    subparsers = parser.add_subparsers(dest='subcommand', title='subcommands',
+                                       required=True)
+    module = sys.modules[__name__]
+    for attr in (a for a in dir(module) if a.startswith('do_')):
+        cmd_name = attr[3:].replace('_', '-')
+        cmd_cb = getattr(module, attr)
+        cmd_help = getattr(cmd_cb, 'help')[0][0][0]
+        cmd_args = getattr(cmd_cb, 'arg', [])
+
+        sparser = subparsers.add_parser(cmd_name, help=cmd_help,
+                                        description=cmd_help, add_help=False)
+        sparser.add_argument('-h', '--help', action='help')
+        for (args, kwargs) in cmd_args:
+            sparser.add_argument(*args, **kwargs)
+        sparser.set_defaults(func=cmd_cb)
+
+    # Parse the arguments
+    args = parser.parse_args()
+
+    # Get the ADT test results
+    series, source = handle_to_series_source(args.handle)
+    if not source.startswith('linux-meta-'):
+        source = source.replace('linux-', 'linux-meta-')
+    results = ADTResults(series, source)
+
+    # Call the subcommand
+    args.func(results, args)
