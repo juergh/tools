@@ -1,17 +1,97 @@
-#!/bin/bash
+#!/bin/bash -eu
 #
 # Build a Raspberry Pi kernel package that is installable on Ubuntu
 #
 
-export ARCH=arm64
-export CROSS_COMPILE=aarch64-linux-gnu-
+function usage()
+{
+	cat <<EOF
+Usage: build-rpi-deb [-h] [-u] v7|v7l|v8
 
-defconfig=bcm2711_defconfig
+Build a Raspberry Pi kernel package that is installable on Ubuntu.
+
+Postional arguments:
+  v7   32-bit kernel
+  v7l  32-bit LPAE kernel
+  v8   64-bit kernel
+
+Optional arguments:
+  -h, --help    Show this help text and exit.
+  -u, --ubuntu  Use the Ubuntu kernel config rather than the raspberrypi
+                config.
+EOF
+}
+
+version=
+ubuntu=0
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-u|--ubuntu)
+			ubuntu=1
+			;;
+		v7|v7l|v8)
+			if [ -z "${version}" ] ; then
+				version=${1}
+			else
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+case "${version}" in
+	v7)
+		export ARCH=arm
+		export CROSS_COMPILE=arm-linux-gnueabihf-
+		defconfig=bcm2709_defconfig  # v7
+		ubuntu_config=config.flavour.raspi-nolpae
+		ubuntu_arch=armhf
+		;;
+	v7l)
+		export ARCH=arm
+		export CROSS_COMPILE=arm-linux-gnueabihf-
+		defconfig=bcm2711_defconfig  # v7l
+		ubuntu_config=config.flavour.raspi
+		ubuntu_arch=armhf
+		;;
+	v8)
+		export ARCH=arm64
+		export CROSS_COMPILE=aarch64-linux-gnu-
+		defconfig=bcm2711_defconfig  # v8
+		ubuntu_config=config.flavour.raspi
+		ubuntu_arch=arm64
+		;;
+	*)
+		usage
+		exit 2
+		;;
+esac
 
 mkdir -p buildd
 
-make O=buildd "${defconfig}"
+if [ "${ubuntu}" -eq 0 ] ; then
+	make O=buildd "${defconfig}"
+else
+	cat debian.raspi/config/config.common.ubuntu \
+		debian.raspi/config/"${ubuntu_arch}"/config.common."${ubuntu_arch}" \
+		debian.raspi/config/"${ubuntu_arch}"/"${ubuntu_config}" > \
+		buildd/.config
+	make O=buildd olddefconfig
+fi
+
 sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=""/' buildd/.config
 
 version=$(cat buildd/.version || echo 1)
-make O=buildd LOCALVERSION="-${version}-raspi" -j8 bindeb-pkg
+make O=buildd LOCALVERSION="-${version}-raspi" -j1 bindeb-pkg
