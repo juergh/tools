@@ -6,7 +6,7 @@
 function usage()
 {
 	cat <<EOF
-Usage: build-rpi-deb [-h] [-u] v7|v7l|v8
+Usage: build-rpi-deb [-c CPUS] [-h] [-u] v7|v7l|v8
 
 Build a Raspberry Pi kernel package that is installable on Ubuntu.
 
@@ -16,17 +16,23 @@ Postional arguments:
   v8   64-bit kernel
 
 Optional arguments:
-  -h, --help    Show this help text and exit.
-  -u, --ubuntu  Use the Ubuntu kernel config rather than the raspberrypi
-                config.
+  -c, --cpus CPUS  Number of CPUs to use for compiling. If not specified,
+                   defaults to the number of online CPUs.
+  -h, --help       Show this help text and exit.
+  -u, --ubuntu     Use the Ubuntu kernel config rather than the raspberrypi
+                   config.
 EOF
 }
 
 version=
 ubuntu=0
+cpus=$(getconf _NPROCESSORS_ONLN)
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-c|--cpus)
+			cpus=${1}
+			;;
 		-h|--help)
 			usage
 			exit
@@ -94,4 +100,4 @@ fi
 sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=""/' buildd/.config
 
 version=$(cat buildd/.version || echo 1)
-make O=buildd LOCALVERSION="-${version}-raspi" -j1 bindeb-pkg
+make O=buildd LOCALVERSION="-${version}-raspi" -j"${cpus}" bindeb-pkg
