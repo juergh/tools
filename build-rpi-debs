@@ -31,6 +31,7 @@ cpus=$(getconf _NPROCESSORS_ONLN)
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
 		-c|--cpus)
+			shift
 			cpus=${1}
 			;;
 		-h|--help)
