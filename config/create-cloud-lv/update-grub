@@ -1,0 +1,6 @@
+#!/bin/bash
+/usr/sbin/update-grub "${@}"
+echo "Copy grub.cfg to /dev/mapper/vg0-boot"
+mount /dev/mapper/vg0-boot /mnt/boot/
+cp /boot/grub/grub.cfg /mnt/boot/grub/grub-bionic-amd64.cfg
+umount /mnt/boot/ || umount -l /mnt/boot
