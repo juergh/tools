@@ -20,7 +20,8 @@ Usage: cranky-pull-sources [-h] POCKET
 Download the kernel source packages from the provided pocket.
 
 Positional arguments:
-  POCKET      The pocket to pull the source package from.
+  POCKET      The pocket to pull the source package from. If set to 'none',
+              uses the version from the previous changelog entry.
 
 Optional arguments:
   -h, --help  Show this help text and exit.
@@ -35,7 +36,7 @@ while [ ${#} -gt 0 ] ; do
 			usage
 			exit
 			;;
-		updates|release|security|proposed)
+		release|security|updates|proposed|none)
 			if [ -z "${pocket}" ] ; then
 				pocket=${1}
 			else
@@ -59,10 +60,12 @@ fi
 trap out EXIT INT TERM HUP
 
 # Get the source package versions from the provided pocket
-declare -A versions=()
-while IFS=' ' read -r package version rest ; do
-	versions[${package}]=${version}
-done < <(cranky rmadison -s -p "${pocket}")
+if [ "${pocket}" != "none" ] ; then
+	declare -A versions=()
+	while IFS=' ' read -r package version rest ; do
+		versions[${package}]=${version}
+	done < <(cranky rmadison -s -p "${pocket}")
+fi
 
 # Walk through the package set
 use_series=0
@@ -78,11 +81,17 @@ while read -r path ; do
 		else
 			changelog=debian/changelog
 		fi
-		series=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
-		package=$(dpkg-parsechangelog -l "${changelog}" -S Source)
 
-		# Get the package version
-		version=${versions[${package}]}
+		# Determine the package version
+		if [ "${pocket}" != "none" ] ; then
+			series=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
+			package=$(dpkg-parsechangelog -l "${changelog}" -S Source)
+			version=${versions[${package}]}
+		else
+			series=$(dpkg-parsechangelog -l "${changelog}" -S Distribution -o 1 -c 1)
+			package=$(dpkg-parsechangelog -l "${changelog}" -S Source -o 1 -c 1)
+			version=$(dpkg-parsechangelog -l "${changelog}" -S Version -o 1 -c 1)
+		fi
 
 		# Download the source package into the parent directory
 		cd ..
