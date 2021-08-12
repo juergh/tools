@@ -194,8 +194,8 @@ class AutoPkgTest():
         self.source = source
         self.debug = debug
 
-        self.tests = None       # autopkgtest test statuses in dict form
-        self.tests_list = None  # autopkgtest test statuses in list form
+        self.tests = None       # autopkgtest test status in dict form
+        self.tests_list = None  # autopkgtest test status in list form
         self._get_tests()       # Get the above
 
     def _get_tests(self):  # pylint: disable=R0915
@@ -293,6 +293,12 @@ class AutoPkgTest():
             print('+++ Tests list:')
             print(json.dumps(self.tests_list, indent=4, sort_keys=True))
 
+    def get_tests(self, package, arch):
+        '''
+        Return a list of tests
+        '''
+        return self.tests.get(package, {}).get(arch, [])
+
 # -----------------------------------------------------------------------------
 # Subcommands
 
@@ -302,6 +308,8 @@ class AutoPkgTest():
          'If no version is provided, shows the results for the last ' +
          '(newest) version. Can also be an index (0: first version, -1: ' +
          'last version, ...)')
+@add_arg('-t', '--tests', action='store_true',
+         help='Show running and queued test status.')
 def do_results(args, results):
     if args.version:
         found = False
@@ -321,10 +329,24 @@ def do_results(args, results):
     else:
         version = results.versions[-1]
 
+    results_list = results.results_list[version]
+
+    # Query autopktest.ubuntu.com for test status
+    if args.tests and version == results.versions[-1]:
+        apt = AutoPkgTest(results.series, results.source, args.debug)
+        for i, result in enumerate(results_list):
+            test_status = ''
+            for test in apt.get_tests(result['package'], result['arch']):
+                if test['status'] == 'RUNNING':
+                    test_status = ' (R)'
+                elif test_status == '' and test['status'] == 'QUEUED':
+                    test_status = ' (Q)'
+            result['status'] += test_status
+            results_list[i] = result
+
     print_header(results.series, results.source, version=version,
                  timestamp=results.timestamp)
-    print_table(['Package', 'Arch', 'Status', 'Annotation'],
-                results.results_list[version])
+    print_table(['Package', 'Arch', 'Status', 'Annotation'], results_list)
 
 @add_help('Retry ADT tests.',
           help='Retry all ADT tests that show a \'MISS\' status.')
