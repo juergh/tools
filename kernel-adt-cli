@@ -274,14 +274,14 @@ class AutoPkgTest():
         for package, arches in self.tests.items():
             for arch, details in arches.items():
                 status = {
-                    'running': 0,
-                    'queued': 0,
+                    'RUNNING': 0,
+                    'QUEUED': 0,
                 }
                 for detail in details:
                     if detail['status'] == 'RUNNING':
-                        status['running'] += 1
+                        status['RUNNING'] += 1
                     elif detail['status'] == 'QUEUED':
-                        status['queued'] += 1
+                        status['QUEUED'] += 1
                 self.tests_list.append({
                     'arch': arch,
                     'package': package,
