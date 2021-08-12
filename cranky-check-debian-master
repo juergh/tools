@@ -1,0 +1,46 @@
+#!/bin/bash -eu
+
+function usage()
+{
+	cat <<EOF
+Usage: cranky-check-debian-master [-h] [OPTS]
+
+Show the commits that modified debian/master since the previous main kernel
+version.
+
+OPTS  Additional options for 'git log'.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+opts=()
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			opts=("${@}")
+			break
+	esac
+	shift
+done
+
+prev_master=$(git log --oneline | \
+				  grep -m2 -P "^[0-9a-f]{8,} UBUNTU: Ubuntu-[0-9]\.[0-9]+" | \
+				  tail -1)
+prev_master_commit=${prev_master%% *}
+
+echo "Previous master: ${prev_master#* }"
+echo
+
+# Show the changes
+while IFS= read -r line ; do
+	git --no-pager log "${opts[@]}" "${line%% *}" -1
+	echo
+done < <(git log --oneline "${prev_master_commit}.." -- debian.master/ | \
+			 grep -vP "UBUNTU: (Start new release|Ubuntu-[0-9]|link-to-tracker)")
+

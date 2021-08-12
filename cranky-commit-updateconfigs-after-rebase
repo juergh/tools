@@ -1,0 +1,26 @@
+#!/bin/bash -eu
+
+# shellcheck disable=SC1091
+. debian/debian.env
+variant=${DEBIAN#debian.}
+
+# shellcheck disable=SC1090
+. "${DEBIAN}"/etc/update.conf
+master_version=$(dpkg-parsechangelog -l"${DEBIAN_MASTER}"/changelog -SVersion)
+master_variant=${DEBIAN_MASTER#debian.}
+master_variant=${master_variant#master}
+
+echo "variant:        ${variant}"
+echo "DEBIAN_MASTER:  ${DEBIAN_MASTER}"
+echo "master variant: ${master_variant}"
+echo "master version: ${master_version}"
+
+if [ -n "${master_variant}" ] ; then
+	master=Ubuntu-${master_variant}-${master_version}
+else
+	master=Ubuntu-${master_version}
+fi
+
+git commit -s -m "UBUNTU: [Config] ${variant}: updateconfigs after rebase to ${master}
+
+Ignore:yes"

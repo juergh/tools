@@ -1,0 +1,116 @@
+#!/bin/bash -eu
+#
+# Create a 'closing' commit for a test build.
+#
+
+function out()
+{
+	local rc=$?
+
+	trap - INT TERM EXIT HUP
+
+	if [ "${rc}" -ne 0 ] ; then
+		git checkout "${CURRENT_COMMIT}"
+		git branch -D "${TESTBUILD_BRANCH}"
+		echo "Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: cranky-close-testbuild [-h] [suffix]
+
+Create a 'closing' commit for a test build.
+
+Positional arguments:
+  suffix  The suffix that will be appended to the package version. If not
+          specified, the default is '~<date>+git<hash>'.
+
+Optional arguments
+  -h, --help  Show this help messgag and exit.
+EOF
+}
+
+suffix=
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -z "${suffix}" ] ; then
+				suffix=${1}
+			else
+				echo "Unexpected argument: ${1}"
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${suffix}" ] ; then
+	suffix=$(date +%Y%m%d)+git$(git log --abbrev=8 --format=%h -1)
+fi
+
+if ! [ -f debian/debian.env ] ; then
+	echo "Not an Ubuntu kernel directory"
+	exit 1
+fi
+
+if [ -n "$(git status --porcelain)" ] ; then
+	echo "Repo is not clean"
+	exit 1
+fi
+
+CURRENT_COMMIT=$(git log --format=%H HEAD -1)
+TESTBUILD_BRANCH="testbuild-${suffix}"
+
+# Create a test build branch
+git checkout -b "${TESTBUILD_BRANCH}"
+
+trap out INT TERM EXIT HUP
+
+# shellcheck disable=SC1091
+. debian/debian.env
+changelog="${DEBIAN}"/changelog
+
+version=$(dpkg-parsechangelog -l "${changelog}" -S Version)
+if ! git log --format=%s -1 | grep -q "^UBUNTU: Ubuntu-.*${version}$" ; then
+	distro=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
+	if [ "${distro}" != "UNRELEASED" ] ; then
+		# Create an opening commit
+		cranky fix
+		cranky open
+#		cranky reorder
+	fi
+
+	# Create a closing commit
+	cranky close
+fi
+
+distro=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
+version=$(dpkg-parsechangelog -l "${changelog}" -S Version)
+
+if [ "${distro}" = "precise" ] || [ "${distro}" = "trusty" ] ; then
+	# Precise and Trusty can't handle '~' in package versions, so use '+'
+	# as a suffix separator. But in this case we need to reuse the 'old' upload
+	# number in order to not create test packages that are newer than official
+	# packages.
+	prev_version=$(dpkg-parsechangelog -l "${changelog}" -S Version -o 1 -c 1)
+	upload=${prev_version##*.}
+	test_version=${version%.*}.${upload}+${suffix}
+else
+	test_version=${version}~${suffix}
+fi
+
+# Create a commit with the updated test version
+sed -i "1 s,${version},${test_version}," "${changelog}"
+git commit -s -m "UBUNTU: Test Build ${test_version}" -- "${changelog}"
+
+echo "Previous version: ${version}"
+echo "Test version:     ${test_version}"

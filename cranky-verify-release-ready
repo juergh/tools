@@ -1,2 +1,3 @@
 #!/bin/bash
-${KTEAM_TOOLS}/maintscripts/verify-release-ready
+
+"${KTEAM_TOOLS}"/maintscripts/verify-release-ready
