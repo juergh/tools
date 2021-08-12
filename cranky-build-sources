@@ -34,6 +34,7 @@ Optional arguments:
 EOF
 }
 
+current=0
 force=0
 pocket=
 build_opts=()
@@ -46,6 +47,7 @@ bo_main=()
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
 		-c|--current)
+			current=1
 			build_opts+=("--current")
 			;;
 		-f|--force)
@@ -82,13 +84,30 @@ if [ -z "${pocket}" ] ; then
 	exit 2
 fi
 
-if [ "${force}" -eq 0 ] && [ -n "$(git status --porcelain)" ] ; then
-	echo "Repo is unclean" >&2
-	echo "Use -f, --force to auto-clean before the build" >&2
-	exit 1
-fi
-
 trap out EXIT
+
+if [ "${force}" -eq 0 ] ; then
+	clean=1
+	if [ ${current} -eq 1  ] ; then
+		# Verify that then current source repo is clean
+		if [ -n "$(git status --porcelain)" ] ; then
+			echo "${PWD}: Repo is unclean" >&2
+			clean=0
+		fi
+	else
+		# Verify that all source repos are clean
+		while IFS= read -r path ; do
+			if [ -n "$(git -C "${path}" status --porcelain)" ] ; then
+				echo "${path}: Repo is unclean" >&2
+				clean=0
+			fi
+		done < <(cranky shell-helper source-packages-path)
+	fi
+	if [ "${clean}" -eq 0 ] ; then
+		echo "Use -f, --force to auto-clean before the build" >&2
+		exit 1
+	fi
+fi
 
 if [ "${pocket}" != "none" ] ; then
 	# Get the previous versions from the provided pocket
