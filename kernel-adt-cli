@@ -225,7 +225,7 @@ class AutoPkgTest():
                     if release != self.series:
                         continue
                     for arch, test_details in arches.items():
-                        for trigger in test_details[0]['triggers']:
+                        for trigger in test_details[0].get('triggers', []):
                             if trigger.startswith(self.source + '/'):
                                 if package not in self.tests:
                                     self.tests[package] = {}
