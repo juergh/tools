@@ -341,7 +341,7 @@ class AutoPkgTest():
          help='Show ADT test results for the provided kernel version. ' +
          'If no version is provided, shows the results for the last ' +
          '(newest) version. Can also be an index (0: first version, -1: ' +
-         'last version, ...)')
+         'last version, ...).')
 @add_arg('-t', '--tests', action='store_true',
          help='Show running and queued test status.')
 @add_arg('-f', '--format', default='pasn', help=table_format_help('pasn'))
