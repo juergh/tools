@@ -75,16 +75,30 @@ def print_header(series, source, version=None, timestamp=None):
         print('Timestamp: {} UTC'.format(timestamp))
     print()
 
-def print_table(header, data):
+def print_table(fmt, data):
     '''
     Prtty print a table
     '''
+    fmt_map = {
+        'p': ['Package', 'package'],
+        'a': ['Arch', 'arch'],
+        's': ['Status', 'status'],
+        'n': ['Annotation', 'annotation'],
+        'l': ['Log', 'log'],
+        'f': ['Artifacts', 'artifacts'],
+    }
+    header = [fmt_map[f][0] for f in fmt]
     table = prettytable.PrettyTable()
     table.field_names = header
     for row in data:
-        table.add_row([row.get(h.lower(), '') for h in header])
+        table.add_row([row.get(fmt_map[f][1], '') for f in fmt])
     table.align = 'l'
     print(table)
+
+def table_format_help(default):
+    return ('Table formatter string. Specifies the columns to display: ' +
+            '(p)ackage, (a)arch, (s)tatus, a(n)otation, (l)og, arti(f)acts. ' +
+            'If not provided, defaults to \'' + default + '\'.')
 
 # -----------------------------------------------------------------------------
 # ADT test results class
@@ -330,6 +344,7 @@ class AutoPkgTest():
          'last version, ...)')
 @add_arg('-t', '--tests', action='store_true',
          help='Show running and queued test status.')
+@add_arg('-f', '--format', default='pasn', help=table_format_help('pasn'))
 def do_results(args, results):
     if args.version:
         found = False
@@ -366,7 +381,7 @@ def do_results(args, results):
 
     print_header(results.series, results.source, version=version,
                  timestamp=results.timestamp)
-    print_table(['Package', 'Arch', 'Status', 'Annotation'], results_list)
+    print_table(args.format, results_list)
 
 @add_help('Retry ADT tests.',
           help='Retry all ADT tests that show a \'MISS\' status.')
@@ -382,7 +397,7 @@ def do_retry(args, results):
             retries.append(result)
 
     print_header(results.series, results.source, version=version)
-    print_table(['Package', 'Arch', 'Status', 'Annotation'], retries)
+    print_table('pasn', retries)
 
     if args.dry_run:
         print('\nDry-run, exiting...')
@@ -416,7 +431,7 @@ def do_tests(args, results):
         })
 
     print_header(results.series, results.source)
-    print_table(['Package', 'Arch', 'Status'], tests)
+    print_table('pas', tests)
 
 # -----------------------------------------------------------------------------
 # Main entry point
