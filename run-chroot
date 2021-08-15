@@ -122,7 +122,7 @@ case "${#dashes}" in
 	1)
 		# Chroot name contains a single dash
 		case "${chroot}" in
-			*-amd64|*-i386|*-powerpc|*-s390x|*-x86_64|*-armhf|*-arm64)
+			*-amd64|*-i386|*-powerpc|*-s390x|*-x86_64|*-armhf|*-arm64|*-ppc64el)
 				session=${USER}-${chroot}
 				;;
 			*)
@@ -159,8 +159,14 @@ fi
 # Create the session if it doesn't exist
 if ! session_exists "${session}" ; then
 	if ! chroot_exists "${chroot}" ; then
-		pr_error "Not such chroot: ${chroot}"
-		exit 1
+		pr_info "Create new chroot ${chroot}"
+		mk-sbuild --arch="${chroot#*-}" "${chroot%-*}"
+		if ! grep -s '^/home' '/etc/schroot/sbuild/fstab' >/dev/null; then
+			cat <<EOF | sudo tee --append '/etc/schroot/sbuild/fstab' >/dev/null
+# Allow use of /home for run-chroot
+/home           /home           none    rw,bind         0       0
+EOF
+		fi
 	fi
 	pr_info "Create new session ${session}"
 	schroot -b -n "${session}" -c "${chroot}"
