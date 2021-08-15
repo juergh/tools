@@ -64,6 +64,9 @@ def handle_to_series_source(handle):
     return handle, 'linux'
 
 def print_header(series, source, version=None, timestamp=None):
+    '''
+    Print a header
+    '''
     print('Series:    {}'.format(series))
     print('Source:    {}'.format(source))
     if version is not None:
@@ -73,6 +76,9 @@ def print_header(series, source, version=None, timestamp=None):
     print()
 
 def print_table(header, data):
+    '''
+    Prtty print a table
+    '''
     table = prettytable.PrettyTable()
     table.field_names = header
     for row in data:
@@ -96,8 +102,10 @@ class ADTResults():
         self.arches = None        # List of all architectures
         self._get_results()       # Get the above
 
-        self.timestamp = None     # TTimestamp of last ADT matrix update
+        self.timestamp = None     # Timestamp of last ADT matrix update
         self._get_timestamp()     # Get the above
+
+        self._get_status_links()  # Get missing status links from autopkgtest
 
     def _get_results(self):
         '''
@@ -184,6 +192,18 @@ class ADTResults():
             if 'ADT Test Matrix for linux-meta' in line:
                 self.timestamp = line.split('(')[1].split(')')[0]
                 break
+
+    def _get_status_links(self):
+        '''
+        Get the status links for the latest test results
+        '''
+        for result in self.results_list[self.versions[-1]]:
+            status_link = result.get('status_link')
+            if not status_link:
+                # Try to get the status link from autopktest
+                status_link = ''
+            result['log'] = status_link + 'log.gz'
+            result['artifacts'] = status_link + 'artifacts.tar.gz'
 
 # -----------------------------------------------------------------------------
 # Autopkgtest class
