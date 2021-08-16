@@ -213,11 +213,9 @@ class ADTResults():
         '''
         for result in self.results_list[self.versions[-1]]:
             status_link = result.get('status_link')
-            if not status_link:
-                # Try to get the status link from autopktest
-                status_link = ''
-            result['log'] = status_link + 'log.gz'
-            result['artifacts'] = status_link + 'artifacts.tar.gz'
+            if status_link:
+                result['log'] = status_link + 'log.gz'
+                result['artifacts'] = status_link + 'artifacts.tar.gz'
 
 # -----------------------------------------------------------------------------
 # Autopkgtest class
