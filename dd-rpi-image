@@ -2,24 +2,33 @@
 
 function usage() {
 	cat <<EOF
-Usage: dd-rpi-image [-h] IMAGE DEVICE
+Usage: dd-rpi-image [-b HOST] [-h] IMAGE DEVICE
 
 Copy the Raspberry Pi image IMAGE to device DEVICE.
 
 Positional arguments:
-  IMAGE       The image to copy.
-  DEVICE      The device to copy the image to.
+  IMAGE                 Image name. If IMAGE is not an existing file, assume
+                        it's the name of an image that can be downloaded from
+                        a bottle-pi host.
+  DEVICE                Target device.
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -b, --bottle-pi HOST  Bottle-pi hostname. If not provided, defaults to
+                        'ozzy:5000'.
+  -h, --help            Show this help text and exit.
 EOF
 }
 
+bottle_pi=ozzy:5000
 img=
 dev=
 
 while [ "$#" -gt 0 ] ; do
 	case "${1}" in
+		-b|--bottle-pi)
+			shift
+			bottle_pi=${1}
+			;;
 		-h|--help)
 			usage
 			exit
@@ -41,11 +50,6 @@ if [ -z "${img}" ] || [ -z "${dev}" ] ; then
 	exit
 fi
 
-if ! [ -e "${img}" ] ; then
-	echo "No such image file: ${img}" >&2
-	exit 1
-fi
-
 if ! [ -b "${dev}" ] ; then
 	echo "No such device file: ${dev}" >&2
 	exit 1
@@ -56,16 +60,17 @@ for mnt in "${mnts[@]}" ; do
 	umount "${mnt}"
 done
 
-case "${img}" in
-	*.gz)
-		cmd="zcat"
-		;;
-	*.xz)
-		cmd="xzcat"
-		;;
-	*)
-		cmd="cat"
-		;;
-esac
-
-"${cmd}" "${img}" | dd of="${dev}" bs=4K conv=fsync status=progress
+if [ -e "${img}" ] ; then
+	case "${img}" in
+		*.gz) cmd="zcat" ;;
+		*.xz) cmd="xzcat" ;;
+		*)    cmd="cat" ;;
+	esac
+	echo "Copy ${img} to ${dev}"
+	"${cmd}" "${img}" | dd of="${dev}" bs=4K conv=fsync status=progress
+else
+	url=http://${bottle_pi}/redfish/v1/Images/${img}
+	echo "Download ${url} to ${dev}"
+	wget -nv -O - "${url}" | zcat | \
+		dd of="${dev}" bs=4K conv=fsync status=progress
+fi
