@@ -177,7 +177,6 @@ EOF
 127.0.1.1  $(hostname)
 EOF
 "
-
 	# Upgrade packages
 	schroot -u root -r -c "${session}" -- apt-get update
 	schroot -u root -r -c "${session}" -- apt-get -y dist-upgrade
@@ -186,6 +185,10 @@ EOF
 	schroot -u root -r -c "${session}" -- apt-get -y install \
 			bc bison debhelper flex gawk git kernel-wedge less libssl-dev \
 			openssl sudo
+
+	# Copy sudoer files
+	sudo tar -cf - /etc/sudoers.d/ | \
+		schroot -u root -r -c "${session}" -- sh -c "cd / && tar -xf -"
 fi
 
 # Assemble the PS1 prefix
