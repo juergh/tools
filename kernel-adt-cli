@@ -422,7 +422,6 @@ def do_retry(args, results):
     status = ''
     package = ''
     arch = ''
-    print(args.status_package)
     if args.status_package.isupper() or args.status_package == '----':
         status = args.status_package
     elif '/' in args.status_package:
@@ -454,8 +453,14 @@ def do_retry(args, results):
     for result in retries:
         print('Retry {}/{} ... '.format(result['package'], result['arch']),
               end='', flush=True)
-        resp = requests.get(result['retry_url'], cookies=cookies)
+        retry_url = result['retry_url']
+        resp = requests.get(retry_url, cookies=cookies)
         if resp.status_code == 200:
+            if 'Log in with Ubuntu SSO' in resp.text:
+                print('Failed (no auth)')
+                error('You need to log in at: {}'.format(
+                    retry_url.split('?')[0]))
+                sys.exit(1)
             print('OK')
         else:
             print('Failed ({})'.format(resp.status_code))
