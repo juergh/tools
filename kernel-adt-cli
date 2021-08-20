@@ -307,7 +307,7 @@ class AutoPkgTest():
         arches = queued.get('ubuntu', {}).get(self.series, {})
         for arch, test_list in arches.items():
             for test in test_list:
-                package, details = test.split(' ', 1)
+                package, details = test.replace('\n', ' ').split(' ', 1)
                 details = json.loads(details)
                 for trigger in details['triggers']:
                     if trigger.startswith(self.source + '/'):
