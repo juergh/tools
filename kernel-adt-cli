@@ -404,17 +404,34 @@ def do_results(args, results):
     print_table(args.format, results_list)
 
 @add_help('Retry ADT tests.',
-          help='Retry all ADT tests that show a \'MISS\' status.')
+          help='Retry ADT tests.')
 @add_arg('-d', '--dry-run', action='store_true',
          help='Only show which tests would be retried.')
+@add_arg('status_package', metavar='status|package', default='MISS', nargs='?',
+         help='Either a test status or a package name. If a test status, ' +
+         'retry all packages showing the provided status. If a package name, ' +
+         'retry the provided package. If not provided, retry all packages ' +
+         'showing a \'MISS\' test status.')
 def do_retry(args, results):
-    cookies = get_browser_cookies()
-    version = results.versions[-1]
+    status = ''
+    package = ''
+    arch = ''
+    print(args.status_package)
+    if args.status_package.isupper() or args.status_package == '----':
+        status = args.status_package
+    elif '/' in args.status_package:
+        package, arch = args.status_package.split('/')
+    else:
+        package = args.status_package
 
+    version = results.versions[-1]
     retries = []
     for result in results.results_list[version]:
-        if result['status'] == 'MISS':
+        if result['status'] == status:
             retries.append(result)
+        elif result['package'] == package:
+            if not arch or result['arch'] == arch:
+                retries.append(result)
 
     print_header(results.series, results.source, version=version)
     print_table('pasn', retries)
@@ -422,6 +439,9 @@ def do_retry(args, results):
     if args.dry_run:
         print('\nDry-run, exiting...')
         return
+
+    # Get the auth cookies from the browsers
+    cookies = get_browser_cookies()
 
     # Retry the tests
     print()
