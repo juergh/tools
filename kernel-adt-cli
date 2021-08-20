@@ -412,6 +412,7 @@ def do_results(args, results):
          'retry all packages showing the provided status. If a package name, ' +
          'retry the provided package. If not provided, retry all packages ' +
          'showing a \'MISS\' test status.')
+@add_arg('-f', '--format', default='pasr', help=table_format_help('pasr'))
 def do_retry(args, results):
     status = ''
     package = ''
@@ -434,7 +435,7 @@ def do_retry(args, results):
                 retries.append(result)
 
     print_header(results.series, results.source, version=version)
-    print_table('pasn', retries)
+    print_table(args.format, retries)
 
     if args.dry_run:
         print('\nDry-run, exiting...')
