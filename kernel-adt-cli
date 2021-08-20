@@ -86,6 +86,7 @@ def print_table(fmt, data):
         'n': ['Annotation', 'annotation'],
         'l': ['Log', 'log'],
         'f': ['Artifacts', 'artifacts'],
+        'r': ['Retry URL', 'retry_url'],
     }
     header = [fmt_map[f][0] for f in fmt]
     table = prettytable.PrettyTable()
@@ -97,8 +98,8 @@ def print_table(fmt, data):
 
 def table_format_help(default):
     return ('Table formatter string. Specifies the columns to display: ' +
-            '(p)ackage, (a)arch, (s)tatus, a(n)otation, (l)og, arti(f)acts. ' +
-            'If not provided, defaults to \'' + default + '\'.')
+            '(p)ackage, (a)arch, (s)tatus, a(n)otation, (l)og, arti(f)acts, ' +
+            '(r)etry_url. If not provided, defaults to \'' + default + '\'.')
 
 # -----------------------------------------------------------------------------
 # ADT test results class
@@ -187,6 +188,27 @@ class ADTResults():
                         }
                     self.results_list[version].append(
                         self.results[version][package][arch])
+
+        # Add missing retry URLs to the latest version
+        retry_url = None
+        for result in self.results_list[self.versions[-1]]:
+            retry_url = result.get('retry_url')
+            if retry_url:
+                params = dict(param.split('=') for
+                              param in retry_url.split('?')[1].split('&'))
+                retry_url = retry_url.replace('arch=' + params['arch'],
+                                              'arch=__ARCH__')
+                retry_url = retry_url.replace('package=' + params['package'],
+                                              'package=__PACKAGE__')
+                break
+        if retry_url:
+            for result in self.results_list[self.versions[-1]]:
+                url = retry_url
+                url = url.replace('__ARCH__', result['arch'])
+                url = url.replace('__PACKAGE__', result['package'])
+                result['retry_url'] = url
+        else:
+            error('Unable to find a valid retry URL')
 
         if self.debug:
             print('+++ Results list:')
