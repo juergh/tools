@@ -63,10 +63,12 @@ def handle_to_series_source(handle):
     # No delimiter in handle so assume handle is just the series
     return handle, 'linux'
 
-def print_header(series, source, version=None, timestamp=None):
+def print_header(series, source, version=None, timestamp=None, ppa=None):
     '''
     Print a header
     '''
+    if ppa is not None:
+        print('PPA:       {}'.format(ppa))
     print('Series:    {}'.format(series))
     print('Source:    {}'.format(source))
     if version is not None:
@@ -105,10 +107,15 @@ def table_format_help(default):
 # ADT test results class
 
 class ADTResults():
-    def __init__(self, series, source, debug=False):
+    def __init__(self, series, source, debug=False, ppa=None):
         self.series = series
         self.source = source
         self.debug = debug
+        self.ppa = ppa
+
+        ppa_path = 'canonical-kernel-team--{}/'.format(ppa) if ppa else ''
+        self.adt_url = ('https://people.canonical.com/~kernel/status/' +
+                        'adt-matrix/' + ppa_path)
 
         self.results = None       # ADT test results in dict form
         self.results_list = None  # ADT test results in list form
@@ -126,9 +133,8 @@ class ADTResults():
         '''
         Get ADT results
         '''
-        resp = requests.get('https://people.canonical.com/~kernel/status/' +
-                            'adt-matrix/{}-{}-detail-results-data.json'.format(
-                                self.series, self.source))
+        f = '{}-{}-detail-results-data.json'.format(self.series, self.source)
+        resp = requests.get(self.adt_url + f)
         if resp.status_code != 200:
             error('Failed to get results ({})'.format(resp.status_code))
             sys.exit(1)
@@ -218,9 +224,8 @@ class ADTResults():
         '''
         Get the timestamp of the last ADT matrix update
         '''
-        resp = requests.get('https://people.canonical.com/~kernel/status/' +
-                            'adt-matrix/{}-{}.html'.format(
-                                self.series, self.source))
+        f = '{}-{}.html'.format(self.series, self.source)
+        resp = requests.get(self.adt_url + f)
         if resp.status_code != 200:
             error('Failed to get timestamp ({})'.format(resp.status_code))
             sys.exit(1)
@@ -400,7 +405,7 @@ def do_results(args, results):
             results_list[i] = result
 
     print_header(results.series, results.source, version=version,
-                 timestamp=results.timestamp)
+                 timestamp=results.timestamp, ppa=results.ppa)
     print_table(args.format, results_list)
 
 @add_help('Retry ADT tests.',
@@ -483,6 +488,9 @@ def main():
                         '\'series:source\'.')
     parser.add_argument('--debug', action='store_true',
                         help='Enable debug mode.')
+    parser.add_argument('-p', '--ppa', choices=('bootstrap', 'unstable'),
+                        help='Process ADT results for kernels from the ' +
+                        'provided PPA.')
 
     # Add subparsers for the subcommands and walk through the 'do_' functions
     subparsers = parser.add_subparsers(dest='subcommand', title='subcommands',
@@ -508,7 +516,7 @@ def main():
     series, source = handle_to_series_source(args.handle)
     if not source.startswith('linux-meta-'):
         source = source.replace('linux-', 'linux-meta-')
-    results = ADTResults(series, source, args.debug)
+    results = ADTResults(series, source, args.debug, args.ppa)
 
     # Call the subcommand
     args.func(args, results)
