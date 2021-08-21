@@ -131,7 +131,7 @@ class ADTResults():
         self._get_timestamp()
         self._get_status_links()
 
-    def _get_results(self):
+    def _get_results(self):  # pylint: disable=R0915
         '''
         Get ADT results
         '''
