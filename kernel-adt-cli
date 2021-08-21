@@ -63,12 +63,11 @@ def handle_to_series_source(handle):
     # No delimiter in handle so assume handle is just the series
     return handle, 'linux'
 
-def print_header(series, source, version=None, timestamp=None, ppa=None):
+def print_header(url, series, source, version=None, timestamp=None):
     '''
     Print a header
     '''
-    if ppa is not None:
-        print('PPA:       {}'.format(ppa))
+    print('URL:       {}'.format(url))
     print('Series:    {}'.format(series))
     print('Source:    {}'.format(source))
     if version is not None:
@@ -114,27 +113,29 @@ class ADTResults():
         self.ppa = ppa
 
         ppa_path = 'canonical-kernel-team--{}/'.format(ppa) if ppa else ''
-        self.adt_url = ('https://people.canonical.com/~kernel/status/' +
-                        'adt-matrix/' + ppa_path)
+        self.adt_url = 'https://people.canonical.com/~kernel/status/' + \
+            'adt-matrix/' + ppa_path
+        self.adt_url_html = self.adt_url + \
+            '{}-{}.html'.format(series, source)
+        self.adt_url_json = self.adt_url + \
+            '{}-{}-detail-results-data.json'.format(series, source)
 
         self.results = None       # ADT test results in dict form
         self.results_list = None  # ADT test results in list form
         self.versions = None      # List of all kernel versions
         self.packages = None      # List of all packages
         self.arches = None        # List of all architectures
-        self._get_results()       # Get the above
-
         self.timestamp = None     # Timestamp of last ADT matrix update
-        self._get_timestamp()     # Get the above
 
-        self._get_status_links()  # Get missing status links from autopkgtest
+        self._get_results()
+        self._get_timestamp()
+        self._get_status_links()
 
     def _get_results(self):
         '''
         Get ADT results
         '''
-        f = '{}-{}-detail-results-data.json'.format(self.series, self.source)
-        resp = requests.get(self.adt_url + f)
+        resp = requests.get(self.adt_url_json)
         if resp.status_code != 200:
             error('Failed to get results ({})'.format(resp.status_code))
             sys.exit(1)
@@ -152,7 +153,7 @@ class ADTResults():
 
         # Rearrange the test results and determine all versions, packages and
         # architectures
-        # self.results: version -> package -> arch -> test result
+        # self.results: version -> package -> arch -> test_result
         self.results = {}
         all_versions = {}
         all_packages = {}
@@ -224,8 +225,7 @@ class ADTResults():
         '''
         Get the timestamp of the last ADT matrix update
         '''
-        f = '{}-{}.html'.format(self.series, self.source)
-        resp = requests.get(self.adt_url + f)
+        resp = requests.get(self.adt_url_html)
         if resp.status_code != 200:
             error('Failed to get timestamp ({})'.format(resp.status_code))
             sys.exit(1)
@@ -404,8 +404,8 @@ def do_results(args, results):
             result['status'] += test_status
             results_list[i] = result
 
-    print_header(results.series, results.source, version=version,
-                 timestamp=results.timestamp, ppa=results.ppa)
+    print_header(results.adt_url_html, results.series, results.source,
+                 version=version, timestamp=results.timestamp)
     print_table(args.format, results_list)
 
 @add_help('Retry ADT tests.',
@@ -438,7 +438,8 @@ def do_retry(args, results):
             if not arch or result['arch'] == arch:
                 retries.append(result)
 
-    print_header(results.series, results.source, version=version)
+    print_header(results.adt_url_html, results.series, results.source,
+                 version=version)
     print_table(args.format, retries)
 
     if args.dry_run:
@@ -481,7 +482,7 @@ def do_tests(args, results):
             'status': test['status'],
         })
 
-    print_header(results.series, results.source)
+    print_header(results.adt_url_html, results.series, results.source)
     print_table('pas', tests)
 
 # -----------------------------------------------------------------------------
