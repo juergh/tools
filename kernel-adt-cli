@@ -3,10 +3,11 @@
 # Manage ADT tests and results
 #
 
-import sys
 
 import argparse
 import json
+import sys
+
 import natsort
 import prettytable
 import requests
@@ -471,6 +472,8 @@ def do_results(args, results):
          'retry the provided package. If not provided, retry all packages ' +
          'showing a \'MISS\' test status.')
 @add_arg('-f', '--format', default='pasr', help=table_format_help('pasr'))
+@add_arg('-t', '--trigger', action='append', help='Add an additional ' +
+         'trigger. Can be provided multiple times.')
 def do_retry(args, results):
     version = results.versions[-1]
     package = None
@@ -486,6 +489,12 @@ def do_retry(args, results):
 
     retry_list = results.get_results(version=version, package=package,
                                      arch=arch, status=status)
+
+    # Add the additional triggers
+    if args.trigger:
+        for result in retry_list:
+            result['retry_url'] += '&trigger=' + \
+                '&trigger='.join([t.replace('/', '%2F') for t in args.trigger])
 
     print_header(results.adt_url_html, results.series, results.source,
                  version=version)
