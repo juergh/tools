@@ -472,9 +472,11 @@ def do_results(args, results):
          'showing a \'MISS\' test status.')
 @add_arg('-f', '--format', default='pasr', help=table_format_help('pasr'))
 def do_retry(args, results):
-    status = ''
-    package = ''
-    arch = ''
+    version = results.versions[-1]
+    package = None
+    arch = None
+    status = None
+
     if args.status_package.isupper() or args.status_package == '----':
         status = args.status_package
     elif '/' in args.status_package:
@@ -482,18 +484,12 @@ def do_retry(args, results):
     else:
         package = args.status_package
 
-    retries = []
-    version = results.versions[-1]
-    for result in results.get_results(version=version):
-        if result['status'] == status:
-            retries.append(result)
-        elif result['package'] == package:
-            if not arch or result['arch'] == arch:
-                retries.append(result)
+    retry_list = results.get_results(version=version, package=package,
+                                     arch=arch, status=status)
 
     print_header(results.adt_url_html, results.series, results.source,
                  version=version)
-    print_table(args.format, retries)
+    print_table(args.format, retry_list)
 
     if args.dry_run:
         print('\nDry-run, exiting...')
@@ -504,7 +500,7 @@ def do_retry(args, results):
 
     # Retry the tests
     print()
-    for result in retries:
+    for result in retry_list:
         print('Retry {}/{} ... '.format(result['package'], result['arch']),
               end='', flush=True)
         retry_url = result['retry_url']
