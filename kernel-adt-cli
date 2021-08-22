@@ -56,8 +56,8 @@ def handle_to_series_source(handle):
     for delim in (':', '/'):
         if delim in handle:
             series, source = handle.split(delim, 1)
-            if not source.startswith('linux-'):
-                source = 'linux-' + source
+            if not source.startswith('linux'):
+                source = 'linux' + source
             return series, source
 
     # No delimiter in handle so assume handle is just the series
@@ -85,8 +85,8 @@ def print_table(fmt, data):
         'a': ['Arch', 'arch'],
         's': ['Status', 'status'],
         'n': ['Annotation', 'annotation'],
-        'l': ['Log', 'log'],
-        'f': ['Artifacts', 'artifacts'],
+        'l': ['Log URL ', 'log_url'],
+        'f': ['Artifacts URL', 'artifacts_url'],
         'r': ['Retry URL', 'retry_url'],
     }
     header = [fmt_map[f][0] for f in fmt]
@@ -120,8 +120,7 @@ class ADTResults():
         self.adt_url_json = self.adt_url + \
             '{}-{}-detail-results-data.json'.format(series, source)
 
-        self.results = None       # ADT test results in dict form
-        self.results_list = None  # ADT test results in list form
+        self.results = None       # ADT test results
         self.versions = None      # List of all kernel versions
         self.packages = None      # List of all packages
         self.arches = None        # List of all architectures
@@ -129,7 +128,6 @@ class ADTResults():
 
         self._get_results()
         self._get_timestamp()
-        self._get_status_links()
 
     def _get_results(self):  # pylint: disable=R0915
         '''
@@ -171,34 +169,51 @@ class ADTResults():
                     self.results[version][package][arch] = result
 
         if self.debug:
-            print('+++ Results dict:')
+            print('+++ Rearranged results:')
             print(json.dumps(self.results, indent=4, sort_keys=True))
 
         # TODO: This needs to be Debian package version sorted
-        self.versions = natsort.natsorted(list(all_versions.keys()))
-        self.packages = sorted(list(all_packages.keys()))
-        self.arches = sorted(list(all_arches.keys()))
+        self.versions = natsort.natsorted(list(all_versions))
+        self.packages = sorted(list(all_packages))
+        self.arches = sorted(list(all_arches))
 
-        # Fill in missing test results and create the test results list
-        self.results_list = {}
+        # Fill in missing test results, source package information and add
+        # URLs for the log and artifacts
         for version in self.versions:
-            self.results_list[version] = []
             for package in self.packages:
                 if package not in self.results[version]:
                     self.results[version][package] = {}
                 for arch in self.arches:
                     if arch not in self.results[version][package]:
+                        # Add a dummy result for missing tests
                         self.results[version][package][arch] = {
                             'arch': arch,
                             'package': package,
                             'status': '----',
                         }
-                    self.results_list[version].append(
-                        self.results[version][package][arch])
+                    result = self.results[version][package][arch]
 
-        # Add missing retry URLs to the latest version
+                    # Add source package information
+                    result.update({
+                        'series': self.series,
+                        'source': self.source,
+                        'source_version': version,
+                    })
+
+                    # Add links for the log and artifacts
+                    status_link = result.get('status_link')
+                    if status_link:
+                        result.update({
+                            'log_url': status_link + 'log.gz',
+                            'artifacts_url': status_link + 'artifacts.tar.gz',
+                        })
+
+        # The newest source package version
+        newest_version = self.versions[-1]
+
+        # Find a valid retry_url for the newest version
         retry_url = None
-        for result in self.results_list[self.versions[-1]]:
+        for result in self.get_results(version=newest_version):
             retry_url = result.get('retry_url')
             if retry_url:
                 params = dict(param.split('=') for
@@ -208,18 +223,22 @@ class ADTResults():
                 retry_url = retry_url.replace('package=' + params['package'],
                                               'package=__PACKAGE__')
                 break
+        if not retry_url:
+            error('Unable to find a valid retry URL')
+
+        # Add  missing retry URLs to test results for the newest version
         if retry_url:
-            for result in self.results_list[self.versions[-1]]:
+            for result in self.get_results(version=newest_version):
                 url = retry_url
                 url = url.replace('__ARCH__', result['arch'])
                 url = url.replace('__PACKAGE__', result['package'])
-                result['retry_url'] = url
-        else:
-            error('Unable to find a valid retry URL')
+                result.update({
+                    'retry_url': url,
+                })
 
         if self.debug:
-            print('+++ Results list:')
-            print(json.dumps(self.results_list, indent=4, sort_keys=True))
+            print('+++ Updated results:')
+            print(json.dumps(self.results, indent=4, sort_keys=True))
 
     def _get_timestamp(self):
         '''
@@ -229,20 +248,54 @@ class ADTResults():
         if resp.status_code != 200:
             error('Failed to get timestamp ({})'.format(resp.status_code))
             sys.exit(1)
+
+        self.timestamp = ''
         for line in resp.text.split('\n'):
             if 'ADT Test Matrix for linux-meta' in line:
                 self.timestamp = line.split('(')[1].split(')')[0]
                 break
+        if not self.timestamp:
+            error('Unable to find ADT matrix update timestamp')
 
-    def _get_status_links(self):
+    def get_results(self, version=None, package=None, arch=None,
+                    status=None, fmt='list'):
         '''
-        Get the status links for the latest test results
+        Return the results for the provided selectors
         '''
-        for result in self.results_list[self.versions[-1]]:
-            status_link = result.get('status_link')
-            if status_link:
-                result['log'] = status_link + 'log.gz'
-                result['artifacts'] = status_link + 'artifacts.tar.gz'
+        versions = [version] if version else self.versions
+        packages = [package] if package else self.packages
+        arches = [arch] if arch else self.arches
+
+        results = {}
+        results_list = []
+        for version in versions:  # pylint: disable=R1704
+            tmp_list = []
+            for package in packages:  # pylint: disable=R1704
+                for arch in arches:  # pylint: disable=R1704
+                    result = self.results[version][package][arch]
+                    if (not status) or (status and status == result['status']):
+                        if version not in results:
+                            results[version] = {}
+                        if package not in results[version]:
+                            results[version][package] = {}
+                        results[version][package][arch] = result
+                        tmp_list.append(result)
+            results_list.append(tmp_list)
+
+        if self.debug:
+            print('+++ Selected results:')
+            print(json.dumps(results, indent=4, sort_keys=True))
+
+        if fmt == 'list':
+            if len(results_list) == 1:
+                return results_list[0]
+            return results_list
+
+        if fmt == 'dict':
+            return results
+
+        error('Invalid format: {}'.format(fmt))
+        return None
 
 # -----------------------------------------------------------------------------
 # Autopkgtest class
@@ -389,7 +442,7 @@ def do_results(args, results):
     else:
         version = results.versions[-1]
 
-    results_list = results.results_list[version]
+    results_list = results.get_results(version=version)
 
     # Query autopktest.ubuntu.com for test status
     if args.tests and version == results.versions[-1]:
@@ -429,9 +482,9 @@ def do_retry(args, results):
     else:
         package = args.status_package
 
-    version = results.versions[-1]
     retries = []
-    for result in results.results_list[version]:
+    version = results.versions[-1]
+    for result in results.get_results(version=version):
         if result['status'] == status:
             retries.append(result)
         elif result['package'] == package:
@@ -520,8 +573,8 @@ def main():
 
     # Resolve the handle and get the ADT results
     series, source = handle_to_series_source(args.handle)
-    if not source.startswith('linux-meta-'):
-        source = source.replace('linux-', 'linux-meta-')
+    if not source.startswith('linux-meta'):
+        source = source.replace('linux', 'linux-meta')
     results = ADTResults(series, source, args.debug, args.ppa)
 
     # Call the subcommand
