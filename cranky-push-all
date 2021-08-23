@@ -1,0 +1,100 @@
+#!/bin/bash -eu
+#
+# Push branches and tags
+#
+
+function push_all()
+{
+	local tag branch remote_branch force push_tag push_branch
+
+	tag=$(git describe --exact-match HEAD 2>/dev/null)
+	branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+	remote_branch=${branch#cranky/}
+
+	force=()
+	if [ -e debian/debian.env ] ; then
+		# shellcheck disable=SC1091
+		. debian/debian.env
+		if [ -e "${DEBIAN}"/etc/update.conf ] ; then
+			force=("--force")
+		fi
+	fi
+
+	echo "${PWD}"
+	echo "  Tag:           ${tag}"
+	echo "  Local branch:  ${branch}"
+	echo "  Remote branch: ${remote_branch}"
+	echo "  Remote:        ${REMOTE}"
+	if [ ${#force[@]} -eq 0 ] ; then
+		echo "  Force push:    No"
+	else
+		echo "  Force push:    Yes"
+	fi
+
+	if [ -z "${tag}" ] || [ -z "${branch}" ] ; then
+		echo "Head commit not tagged or not on a branch" >&2
+		return
+	fi
+
+	push_tag=(git push origin "${tag}")
+	push_branch=(git push origin "${force[@]}" "${branch}")
+
+	echo "${push_tag[@]}"
+	if [ "${DRY_RUN}" -eq 0 ] ; then
+		"${push_tag[@]}" || true
+	fi
+
+	echo "${push_branch[@]}"
+	if [ "${DRY_RUN}" -eq 0 ] ; then
+		"${push_branch[@]}" || true
+	fi
+
+	echo
+}
+
+function usage()
+{
+    cat <<EOF
+Usage: cranky-push-all [-c] [-h]
+
+Push branches and tags.
+
+Optional arguments:
+  -c, --current  Push only the current repo.
+  -d, --dry-run  Show what would be pushed but don't actually do it.
+  -h, --help     Show the current help text and exit.
+EOF
+}
+
+current=0
+DRY_RUN=0
+REMOTE=origin
+
+while [ ${#} -gt 0 ] ; do
+    case "${1}" in
+		-c|--current)
+			current=1
+			;;
+		-d|--dry-run)
+			DRY_RUN=1
+			;;
+        -h|--help)
+            usage
+            exit
+            ;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+if [ ${current} -eq 1 ] ; then
+	push_all
+else
+	while IFS= read -r path ; do
+		cd "${path}"
+		push_all
+	done < <(cranky shell-helper source-packages-path)
+fi
