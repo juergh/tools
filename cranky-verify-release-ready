@@ -1,3 +1,47 @@
-#!/bin/bash
+#!/bin/bash -eu
+#
+# Run verify-release-ready against a set of kernel packages
+#
 
-"${KTEAM_TOOLS}"/maintscripts/verify-release-ready
+function usage()
+{
+    cat <<EOF
+Usage: cranky-verify-release-ready [-c] [-h]
+
+Run verify-release-ready.
+
+Optional arguments:
+  -c, --current  Run verify-release-ready only in the current directory.
+  -h, --help     Show the current help text and exit.
+EOF
+}
+
+current=0
+
+while [ ${#} -gt 0 ] ; do
+    case "${1}" in
+		-c|--current)
+			current=1
+			;;
+        -h|--help)
+            usage
+            exit
+            ;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+if [ ${current} -eq 1 ] ; then
+	"${KTEAM_TOOLS}"/maintscripts/verify-release-ready
+else
+	while IFS= read -r path ; do
+		echo "${path}"
+		cd "${path}"
+		"${KTEAM_TOOLS}"/maintscripts/verify-release-ready || true
+		echo
+	done < <(cranky shell-helper source-packages-path)
+fi
