@@ -4,9 +4,10 @@ import argparse
 import os
 import sys
 
-from PIL import Image
-
+import subprocess
 import taglib
+
+from PIL import Image
 
 # -----------------------------------------------------------------------------
 # Helper functions
@@ -73,17 +74,45 @@ def do_mp3_tag_show(args):
             print('  {:<12}: {}'.format(key, ' '.join(val)))
     return 0
 
-@add('arg', 'file', metavar='FILE', help='Filename')
+@add('arg', 'file', metavar='FILE', nargs='+', help='Filename')
 @add('help', 'Show mp3 information')
 def do_mp3_info(args):
     """
     Show mp3 information
     """
-    f = taglib.File(args.file)   # pylint: disable=I1101
-    print('Channels    : {}'.format(f.channels))
-    print('Bit rate    : {:<5} [kbit/s]'.format(f.bitrate))
-    print('Sample rate : {:<5} [Hz]'.format(f.sampleRate))
-    print('Length      : {:<5} [sec]'.format(f.length))
+    for f in args.file:
+        print()
+        print(f)
+        t = taglib.File(f)   # pylint: disable=I1101
+        print('  Channels    : {}'.format(t.channels))
+        print('  Bit rate    : {:<5} [kbit/s]'.format(t.bitrate))
+        print('  Sample rate : {:<5} [Hz]'.format(t.sampleRate))
+        print('  Length      : {:<5} [sec]'.format(t.length))
+    return 0
+
+@add('arg', 'file', metavar='FILE', nargs='+', help='Filename')
+@add('help', 'Convert mp3')
+def do_mp3_convert(args):
+    """
+    Convert mp3
+    """
+    ffmpeg_opts = (
+        '-y',
+        '-loglevel', '24',
+        '-codec:a', 'libmp3lame',
+        '-b:a', '192k',
+        '-ac:a', '2',
+        '-ar:a', '44100'
+    )
+    for f in args.file:
+        new = f + '.new.mp3'
+        print(f)
+        # pylint: disable=W1510
+        proc = subprocess.run(('ffmpeg', '-i', f) + ffmpeg_opts + (new, ))
+        if proc.returncode:
+            print('Failed to convert {}'.format(f))
+        else:
+            os.replace(new, f)
     return 0
 
 @add('arg', 'file', metavar='FILE', help='Filename')
