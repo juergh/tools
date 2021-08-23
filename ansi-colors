@@ -3,8 +3,9 @@
 # Print ANSI colors
 #
 
-echo "Escape sequence:"
-echo "\e[<CODE>m<TEXT>\e[0m"
+echo "3-bit and 4-bit escape sequence:"
+echo
+echo "\033[ <NUM> m <TEXT> \033[0m"
 echo
 
 props=(
@@ -19,18 +20,39 @@ props=(
 )
 
 for prop in "${props[@]}" ; do
-	code=${prop%% *}
+	num=${prop%% *}
 	text=${prop#* }
-	printf "%-3d : " "${code}"
-	echo -e "\e[${code}m${text}\e[0m"
+	printf "%-3d : " "${num}"
+	echo -e "\033[${num}m${text}\033[0m"
 done
 echo
 
-for code in $(seq 30 37) "" $(seq 40 47) "" $(seq 90 97) "" $(seq 100 107); do
-	if [ -z "${code}" ] ; then
+for num in $(seq 30 37) "" $(seq 90 97) ; do
+	if [ -z "${num}" ] ; then
 		echo
 		continue
 	fi
-	printf "%-3d : " "${code}"
-	echo -e "\e[${code}m▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ 01234567abcdefgh\e[0m"
+	printf "%-3d : " "${num}"
+	echo -ne "\033[${num}m▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ 01234567abcdefgh\033[0m"
+	num=$((num + 10))
+	printf "   %3d : " "${num}"
+	echo -e "\033[${num}m▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ 01234567abcdefgh\033[0m"
+done
+echo
+
+echo "8-bit escape sequence:"
+echo
+echo "      Foreground                                     Background"
+echo "      \033[38;5; <NUM> m <TEXT> \033[0m              \033[48;5; <NUM> m <TEXT> \033[0m"
+echo
+
+for num in $(seq 0 7) "" $(seq 8 15) "" $(seq 16 231) "" $(seq 232 255) ; do
+	if [ -z "${num}" ] ; then
+		echo
+		continue
+	fi
+	printf "%3d : " "${num}"
+	echo -ne "\033[38;5;${num}m▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ 01234567abcdefgh\033[0m"
+	printf "   %3d : " "${num}"
+	echo -e "\033[48;5;${num}m▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ 01234567abcdefgh\033[0m"
 done
