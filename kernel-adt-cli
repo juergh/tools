@@ -77,6 +77,31 @@ def print_header(url, series, source, version=None, timestamp=None):
         print('Timestamp: {} UTC'.format(timestamp))
     print()
 
+def colored_status(status):
+    '''
+    Return a colored status string
+    '''
+    nocolor = '\033[0m'
+    green = '\033[38;5;28m'
+    yellow = '\033[38;5;226m'
+    orange = '\033[38;5;208m'
+    lightgreen = '\033[38;5;121m'
+    tomato = '\033[38;5;203m'
+    red = '\033[38;5;196m'
+    color = {
+        'GOOD': green,
+        'NONE': green,
+        'RUN': yellow,
+        'MISS': yellow,
+        'SKIP': yellow,
+        'FAIL': orange,
+        'NEUTRAL': orange,
+        'NEVER': lightgreen,
+        'REGR': tomato,
+        'REGN': red,
+    }
+    return color.get(status, nocolor) + status + nocolor
+
 def print_table(fmt, data):
     '''
     Prtty print a table
@@ -93,7 +118,11 @@ def print_table(fmt, data):
     header = [fmt_map[f][0] for f in fmt]
     table = prettytable.PrettyTable()
     table.field_names = header
-    for row in data:
+    for row in list(data):  # Copy the data list
+        # Color code the status
+        if 's' in fmt and row.get('status'):
+            row['status'] = colored_status(row['status'])
+        # Add the row to the table
         table.add_row([row.get(fmt_map[f][1], '') for f in fmt])
     table.align = 'l'
     print(table)
