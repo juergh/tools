@@ -21,7 +21,7 @@ function push_all()
 		# shellcheck disable=SC1091
 		. debian/debian.env
 		if [ -e "${DEBIAN}"/etc/update.conf ] ; then
-			push_branch_opts+=("--force")
+			push_branch_opts+=("--force-with-lease")
 			force="Yes"
 		fi
 	fi
