@@ -499,8 +499,6 @@ class AutoPkgTest():
             print(json.dumps(tests, indent=4, sort_keys=True))
 
         if fmt == 'list':
-            if len(tests_list) == 1:
-                return tests_list[0]
             return tests_list
 
         if fmt == 'dict':
