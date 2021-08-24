@@ -58,7 +58,7 @@ def handle_to_series_source(handle):
         if delim in handle:
             series, source = handle.split(delim, 1)
             if not source.startswith('linux'):
-                source = 'linux' + source
+                source = 'linux-' + source
             return series, source
 
     # No delimiter in handle so assume handle is just the series
