@@ -173,7 +173,7 @@ class ADTResults():
         results = resp.json()
 
         if self.debug:
-            print('+++ Test results:')
+            print('+++ Results:')
             print(json.dumps(results, indent=4, sort_keys=True))
 
         # Sanity check
@@ -182,24 +182,29 @@ class ADTResults():
             error('Mismatched series and/or source')
             sys.exit(1)
 
-        # Rearrange the test results and determine all versions, packages and
-        # architectures
-        # self.results: version -> package -> arch -> test_result
         self.results = {}
         all_versions = {}
         all_packages = {}
         all_arches = {}
+
+        # Rearrange the test results and determine all versions, packages and
+        # architectures
+        # self.results: version -> package -> arch -> test_result
         for version, arches in results['history'].items():
-            all_versions[version] = 1
             self.results[version] = {}
             for arch, results in arches.items():
-                all_arches[arch] = 1
                 for result in results:
                     package = result['package']
-                    all_packages[package] = 1
                     if package not in self.results[version]:
                         self.results[version][package] = {}
+
+                    # Add the result
                     self.results[version][package][arch] = result
+
+                    # Collect version, package and arch
+                    all_versions[version] = 1
+                    all_packages[package] = 1
+                    all_arches[arch] = 1
 
         if self.debug:
             print('+++ Rearranged results:')
@@ -312,8 +317,13 @@ class ADTResults():
                             results[version] = {}
                         if package not in results[version]:
                             results[version][package] = {}
+
+                        # Add the result to the results dict and to the
+                        # per-version list
                         results[version][package][arch] = result
                         tmp_list.append(result)
+
+            # Add the per-version list to the results list
             results_list.append(tmp_list)
 
         if self.debug:
@@ -340,16 +350,16 @@ class AutoPkgTest():
         self.source = source
         self.debug = debug
 
-        self.tests = None       # autopkgtest test status in dict form
-        self.tests_list = None  # autopkgtest test status in list form
-        self._get_tests()       # Get the above
+        self.tests = None     # Autopkgtest test status
+        self.packages = None  # List of all packages
+        self.arches = None    # List of all architectures
+
+        self._get_tests()
 
     def _get_tests(self):  # pylint: disable=R0915
         '''
         Get autopkgtest status of running and queued tests
         '''
-        self.tests = {}
-
         # Get running tests
         url = 'https://autopkgtest.ubuntu.com/static/running.json'
         resp = requests.get(url)
@@ -363,8 +373,12 @@ class AutoPkgTest():
             print('+++ Running tests:')
             print(json.dumps(running, indent=4, sort_keys=True))
 
-        # Rearrange the running tests and filter out tests for different series
-        # and sources
+        self.tests = {}
+        all_packages = {}
+        all_arches = {}
+
+        # Rearrange the running tests and determine all packages and
+        # architectures
         # self.tests: package -> arch -> [test details]
         for package, runhashes in running.items():  # pylint: disable=R1702
             for _runhash, releases in runhashes.items():
@@ -373,16 +387,35 @@ class AutoPkgTest():
                         continue
                     for arch, test_details in arches.items():
                         for trigger in test_details[0].get('triggers', []):
-                            if trigger.startswith(self.source + '/'):
-                                if package not in self.tests:
-                                    self.tests[package] = {}
-                                if arch not in self.tests[package]:
-                                    self.tests[package][arch] = []
-                                details = dict(zip(['params', 'duration',
-                                                    'logtail', 'status'],
-                                                   test_details + ['RUNNING']))
-                                self.tests[package][arch].append(details)
-                                break
+                            if not trigger.startswith(self.source + '/'):
+                                continue
+                            if package not in self.tests:
+                                self.tests[package] = {}
+                            if arch not in self.tests[package]:
+                                self.tests[package][arch] = {
+                                    'package': package,
+                                    'arch': arch,
+                                    'status': {
+                                        'running': 0,
+                                        'queued': 0
+                                    },
+                                    'test': [],
+                                }
+                            test = self.tests[package][arch]
+
+                            # Add the test and update the overall status
+                            test['test'].append({
+                                'status': 'RUNNING',
+                                'params': test_details[0],
+                                'duration': test_details[1],
+                                'logtail': test_details[2],
+                            })
+                            test['status']['running'] += 1
+
+                            # Collect package and arch
+                            all_packages[package] = 1
+                            all_arches[arch] = 1
+                            break
 
         # Get queued tests
         url = 'https://autopkgtest.ubuntu.com/queues.json'
@@ -402,51 +435,79 @@ class AutoPkgTest():
         arches = queued.get('ubuntu', {}).get(self.series, {})
         for arch, test_list in arches.items():
             for test in test_list:
-                package, details = test.replace('\n', ' ').split(' ', 1)
-                details = json.loads(details)
-                for trigger in details['triggers']:
-                    if trigger.startswith(self.source + '/'):
-                        if package not in self.tests:
-                            self.tests[package] = {}
-                        if arch not in self.tests[package]:
-                            self.tests[package][arch] = []
-                        details['status'] = 'QUEUED'
-                        self.tests[package][arch].append(details)
-                        break
+                package, test_details = test.replace('\n', ' ').split(' ', 1)
+                test_details = json.loads(test_details)
+                for trigger in test_details['triggers']:
+                    if not trigger.startswith(self.source + '/'):
+                        continue
+                    if package not in self.tests:
+                        self.tests[package] = {}
+                    if arch not in self.tests[package]:
+                        self.tests[package][arch] = {
+                            'package': package,
+                            'arch': arch,
+                            'status': {
+                                'running': 0,
+                                'queued': 0
+                            },
+                            'test': [],
+                        }
+                    test = self.tests[package][arch]
+
+                    # Add the test and update the overall status
+                    test['test'].append({
+                        'status': 'QUEUED',
+                        'details': test_details,
+                    })
+                    test['status']['queued'] += 1
+
+                    # Collect package and arch
+                    all_packages[package] = 1
+                    all_arches[arch] = 1
+                    break
 
         if self.debug:
-            print('+++ Tests dict:')
+            print('+++ Updated tests:')
             print(json.dumps(self.tests, indent=4, sort_keys=True))
 
-        # Create the tests list
-        self.tests_list = []
-        for package, arches in self.tests.items():
-            for arch, details in arches.items():
-                status = {
-                    'RUNNING': 0,
-                    'QUEUED': 0,
-                }
-                for detail in details:
-                    if detail['status'] == 'RUNNING':
-                        status['RUNNING'] += 1
-                    elif detail['status'] == 'QUEUED':
-                        status['QUEUED'] += 1
-                self.tests_list.append({
-                    'arch': arch,
-                    'package': package,
-                    'status': status,
-                    'details': details,
-                })
+        self.packages = sorted(list(all_packages))
+        self.arches = sorted(list(all_arches))
+
+    def get_tests(self, package=None, arch=None, fmt='list'):
+        '''
+        Return the tests for the provided selectors
+        '''
+        packages = [package] if package else self.packages
+        arches = [arch] if arch else self.arches
+
+        tests = {}
+        tests_list = []
+        for package in packages:  # pylint: disable=R1704
+            for arch in arches:  # pylint: disable=R1704
+                test = self.tests.get(package, {}).get(arch, {})
+                if not test:
+                    continue
+                if package not in tests:
+                    tests[package] = {}
+
+                # Add the test to the tests dict and list
+                tests[package][arch] = test
+                tests_list.append(test)
 
         if self.debug:
-            print('+++ Tests list:')
-            print(json.dumps(self.tests_list, indent=4, sort_keys=True))
+            print('+++ Selected tests:')
+            print(json.dumps(tests, indent=4, sort_keys=True))
 
-    def get_tests(self, package, arch):
-        '''
-        Return a list of tests
-        '''
-        return self.tests.get(package, {}).get(arch, [])
+        if fmt == 'list':
+            if len(tests_list) == 1:
+                return tests_list[0]
+            return tests_list
+
+        if fmt == 'dict':
+            return tests
+
+        error('Invalid format: {}'.format(fmt))
+        return None
 
 # -----------------------------------------------------------------------------
 # Subcommands
@@ -487,7 +548,8 @@ def do_results(args, results):
         apt = AutoPkgTest(results.series, results.source, args.debug)
         for result in results_list:
             test_status = ''
-            for test in apt.get_tests(result['package'], result['arch']):
+            for test in apt.get_tests(package=result['package'],
+                                      arch=result['arch']):
                 test_status = test['status']
                 if test_status == 'RUNNING':
                     break
@@ -523,18 +585,24 @@ def do_retry(args, results):
     else:
         package = args.status_package
 
-    retry_list = results.get_results(version=version, package=package,
-                                     arch=arch, status=status)
+    results_list = results.get_results(version=version, package=package,
+                                       arch=arch, status=status)
+
+    # Filter out running and queued tests
+    apt = AutoPkgTest(results.series, results.source, args.debug)
+    results_list = [result for result in results_list if not
+                    apt.get_tests(package=result['package'],
+                                  arch=result['arch'])]
 
     # Add the additional triggers
     if args.trigger:
-        for result in retry_list:
+        for result in results_list:
             result['retry_url'] += '&trigger=' + \
                 '&trigger='.join([t.replace('/', '%2F') for t in args.trigger])
 
     print_header(results.adt_url_html, results.series, results.source,
                  version=version)
-    print_table(args.format, retry_list)
+    print_table(args.format, results_list)
 
     if args.dry_run:
         print('\nDry-run, exiting...')
@@ -545,7 +613,7 @@ def do_retry(args, results):
 
     # Retry the tests
     print()
-    for result in retry_list:
+    for result in results_list:
         print('Retry {}/{} ... '.format(result['package'], result['arch']),
               end='', flush=True)
         retry_url = result['retry_url']
@@ -567,17 +635,10 @@ def do_versions(_args, results):
 @add_help('Show running and queued autopkgtest tests.')
 def do_tests(args, results):
     apt = AutoPkgTest(results.series, results.source, args.debug)
-
-    tests = []
-    for test in apt.tests_list:
-        tests.append({
-            'package': test['package'],
-            'arch': test['arch'],
-            'status': test['status'],
-        })
+    tests_list = apt.get_tests()
 
     print_header(results.adt_url_html, results.series, results.source)
-    print_table('pas', tests)
+    print_table('pas', tests_list)
 
 # -----------------------------------------------------------------------------
 # Main entry point
