@@ -114,14 +114,16 @@ def print_table(fmt, data):
         'l': ['Log URL ', 'log_url'],
         'f': ['Artifacts URL', 'artifacts_url'],
         'r': ['Retry URL', 'retry_url'],
+        't': ['Test', 'test_status'],
     }
     header = [fmt_map[f][0] for f in fmt]
     table = prettytable.PrettyTable()
     table.field_names = header
     for row in list(data):  # Copy the data list
         # Color code the status
-        if 's' in fmt and row.get('status'):
-            row['status'] = colored_status(row['status'])
+        status = row.get('status')
+        if 's' in fmt and status and isinstance(status, str):
+            row['status'] = colored_status(status)
         # Add the row to the table
         table.add_row([row.get(fmt_map[f][1], '') for f in fmt])
     table.align = 'l'
@@ -480,21 +482,21 @@ def do_results(args, results):
     results_list = results.get_results(version=version)
 
     # Query autopktest.ubuntu.com for test status
+    fmt = args.format
     if args.tests and version == results.versions[-1]:
         apt = AutoPkgTest(results.series, results.source, args.debug)
-        for i, result in enumerate(results_list):
+        for result in results_list:
             test_status = ''
             for test in apt.get_tests(result['package'], result['arch']):
-                if test['status'] == 'RUNNING':
-                    test_status = ' (R)'
-                elif test_status == '' and test['status'] == 'QUEUED':
-                    test_status = ' (Q)'
-            result['status'] += test_status
-            results_list[i] = result
+                test_status = test['status']
+                if test_status == 'RUNNING':
+                    break
+            result['test_status'] = test_status
+        fmt = fmt.replace('s', 'st')
 
     print_header(results.adt_url_html, results.series, results.source,
                  version=version, timestamp=results.timestamp)
-    print_table(args.format, results_list)
+    print_table(fmt, results_list)
 
 @add_help('Retry ADT tests.',
           help='Retry ADT tests.')
