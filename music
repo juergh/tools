@@ -115,30 +115,36 @@ def do_mp3_convert(args):
             os.replace(new, f)
     return 0
 
-@add('arg', 'file', metavar='FILE', help='Filename')
+@add('arg', 'file', metavar='FILE', nargs='+', help='Filename')
 @add('help', 'Show image information')
 def do_image_info(args):
     """
     Show image information
     """
-    i = Image.open(args.file)
-    print('Size: {}'.format(i.size))
-    i.close()
+    for f in args.file:
+        print()
+        print(f)
+        i = Image.open(f)
+        print('  Size: {}'.format(i.size))
+        i.close()
     return 0
 
-@add('arg', 'file', metavar='FILE', help='Filename')
+@add('arg', 'file', metavar='FILE', nargs='+', help='Filename')
 @add('help', 'Resize image to 400x400')
 def do_image_resize(args):
     """
     Resize image
     """
-    i = Image.open(args.file)
-    n = i.resize((400, 400), Image.ANTIALIAS)
-    n.save(args.file + '.new', 'JPEG')
-    os.rename(args.file + '.new', args.file)
-    print('Size: {}'.format(n.size))
-    i.close()
-    n.close()
+    for f in args.file:
+        print()
+        print(f)
+        i = Image.open(f)
+        n = i.resize((400, 400), Image.ANTIALIAS)
+        n.save(f + '.new', 'JPEG')
+        os.rename(f + '.new', f)
+        print('  Size: {}'.format(n.size))
+        i.close()
+        n.close()
     return 0
 
 # -----------------------------------------------------------------------------
