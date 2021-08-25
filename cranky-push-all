@@ -96,6 +96,11 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
+if [ -e snapcraft.yaml ] ; then
+	# Kernel snap repo
+	current=1
+fi
+
 if [ ${current} -eq 1 ] ; then
 	push_all
 else
