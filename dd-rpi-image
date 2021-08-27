@@ -67,10 +67,10 @@ if [ -e "${img}" ] ; then
 		*)    cmd="cat" ;;
 	esac
 	echo "Copy ${img} to ${dev}"
-	"${cmd}" "${img}" | dd of="${dev}" bs=4K conv=fsync status=progress
+	"${cmd}" "${img}" | sudo dd of="${dev}" bs=4K conv=fsync status=progress
 else
 	url=http://${bottle_pi}/redfish/v1/Images/${img}
 	echo "Download ${url} to ${dev}"
 	wget -nv -O - "${url}" | zcat | \
-		dd of="${dev}" bs=4K conv=fsync status=progress
+		sudo dd of="${dev}" bs=4K conv=fsync status=progress
 fi
