@@ -346,9 +346,9 @@ class ADTResults():
 # Autopkgtest class
 
 class AutoPkgTest():
-    def __init__(self, series, source, debug=False):
+    def __init__(self, series, trigger, debug=False):
         self.series = series
-        self.source = source
+        self.trigger = trigger
         self.debug = debug
 
         self.tests = None     # Autopkgtest test status
@@ -388,7 +388,7 @@ class AutoPkgTest():
                         continue
                     for arch, test_details in arches.items():
                         for trigger in test_details[0].get('triggers', []):
-                            if not trigger.startswith(self.source + '/'):
+                            if trigger != self.trigger:
                                 continue
                             if package not in self.tests:
                                 self.tests[package] = {}
@@ -439,7 +439,7 @@ class AutoPkgTest():
                 package, test_details = test.replace('\n', ' ').split(' ', 1)
                 test_details = json.loads(test_details)
                 for trigger in test_details['triggers']:
-                    if not trigger.startswith(self.source + '/'):
+                    if trigger != self.trigger:
                         continue
                     if package not in self.tests:
                         self.tests[package] = {}
@@ -539,12 +539,13 @@ def do_results(args, results):
     else:
         version = results.versions[-1]
 
+    table_format = args.format
     results_list = results.get_results(version=version)
 
     # Query autopktest.ubuntu.com for test status
-    fmt = args.format
-    if args.tests and version == results.versions[-1]:
-        apt = AutoPkgTest(results.series, results.source, args.debug)
+    if args.tests and results_list and results_list[0].get('retry_trigger'):
+        apt = AutoPkgTest(results.series, results_list[0]['retry_trigger'],
+                          args.debug)
         for result in results_list:
             test_status = ''
             for test in apt.get_tests(package=result['package'],
@@ -553,11 +554,11 @@ def do_results(args, results):
                 if test_status == 'RUNNING':
                     break
             result['test_status'] = test_status
-        fmt = fmt.replace('s', 'st')
+        table_format = table_format.replace('s', 'st')
 
     print_header(results.adt_url_html, results.series, results.source,
                  version=version, timestamp=results.timestamp)
-    print_table(fmt, results_list)
+    print_table(table_format, results_list)
 
 @add_help('Retry ADT tests.',
           help='Retry ADT tests.')
