@@ -250,9 +250,10 @@ class ADTResults():
 
         # Find a valid retry_url for the newest version
         retry_url = None
+        retry_params = None
         for result in self.get_results(version=newest_version):
             retry_url = result.get('retry_url')
-            if retry_url:
+            if retry_url and '?' in retry_url:
                 retry_params = dict(param.split('=') for
                                     param in retry_url.split('?')[1].split('&'))
                 retry_url = retry_url.replace('arch=' + retry_params['arch'],
@@ -264,7 +265,7 @@ class ADTResults():
             error('Unable to find a valid retry URL')
 
         # Add a retry URL and trigger to test results for the newest version
-        if retry_url:
+        if retry_url and retry_params:
             for result in self.get_results(version=newest_version):
                 url = retry_url
                 url = url.replace('__ARCH__', result['arch'])
