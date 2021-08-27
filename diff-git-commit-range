@@ -1,0 +1,37 @@
+#!/bin/bash -eu
+#
+# Diff the commits in the provided range
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: diff-git-commit-range [-h] [REV_RANGE]
+
+Diff the commits in the provided REV_RANGE.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
+
+while IFS= read -r commit ; do
+	if ! diff-git-commits "${commit}" 2>/dev/null ; then
+		oneline=$(git log --format='%h ("%s")' "${commit}" -1)
+		echo -e "\033[91mFailed to diff commit: ${oneline}\033[0m"
+	fi
+	echo
+done < <(git log --format=%h "${@}")
