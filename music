@@ -2,9 +2,11 @@
 
 import argparse
 import os
-import sys
-
 import subprocess
+import sys
+import warnings
+
+import librosa
 import taglib
 
 from PIL import Image
@@ -51,6 +53,26 @@ def do_image_resize(args):
         print('  Size: {}'.format(n.size))
         i.close()
         n.close()
+    return 0
+
+@add('help', 'Show mp3 BPM (beats per minute)')
+def do_mp3_bpm_show(args):
+    """
+    Show mp3 file BPM information
+    """
+    # Supress 'UserWarning: PySoundFile failed. Trying audioread instead.'
+    warnings.filterwarnings("ignore")
+
+    first = True
+    for f in args.file:
+        if first:
+            first = False
+        else:
+            print()
+        print(f)
+        y, sr = librosa.load(f, sr=None)
+        bpm, _ = librosa.beat.beat_track(y=y, sr=sr)
+        print('  BPM: {:.2f}'.format(bpm))
     return 0
 
 @add('help', 'Convert mp3')
