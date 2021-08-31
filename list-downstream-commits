@@ -23,23 +23,28 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: list-downstream-commits [-h] [-r] [-u] [BRANCH]
+Usage: list-downstream-commits [-d] [-h] [-r] [-u] [BRANCH]
 
 List the downstream commits on the current (or provided) branch.
 
 Optional arguments:
+  -d, --debian  Filter debian commits.
   -h, --help    Show this help text and exit.
   -r, --revert  Filter reverted commits.
   -u, --ubuntu  Filter UBUNTU commits.
 EOF
 }
 
+filter_debian=0
 filter_ubuntu=0
 filter_revert=0
 branch=
 
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
+		-d|--debian)
+			filter_debian=1
+			;;
 		-h|--help)
 			usage
 			exit
@@ -101,6 +106,14 @@ declare -A reverted
 while IFS= read -r line ; do
 	commit=${line%% *}
 	subject=${line#* }
+
+	# Filter debian commits
+	if [ ${filter_debian} -eq 1 ] ; then
+		if ! git log --format= --name-only "${commit}" -1 | \
+			 grep -qv '^debian' ; then
+			continue
+		fi
+	fi
 
 	# Filter ubuntu commits
 	if [ "${filter_ubuntu}" -eq 1 ] ; then
