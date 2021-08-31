@@ -23,6 +23,75 @@ def add(name, *args, **kwargs):
 # -----------------------------------------------------------------------------
 # Commands
 
+@add('help', 'Show image information')
+def do_image_info(args):
+    """
+    Show image information
+    """
+    for f in args.file:
+        print()
+        print(f)
+        i = Image.open(f)
+        print('  Size: {}'.format(i.size))
+        i.close()
+    return 0
+
+@add('help', 'Resize image to 400x400')
+def do_image_resize(args):
+    """
+    Resize image
+    """
+    for f in args.file:
+        print()
+        print(f)
+        i = Image.open(f)
+        n = i.resize((400, 400), Image.ANTIALIAS)
+        n.save(f + '.new', 'JPEG')
+        os.rename(f + '.new', f)
+        print('  Size: {}'.format(n.size))
+        i.close()
+        n.close()
+    return 0
+
+@add('help', 'Convert mp3')
+def do_mp3_convert(args):
+    """
+    Convert mp3
+    """
+    ffmpeg_opts = (
+        '-y',
+        '-loglevel', '24',
+        '-codec:a', 'libmp3lame',
+        '-b:a', '192k',
+        '-ac:a', '2',
+        '-ar:a', '44100'
+    )
+    for f in args.file:
+        new = f + '.new.mp3'
+        print(f)
+        # pylint: disable=W1510
+        proc = subprocess.run(('ffmpeg', '-i', f) + ffmpeg_opts + (new, ))
+        if proc.returncode:
+            print('Failed to convert {}'.format(f))
+        else:
+            os.replace(new, f)
+    return 0
+
+@add('help', 'Show mp3 information')
+def do_mp3_info(args):
+    """
+    Show mp3 information
+    """
+    for f in args.file:
+        print()
+        print(f)
+        t = taglib.File(f)   # pylint: disable=I1101
+        print('  Channels    : {}'.format(t.channels))
+        print('  Bit rate    : {:<5} [kbit/s]'.format(t.bitrate))
+        print('  Sample rate : {:<5} [Hz]'.format(t.sampleRate))
+        print('  Length      : {:<5} [sec]'.format(t.length))
+    return 0
+
 @add('arg', '-f', '--force', action='store_true', help='Write the tags')
 @add('help', 'Set mp3 tag details')
 def do_mp3_tag_set(args):
@@ -70,75 +139,6 @@ def do_mp3_tag_show(args):
         t = taglib.File(f)   # pylint: disable=I1101
         for key, val in t.tags.items():
             print('  {:<12}: {}'.format(key, ' '.join(val)))
-    return 0
-
-@add('help', 'Show mp3 information')
-def do_mp3_info(args):
-    """
-    Show mp3 information
-    """
-    for f in args.file:
-        print()
-        print(f)
-        t = taglib.File(f)   # pylint: disable=I1101
-        print('  Channels    : {}'.format(t.channels))
-        print('  Bit rate    : {:<5} [kbit/s]'.format(t.bitrate))
-        print('  Sample rate : {:<5} [Hz]'.format(t.sampleRate))
-        print('  Length      : {:<5} [sec]'.format(t.length))
-    return 0
-
-@add('help', 'Convert mp3')
-def do_mp3_convert(args):
-    """
-    Convert mp3
-    """
-    ffmpeg_opts = (
-        '-y',
-        '-loglevel', '24',
-        '-codec:a', 'libmp3lame',
-        '-b:a', '192k',
-        '-ac:a', '2',
-        '-ar:a', '44100'
-    )
-    for f in args.file:
-        new = f + '.new.mp3'
-        print(f)
-        # pylint: disable=W1510
-        proc = subprocess.run(('ffmpeg', '-i', f) + ffmpeg_opts + (new, ))
-        if proc.returncode:
-            print('Failed to convert {}'.format(f))
-        else:
-            os.replace(new, f)
-    return 0
-
-@add('help', 'Show image information')
-def do_image_info(args):
-    """
-    Show image information
-    """
-    for f in args.file:
-        print()
-        print(f)
-        i = Image.open(f)
-        print('  Size: {}'.format(i.size))
-        i.close()
-    return 0
-
-@add('help', 'Resize image to 400x400')
-def do_image_resize(args):
-    """
-    Resize image
-    """
-    for f in args.file:
-        print()
-        print(f)
-        i = Image.open(f)
-        n = i.resize((400, 400), Image.ANTIALIAS)
-        n.save(f + '.new', 'JPEG')
-        os.rename(f + '.new', f)
-        print('  Size: {}'.format(n.size))
-        i.close()
-        n.close()
     return 0
 
 # -----------------------------------------------------------------------------
