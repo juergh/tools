@@ -76,9 +76,10 @@ for f in "${TMPD}"/"${branch}"-20* ; do
 	{
 		echo "${f##*/}:"
 		if [ -z "${prev_f}" ] ; then
-			cat "${f}"
+			sed 's/^/             /' "${f}"
 		else
-			diff-commit-lists "${prev_f}" "${f}" | grep -e '-        ' || true
+			diff-commit-lists "${prev_f}" "${f}" | grep -e '-           ' || \
+				true
 			echo
 			cat "${TMPD}"/tmp
 		fi
