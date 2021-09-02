@@ -1,0 +1,80 @@
+#!/bin/bash -eu
+#
+# Filter the reverted commits in a commit list
+#
+
+function pr_orange()
+{
+	echo -e "\033[93m${*}\033[0m"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: filter-commit-list [-h] COMMIT_LIST
+
+Filter the reverted commits in the provided commit list.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+commit_list=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -z "${commit_list}" ] ; then
+				commit_list=${1}
+			else
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${commit_list}" ] ; then
+	usage
+	exit 2
+fi
+
+reverted=()
+
+count=0
+while IFS= read -r line ; do
+	count=$((count + 1))
+
+	if [ -z "${line}" ] || [ "${line#rpi-}" != "${line}" ] ; then
+		echo "${line}"
+		continue
+	fi
+	
+	if [ "${reverted[${count}]:-0}" -eq 1 ] ; then
+		pr_orange "${line}"
+		continue
+	fi
+
+	subject=${line:26}
+	reverted_subject=${subject#Revert \"}
+	if [ "${reverted_subject}" != "${subject}" ] ; then
+		reverted_subject=${reverted_subject%\"}
+		match=$(sed -e "1,${count}d" "${commit_list}" | \
+					cut -b 27- | \
+					grep -m1 -nxF "${reverted_subject}" || true)
+		if [ -n "${match}" ] ; then
+			match_count=$((${match%%:*} + count))
+			reverted[${match_count}]=1
+			pr_orange "${line}"
+			continue
+		fi
+	fi
+
+	echo "${line}"
+done < <(cat "${commit_list}")
