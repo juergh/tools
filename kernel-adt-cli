@@ -509,6 +509,24 @@ class AutoPkgTest():
         error('Invalid format: {}'.format(fmt))
         return None
 
+    def get_status_link(self, test_url, arch, trigger):
+        url = test_url + '/' + self.series + '/' + arch
+        resp = requests.get(url)
+        if resp.status_code != 200:
+            error(url)
+            error('Failed to get test results ({})'.format(resp.status_code))
+            sys.exit(1)
+
+        found_trigger = False
+        for line in resp.text.split('\n'):
+            if found_trigger and '/log.gz' in line:
+                print(line)
+                break
+            if trigger in line:
+                found_trigger = True
+            elif '<tr>' in line:
+                found_trigger = False
+
 # -----------------------------------------------------------------------------
 # Subcommands
 
