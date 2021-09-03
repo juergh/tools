@@ -2,36 +2,36 @@
 
 function usage() {
 	cat <<EOF
-Usage: dd-rpi-image [-b HOST] [-h] IMAGE DEVICE
+Usage: dd-rpi-image [-h] [-o HOST] IMAGE DEVICE
 
 Copy the Raspberry Pi image IMAGE to device DEVICE.
 
 Positional arguments:
-  IMAGE                 Image name. If IMAGE is not an existing file, assume
-                        it's the name of an image that can be downloaded from
-                        a bottle-pi host.
-  DEVICE                Target device.
+  IMAGE            Image name. If IMAGE is not an existing file, assume it is
+                   the name of an image that can be downloaded from a remote
+                   host.
+  DEVICE           Target device.
 
 Optional arguments:
-  -b, --bottle-pi HOST  Bottle-pi hostname. If not provided, defaults to
-                        'ozzy:5000'.
-  -h, --help            Show this help text and exit.
+  -h, --help       Show this help text and exit.
+  -o, --host HOST  Hostname to download the image from. If not provided,
+                   defaults to 'http://ozzy/images'.
 EOF
 }
 
-bottle_pi=ozzy:5000
+host="http://ozzy/images"
 img=
 dev=
 
 while [ "$#" -gt 0 ] ; do
 	case "${1}" in
-		-b|--bottle-pi)
-			shift
-			bottle_pi=${1}
-			;;
 		-h|--help)
 			usage
 			exit
+			;;
+		-o|--host)
+			shift
+			host=${1}
 			;;
 		*) if [ -z "${img}" ] ; then
 			   img=${1}
@@ -69,7 +69,7 @@ if [ -e "${img}" ] ; then
 	echo "Copy ${img} to ${dev}"
 	"${cmd}" "${img}" | sudo dd of="${dev}" bs=4K conv=fsync status=progress
 else
-	url=http://${bottle_pi}/redfish/v1/Images/${img}
+	url=${host}/${img}
 	echo "Download ${url} to ${dev}"
 	wget -nv -O - "${url}" | zcat | \
 		sudo dd of="${dev}" bs=4K conv=fsync status=progress
