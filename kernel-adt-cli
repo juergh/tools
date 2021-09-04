@@ -133,6 +133,17 @@ def table_format_help(default):
             '(p)ackage, (a)arch, (s)tatus, a(n)otation, (l)og, arti(f)acts, ' +
             '(r)etry_url. If not provided, defaults to \'' + default + '\'.')
 
+def to_list(data, default=None):
+    '''
+    Return the provided data as a list or a default list
+    '''
+    for d in [data, default]:
+        if d:
+            if isinstance(d, list):
+                return d
+            return [d]
+    return []
+
 # -----------------------------------------------------------------------------
 # ADT test results class
 
@@ -303,9 +314,10 @@ class ADTResults():
         '''
         Return the results for the provided selectors
         '''
-        versions = [version] if version else self.versions
-        packages = [package] if package else self.packages
-        arches = [arch] if arch else self.arches
+        versions = to_list(version, self.versions)
+        packages = to_list(package, self.packages)
+        arches = to_list(arch, self.arches)
+        statuses = to_list(status)
 
         results = {}
         results_list = []
@@ -314,7 +326,7 @@ class ADTResults():
             for package in packages:  # pylint: disable=R1704
                 for arch in arches:  # pylint: disable=R1704
                     result = self.results[version][package][arch]
-                    if (not status) or (status and status == result['status']):
+                    if not statuses or result['status'] in statuses:
                         if version not in results:
                             results[version] = {}
                         if package not in results[version]:
@@ -479,8 +491,8 @@ class AutoPkgTest():
         '''
         Return the tests for the provided selectors
         '''
-        packages = [package] if package else self.packages
-        arches = [arch] if arch else self.arches
+        packages = to_list(package, self.packages)
+        arches = to_list(arch, self.arches)
 
         tests = {}
         tests_list = []
