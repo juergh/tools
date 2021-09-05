@@ -262,7 +262,7 @@ class ADTResults():
         # Find a valid retry_url for the newest version
         retry_url = None
         retry_params = None
-        for result in self.get_results(version=newest_version):
+        for result in self.get_results(version=newest_version)[0]:
             retry_url = result.get('retry_url')
             if retry_url and '?' in retry_url:
                 retry_params = dict(param.split('=') for
@@ -277,7 +277,7 @@ class ADTResults():
 
         # Add a retry URL and trigger to test results for the newest version
         if retry_url and retry_params:
-            for result in self.get_results(version=newest_version):
+            for result in self.get_results(version=newest_version)[0]:
                 url = retry_url
                 url = url.replace('__ARCH__', result['arch'])
                 url = url.replace('__PACKAGE__', result['package'])
@@ -345,8 +345,6 @@ class ADTResults():
             print(json.dumps(results, indent=4, sort_keys=True))
 
         if fmt == 'list':
-            if len(results_list) == 1:
-                return results_list[0]
             return results_list
 
         if fmt == 'dict':
@@ -571,7 +569,7 @@ def do_results(args, results):
         version = results.versions[-1]
 
     table_format = args.format
-    results_list = results.get_results(version=version)
+    results_list = results.get_results(version=version)[0]
 
     # Query autopktest.ubuntu.com for test status
     if args.tests and results_list and results_list[0].get('retry_trigger'):
@@ -617,7 +615,7 @@ def do_retry(args, results):
         package = args.status_package
 
     results_list = results.get_results(version=version, package=package,
-                                       arch=arch, status=status)
+                                       arch=arch, status=status)[0]
 
     # Filter out running and queued tests
     apt = AutoPkgTest(results.series, results.source, args.debug)
