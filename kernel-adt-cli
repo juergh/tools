@@ -340,18 +340,19 @@ class ADTResults():
             # Add the per-version list to the results list
             results_list.append(tmp_list)
 
+        if fmt == 'list':
+            resp = results_list
+        elif fmt == 'dict':
+            resp = results
+        else:
+            error('Invalid format: {}'.format(fmt))
+            resp = None
+
         if self.debug:
             print('+++ Selected results:')
-            print(json.dumps(results, indent=4, sort_keys=True))
+            print(json.dumps(resp, indent=4, sort_keys=True))
 
-        if fmt == 'list':
-            return results_list
-
-        if fmt == 'dict':
-            return results
-
-        error('Invalid format: {}'.format(fmt))
-        return None
+        return resp
 
 # -----------------------------------------------------------------------------
 # Autopkgtest class
@@ -506,18 +507,19 @@ class AutoPkgTest():
                 tests[package][arch] = test
                 tests_list.append(test)
 
+        if fmt == 'list':
+            resp = tests_list
+        elif fmt == 'dict':
+            resp = tests
+        else:
+            error('Invalid format: {}'.format(fmt))
+            resp = None
+
         if self.debug:
             print('+++ Selected tests:')
-            print(json.dumps(tests, indent=4, sort_keys=True))
+            print(json.dumps(resp, indent=4, sort_keys=True))
 
-        if fmt == 'list':
-            return tests_list
-
-        if fmt == 'dict':
-            return tests
-
-        error('Invalid format: {}'.format(fmt))
-        return None
+        return resp
 
     def get_status_link(self, test_url, arch, trigger):
         url = test_url + '/' + self.series + '/' + arch
