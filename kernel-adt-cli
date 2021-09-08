@@ -580,7 +580,7 @@ def do_results(args, results):
         apt = AutoPkgTest(results.series, results_list[0]['retry_trigger'],
                           args.debug)
         for result in results_list:
-            test_status = ''
+            test_status = '----'
             for test in apt.get_tests(package=result['package'],
                                       arch=result['arch']):
                 test_status = test['status']
