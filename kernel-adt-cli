@@ -101,27 +101,29 @@ def colored_status(status):
     }
     return color.get(status, nocolor) + status + nocolor
 
-def print_table(fmt, data):
+def print_table(data, fmt):
     '''
     Prtty print a table
     '''
     fmt_map = {
-        'p': ['Package', 'package'],
-        'a': ['Arch', 'arch'],
-        's': ['Status', 'status'],
+        '0': ['Package', 'package'],
+        '1': ['Arch', 'arch'],
+        '2': ['Status', 'status'],
         'n': ['Annotation', 'annotation'],
         'l': ['Log URL ', 'log_url'],
         'f': ['Artifacts URL', 'artifacts_url'],
         'r': ['Retry URL', 'retry_url'],
         't': ['Test', 'test_status'],
     }
+    fmt = '012' + fmt
     header = [fmt_map[f][0] for f in fmt]
     table = prettytable.PrettyTable()
     table.field_names = header
+
     for row in list(data):  # Copy the data list
         # Color code the status
         status = row.get('status')
-        if 's' in fmt and status and isinstance(status, str):
+        if status and isinstance(status, str):
             row['status'] = colored_status(status)
         # Add the row to the table
         table.add_row([row.get(fmt_map[f][1], '') for f in fmt])
@@ -129,9 +131,10 @@ def print_table(fmt, data):
     print(table)
 
 def table_format_help(default):
-    return ('Table formatter string. Specifies the columns to display: ' +
-            '(p)ackage, (a)arch, (s)tatus, a(n)otation, (l)og, arti(f)acts, ' +
-            '(r)etry_url. If not provided, defaults to \'' + default + '\'.')
+    return ('Table formatter string. Specifies additional columns to ' +
+            'display: a(n)otation, (l)og, arti(f)acts, (r)etry_url, ' +
+            '(t)est_status. If not provided, defaults to \'' + default +
+            '\'.')
 
 def to_list(data, default=None):
     '''
@@ -550,7 +553,7 @@ class AutoPkgTest():
          'last version, ...).')
 @add_arg('-t', '--tests', action='store_true',
          help='Show running and queued test status.')
-@add_arg('-f', '--format', default='pasn', help=table_format_help('pasn'))
+@add_arg('-f', '--format', default='n', help=table_format_help('n'))
 def do_results(args, results):
     if args.version:
         found = False
@@ -570,7 +573,6 @@ def do_results(args, results):
     else:
         version = results.versions[-1]
 
-    table_format = args.format
     results_list = results.get_results(version=version)[0]
 
     # Query autopktest.ubuntu.com for test status
@@ -585,11 +587,11 @@ def do_results(args, results):
                 if test_status == 'RUNNING':
                     break
             result['test_status'] = test_status
-        table_format = table_format.replace('s', 'st')
+        args.format = 't' + args.format.replace('t', '')
 
     print_header(results.adt_url_html, results.series, results.source,
                  version=version, timestamp=results.timestamp)
-    print_table(table_format, results_list)
+    print_table(results_list, args.format)
 
 @add_help('Retry ADT tests.',
           help='Retry ADT tests.')
@@ -600,7 +602,7 @@ def do_results(args, results):
          'retry all packages showing the provided status. If a package name, ' +
          'retry the provided package. If not provided, retry all packages ' +
          'showing a \'MISS\' test status.')
-@add_arg('-f', '--format', default='pasr', help=table_format_help('pasr'))
+@add_arg('-f', '--format', default='r', help=table_format_help('r'))
 @add_arg('-t', '--trigger', action='append', help='Add an additional ' +
          'trigger. Can be provided multiple times.')
 def do_retry(args, results):
@@ -633,7 +635,7 @@ def do_retry(args, results):
 
     print_header(results.adt_url_html, results.series, results.source,
                  version=version)
-    print_table(args.format, results_list)
+    print_table(results_list, args.format)
 
     if args.dry_run:
         print('\nDry-run, exiting...')
@@ -669,7 +671,7 @@ def do_tests(args, results):
     tests_list = apt.get_tests()
 
     print_header(results.adt_url_html, results.series, results.source)
-    print_table('pas', tests_list)
+    print_table(tests_list, 'pas')
 
 # -----------------------------------------------------------------------------
 # Main entry point
