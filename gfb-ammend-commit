@@ -16,17 +16,36 @@ GREEN = ("\033[32m", "\033[0m")
 YELLOW = ("\033[33m", "\033[0m")
 NONE = ("", "")
 
+REPOS = (
+    ('/srv/git/linux.git', 'linux'),
+    ('/srv/git/linux-stable.git', 'linux-stable'),
+    ('/srv/git/linux-rpi.git', 'linux-rpi'),
+)
 
-def run_cmd(cmd):
+def run_cmd(cmd, stderr=None):
     """
     Run a command and return the exit status and stdout
     """
-    proc = run(cmd, stdout=PIPE, universal_newlines=True, check=False)
+    proc = run(cmd, stdout=PIPE, stderr=stderr, universal_newlines=True,
+               check=False)
     stdout = proc.stdout.split("\n")[:-1]
     return proc.returncode, stdout
 
 
-def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, note, color=NONE):
+def find_provenance(commit):
+    """
+    Try to find the provenance of the provided commit hash
+    """
+    for repo in REPOS:
+        rc, _stdout = run_cmd(['git', '--git-dir', repo[0], 'show', commit],
+                              stderr=PIPE)
+        if rc == 0:
+            return repo[1]
+    return 'not-found'
+
+
+def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, note,
+               color=NONE):
     """
     Modify a commit message
     """
@@ -61,8 +80,8 @@ def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, note, color=NONE):
                                "BugLink: {}".format(bug) +
                                color[1])
             else:
-                tmp_bug.append(color[0] +
-                               "BugLink: https://bugs.launchpad.net/bugs/{}".format(bug) +
+                tmp_bug.append(color[0] + "BugLink: https://" +
+                               "bugs.launchpad.net/bugs/{}".format(bug) +
                                color[1])
 
         # Prepend the sorted BugLinks to the message
@@ -104,9 +123,18 @@ def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, note, color=NONE):
                 idx = i
 
         # Add the provenance to the line
-        if re.search(r"[0-9a-f]{40}\)$", msg[idx]):
-            msg[idx] = (color[0] + msg[idx][:-1] + " " + provenance + ")" +
-                        color[1])
+        m = re.match(r"(.*? from commit)\s+([0-9a-f]{40})\s*(.*)\)", msg[idx])
+        if m:
+            prefix, commit = m.group(1, 2)
+            if provenance == 'auto':
+                provenance = find_provenance(commit)
+#            print('-->' + commit + '--' + provenance + '<--', file=sys.stderr)
+            if provenance == "linux":
+                msg[idx] = "{}{} {}){}".format(color[0], prefix, commit,
+                                               color[1])
+            else:
+                msg[idx] = "{}{} {} {}){}".format(color[0], prefix, commit,
+                                                  provenance, color[1])
 
     # -------------------------------------------------------------------------
     # Add <foo>-by tags
@@ -285,8 +313,8 @@ def main():
     for commit in commits:
         # Print the commit header
         _, header = run_cmd(["git", "log",
-                             "--format=commit %H%nAuthor: %an <%ae>%nDate:   %cD",
-                             commit, "-1"])
+                             "--format=commit %H%nAuthor: %an <%ae>%n" +
+                             "Date:   %cD", commit, "-1"])
         print(YELLOW[0] + header[0] + YELLOW[1])
         print("\n".join(header[1:]))
         print()
