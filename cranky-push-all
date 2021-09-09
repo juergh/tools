@@ -96,7 +96,7 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
-if [ -e snapcraft.yaml ] ; then
+if [ -e snapcraft.yaml ] && ! [ -e MAINTAINERS ] ; then
 	# Kernel snap repo
 	current=1
 fi
