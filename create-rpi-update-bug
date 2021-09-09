@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import sys
 
 from launchpadlib.launchpad import Launchpad
 
@@ -19,7 +20,8 @@ tmp = args.tag.split('-')
 branch = '-'.join(tmp[:2])
 date = '-'.join(tmp[2:])
 
-title = "{}/{}: Upstream raspberrypi patchset {}".format(series, package, date)
+title = "{}/{}: Update to upstream raspberrypi {} ({})".format(series, package,
+                                                               branch, date)
 print(title)
 
 description = """
@@ -35,7 +37,7 @@ print(description)
 
 if not args.force:
     print("Use -f, --force to create the bug")
-    exit(0)
+    sys.exit(0)
 
 lp = Launchpad.login_with('tools', 'production', version='devel')
 
