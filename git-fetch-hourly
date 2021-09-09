@@ -8,7 +8,7 @@ fetch_repo()
 	date -R
 	echo "-- Fetching $(pwd)/${1}"
 
-	git -C "${1}" fetch --prune
+	git -C "${1}" fetch
 	git -C "${1}" reset --hard FETCH_HEAD
 	date -R > "${1}"/.fetched
 }

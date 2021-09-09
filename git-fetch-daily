@@ -8,7 +8,7 @@ fetch_repo()
 	date -R
 	echo "-- Fetching $(pwd)/${1}"
 
-	git -C "${1}" fetch --prune --all --tags
+	git -C "${1}" fetch --all --tags
 	date -R > "${1}"/.fetched
 }
 
