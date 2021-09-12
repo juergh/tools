@@ -63,15 +63,13 @@ def handle_to_series_source(handle):
     # No delimiter in handle so assume handle is just the series
     return handle, 'linux'
 
-def print_header(url, series, source, version=None, timestamp=None):
+def print_header(url, series, source, timestamp=None):
     '''
     Print a header
     '''
     print('URL:       {}'.format(url))
     print('Series:    {}'.format(series))
     print('Source:    {}'.format(source))
-    if version is not None:
-        print('Version:   {}'.format(version))
     if timestamp is not None:
         print('Timestamp: {} UTC'.format(timestamp))
     print()
@@ -106,27 +104,28 @@ def print_table(data, fmt):
     Prtty print a table
     '''
     fmt_map = {
-        '0': ['Package', 'package'],
-        '1': ['Arch', 'arch'],
-        '2': ['Status', 'status'],
         'n': ['Annotation', 'annotation'],
         'l': ['Log URL ', 'log_url'],
         'f': ['Artifacts URL', 'artifacts_url'],
         'r': ['Retry URL', 'retry_url'],
         't': ['Test', 'test_status'],
     }
-    fmt = '012' + fmt
-    header = [fmt_map[f][0] for f in fmt]
+
     table = prettytable.PrettyTable()
+
+    header = ['Package', 'Arch']
+    for result in data[0]:
+        header.append(result['source_version'])
+    header.extend([fmt_map[f][0] for f in fmt])
     table.field_names = header
 
-    for row in list(data):  # Copy the data list
-        # Color code the status
-        status = row.get('status')
-        if status and isinstance(status, str):
-            row['status'] = colored_status(status)
-        # Add the row to the table
-        table.add_row([row.get(fmt_map[f][1], '') for f in fmt])
+    for test in data:
+        row = [test[-1]['package'], test[-1]['arch']]
+        for result in test:
+            row.append(colored_status(result['status']))
+        row.extend([test[-1].get(fmt_map[f][1], '') for f in fmt])
+        table.add_row(row)
+
     table.align = 'l'
     print(table)
 
@@ -265,8 +264,8 @@ class ADTResults():
         # Find a valid retry_url for the newest version
         retry_url = None
         retry_params = None
-        for result in self.get_results(version=newest_version)[0]:
-            retry_url = result.get('retry_url')
+        for result in self.get_results(version=newest_version):
+            retry_url = result[0].get('retry_url')
             if retry_url and '?' in retry_url:
                 retry_params = dict(param.split('=') for
                                     param in retry_url.split('?')[1].split('&'))
@@ -280,12 +279,12 @@ class ADTResults():
 
         # Add a retry URL and trigger to test results for the newest version
         if retry_url and retry_params:
-            for result in self.get_results(version=newest_version)[0]:
+            for result in self.get_results(version=newest_version):
                 url = retry_url
-                url = url.replace('__ARCH__', result['arch'])
-                url = url.replace('__PACKAGE__', result['package'])
+                url = url.replace('__ARCH__', result[0]['arch'])
+                url = url.replace('__PACKAGE__', result[0]['package'])
                 trigger = retry_params['trigger'].replace('%2F', '/')
-                result.update({
+                result[0].update({
                     'retry_url': url,
                     'retry_trigger': trigger,
                 })
@@ -324,24 +323,28 @@ class ADTResults():
 
         results = {}
         results_list = []
-        for version in versions:  # pylint: disable=R1704
-            tmp_list = []
-            for package in packages:  # pylint: disable=R1704
-                for arch in arches:  # pylint: disable=R1704
+        for package in packages:  # pylint: disable=R1704
+            for arch in arches:  # pylint: disable=R1704
+                result = self.results[versions[-1]][package][arch]
+                if statuses and result['status'] not in statuses:
+                    # Ignore tests that don't have the expected status (for
+                    # the newest version)
+                    continue
+
+                tmp_list = []
+                for version in versions:  # pylint: disable=R1704
                     result = self.results[version][package][arch]
-                    if not statuses or result['status'] in statuses:
-                        if version not in results:
-                            results[version] = {}
-                        if package not in results[version]:
-                            results[version][package] = {}
+                    if version not in results:
+                        results[version] = {}
+                    if package not in results[version]:
+                        results[version][package] = {}
 
-                        # Add the result to the results dict and to the
-                        # per-version list
-                        results[version][package][arch] = result
-                        tmp_list.append(result)
+                    # Add the result to the results dict and temp list
+                    results[version][package][arch] = result
+                    tmp_list.append(result)
 
-            # Add the per-version list to the results list
-            results_list.append(tmp_list)
+                # Update the results list
+                results_list.append(tmp_list)
 
         if fmt == 'list':
             resp = results_list
@@ -570,10 +573,12 @@ def do_results(args, results):
         if not found:
             error('Invalid version: {}'.format(args.version))
             sys.exit(1)
+    elif len(results.versions) == 1:
+        version = results.versions[0]
     else:
-        version = results.versions[-1]
+        version = results.versions[-2:]
 
-    results_list = results.get_results(version=version)[0]
+    results_list = results.get_results(version=version)
 
     # Query autopktest.ubuntu.com for test status
     if args.tests and results_list and results_list[0].get('retry_trigger'):
@@ -590,7 +595,7 @@ def do_results(args, results):
         args.format = 't' + args.format.replace('t', '')
 
     print_header(results.adt_url_html, results.series, results.source,
-                 version=version, timestamp=results.timestamp)
+                 timestamp=results.timestamp)
     print_table(results_list, args.format)
 
 @add_help('Retry ADT tests.',
@@ -633,8 +638,7 @@ def do_retry(args, results):
             result['retry_url'] += '&trigger=' + \
                 '&trigger='.join([t.replace('/', '%2F') for t in args.trigger])
 
-    print_header(results.adt_url_html, results.series, results.source,
-                 version=version)
+    print_header(results.adt_url_html, results.series, results.source)
     print_table(results_list, args.format)
 
     if args.dry_run:
