@@ -1,0 +1,88 @@
+#!/bin/bash -eu
+#
+# Push a branch to juergh's LP linux repo
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-d] [-f] [-h] [BRANCH]
+
+Push the provided (or current branch) to juergh's LP linux repo.
+
+Optional arguments:
+  -d, --dry-run  Do a dry-run.
+  -f, --force    Do a force push.
+  -h, --help     Show this help text and exit.
+EOF
+}
+
+if ! [ -e debian/debian.env ] ; then
+	echo "Doesn't look like an Ubuntu kernel repo" >&2
+	exit 1
+fi
+
+dry_run=0
+opts=()
+branch=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-d|--dry-run)
+			dry_run=1
+			;;
+		-f|--force)
+			opts+=("--force-with-lease")
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -z "${branch}" ] ; then
+				branch=${1}
+			else
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${branch}" ] ; then
+	branch=$(git rev-parse --abbrev-ref HEAD)
+	if [ -z "${branch}" ] ; then
+		echo "Unable to determine current branch name" >&2
+		exit 1
+	fi
+fi
+
+if ! git remote | grep -qxF juergh ; then
+	git remote add juergh \
+		git+ssh://git.launchpad.net/~juergh/ubuntu/+source/linux
+fi
+
+# shellcheck disable=SC1091
+. debian/debian.env
+
+release=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
+if [ "${release}" = "UNRELEASED" ]; then
+	release=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution \
+								  -o 1 -c 1)
+fi
+package=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+
+echo "Release: ${release}"
+echo "Source:  ${package}"
+echo "Branch:  ${branch}"
+echo
+echo "git push ${opts[*]} juergh ${branch}:${release}/${package}/${branch}"
+
+if [ ${dry_run} -eq 1 ] ; then
+	echo
+	echo "Dry-run, exiting..."
+	exit
+fi
+
+git push "${opts[@]}" juergh "${branch}":"${release}"/"${package}"/"${branch}"
