@@ -2,24 +2,25 @@
 
 function usage() {
 	cat <<EOF
-Usage: dd-rpi-image [-h] [-o HOST] IMAGE DEVICE
+Usage: $(basename "${0}") [-h] [-o HOST] IMAGE|URL DEVICE
 
-Copy the Raspberry Pi image IMAGE to device DEVICE.
+Copy a Raspberry Pi image to a device.
 
 Positional arguments:
   IMAGE            Image name. If IMAGE is not an existing file, assume it is
-                   the name of an image that can be downloaded from a remote
-                   host.
+                   the name of a gzip-compressed image that can be downloaded
+                   from a remote host, i.e., HOST/IMAGE.
+  URL              Fully qualified URL of a gzip-compressed image.
   DEVICE           Target device.
 
 Optional arguments:
   -h, --help       Show this help text and exit.
   -o, --host HOST  Hostname to download the image from. If not provided,
-                   defaults to 'http://ozzy/images'.
+                   defaults to 'http://192.168.99.11/images'.
 EOF
 }
 
-host="http://ozzy/images"
+host="http://192.168.99.11/images"
 img=
 dev=
 
@@ -46,8 +47,8 @@ while [ "$#" -gt 0 ] ; do
 done
 
 if [ -z "${img}" ] || [ -z "${dev}" ] ; then
-	usage >&2
-	exit
+	usage
+	exit 2
 fi
 
 if ! [ -b "${dev}" ] ; then
@@ -69,8 +70,10 @@ if [ -e "${img}" ] ; then
 	echo "Copy ${img} to ${dev}"
 	"${cmd}" "${img}" | sudo dd of="${dev}" bs=4K conv=fsync status=progress
 else
-	url=${host}/${img}
-	echo "Download ${url} to ${dev}"
-	wget -nv -O - "${url}" | zcat | \
+	if [ "${img#http}" = "${img}" ] ; then
+		img=${host}/${img}
+	fi
+	echo "Download ${img} to ${dev}"
+	wget -nv -O - "${img}" | zcat | \
 		sudo dd of="${dev}" bs=4K conv=fsync status=progress
 fi
