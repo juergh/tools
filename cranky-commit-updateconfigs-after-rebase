@@ -1,4 +1,37 @@
 #!/bin/bash -eu
+#
+# Create an updateconfigs commit
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: cranky-commit-updateconfigs-after-rebase [-f] [-h]
+
+Optional arguments:
+  -f, --force  Commit the changes.
+  -h, --help   Show this help text and exit.
+EOF
+}
+
+force=0
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-f|--force)
+			force=1
+			;;
+		*)
+			echo "Error: Invalid argument: ${1}"
+			exit 2
+			;;
+	esac
+	shift
+done
 
 # shellcheck disable=SC1091
 . debian/debian.env
@@ -7,13 +40,9 @@ variant=${DEBIAN#debian.}
 # shellcheck disable=SC1090
 . "${DEBIAN}"/etc/update.conf
 master_version=$(dpkg-parsechangelog -l"${DEBIAN_MASTER}"/changelog -SVersion)
-master_variant=${DEBIAN_MASTER#debian.}
-master_variant=${master_variant#master}
-
-echo "variant:        ${variant}"
-echo "DEBIAN_MASTER:  ${DEBIAN_MASTER}"
-echo "master variant: ${master_variant}"
-echo "master version: ${master_version}"
+master_source=$(dpkg-parsechangelog -l"${DEBIAN_MASTER}"/changelog -SSource)
+master_variant=${master_source#linux}
+master_variant=${master_variant#-}
 
 if [ -n "${master_variant}" ] ; then
 	master=Ubuntu-${master_variant}-${master_version}
@@ -21,6 +50,25 @@ else
 	master=Ubuntu-${master_version}
 fi
 
-git commit -s -m "UBUNTU: [Config] ${variant}: updateconfigs after rebase to ${master}
+subject="UBUNTU: [Config] ${variant}: updateconfigs after rebase to ${master}"
+
+echo "variant:        ${variant}"
+echo "DEBIAN_MASTER:  ${DEBIAN_MASTER}"
+echo "master source:  ${master_source}"
+echo "master variant: ${master_variant}"
+echo "master version: ${master_version}"
+echo "Commit subject: ${subject}"
+
+if [ "$(git diff --cached | wc -l)" -eq 0 ] ; then
+	echo "Error: No staged files" >&2
+	exit 1
+fi
+
+if [ ${force} -eq 0 ] ; then
+	echo "You need to provide -f, --force to comit the changes"
+	exit
+fi
+
+git commit -s -m "${subject}
 
 Ignore:yes"
