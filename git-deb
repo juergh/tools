@@ -235,7 +235,7 @@ function do_send_patch()
 function do_request_pull()
 {
 	local start=${1:-}
-	local refs_heads commit branch remote ref _remote _branch buglink
+	local refs_heads commit branch remotes remote buglink
 	local url bug subject blurb name email
 
 	if [ -z "${start}" ] ; then
@@ -255,28 +255,25 @@ function do_request_pull()
 	fi
 
 	# Get the remote where we pushed this branch to
+	commit=$(git rev-parse HEAD)
 	branch=$(git rev-parse --abbrev-ref HEAD)
-	remote=
-	while IFS= read -r ref ; do
-		_remote=${ref#*refs/remotes/}
-		_remote=${_remote%%/*}
-		_branch=${ref#*${_remote}/}
-		if [ "${_branch}" = "${branch}" ] ; then
-			if [ -n "${remote}" ] ; then
-				pr_error "Error: Multiple remotes found that contain a" \
-						 "branch with the same name"
-				exit 1
-			fi
-			remote=${_remote}
-		fi
-	done < <(git for-each-ref refs/remotes)
-	if [ -z "${remote}" ] ; then
+	readarray -t remotes < <(git for-each-ref refs/remotes | \
+								 grep "^${commit}.*/${branch}$" || true)
+	if [ ${#remotes[@]} -eq 0 ] ; then
 		pr_error "Remote of branch '${branch}' not found"
 		exit 1
+	elif [ ${#remotes[@]} -gt 1 ] ; then
+		pr_error "Error: Multiple remotes of branch '${branch}' found"
+		exit 1
 	fi
+	remote=${remotes[0]#*refs/remotes/}
+	remote=${remote%%/*}
+
+	# The name of the remote branch
+	remote_branch=${remotes[0]#*refs/remotes/*/}
 
 	# Determine the subject for this pull request
-	buglink=$(git log --format=%b -1 | grep '^BugLink: ' || true)
+	buglink=$(git log --format=%b -2 | grep -m1 '^BugLink: ' || true)
 	buglink=${buglink#BugLink: }
 	url=${buglink%% *}
 	if [ "${url}" = "${buglink}" ] ; then
@@ -316,7 +313,7 @@ Signed-off-by: ${name} <${email}>
 
 EOF
 	git request-pull "${start}" "$(git config "remote.${remote}.url")" \
-		"${branch}" | sed -e 's,git+ssh://.*@git,git://git,'
+		"${branch}":"${remote_branch}"
 }
 
 do_tag()
