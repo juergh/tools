@@ -53,6 +53,9 @@ for bug_task in bug.bug_tasks_collection:
     bug_task.status = 'Confirmed'
     bug_task.lp_save()
 
+# Add tag to silence the bot?
+bug.tags.append('kernel-stable-tracking-bug')
+
 # Nominate the series
 ubuntu = lp.distributions['ubuntu']
 for s in ubuntu.series_collection:
