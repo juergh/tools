@@ -99,7 +99,7 @@ def colored_status(status):
     }
     return color.get(status, nocolor) + status + nocolor
 
-def print_table(data, fmt):
+def print_table(data, fmt=''):
     '''
     Prtty print a table
     '''
@@ -111,19 +111,28 @@ def print_table(data, fmt):
         't': ['Test', 'test_status'],
     }
 
+    if not data:
+        return
+
     table = prettytable.PrettyTable()
 
     header = ['Package', 'Arch']
-    for result in data[0]:
-        header.append(result['source_version'])
+    if isinstance(data[0], list):
+        for result in data[0]:
+            header.append(result['source_version'])
+    else:
+        header.append('Status')
     header.extend([fmt_map[f][0] for f in fmt])
     table.field_names = header
 
     for test in data:
-        row = [test[-1]['package'], test[-1]['arch']]
-        for result in test:
-            row.append(colored_status(result['status']))
-        row.extend([test[-1].get(fmt_map[f][1], '') for f in fmt])
+        if isinstance(test, list):
+            row = [test[-1]['package'], test[-1]['arch']]
+            for result in test:
+                row.append(colored_status(result['status']))
+            row.extend([test[-1].get(fmt_map[f][1], '') for f in fmt])
+        else:
+            row = [test['package'], test['arch'], test['status']]
         table.add_row(row)
 
     table.align = 'l'
@@ -169,6 +178,7 @@ class ADTResults():
         self.packages = None      # List of all packages
         self.arches = None        # List of all architectures
         self.timestamp = None     # Timestamp of last ADT matrix update
+        self.trigger = None       # (Retry) trigger for the newest version
 
         self._get_results()
         self._get_timestamp()
@@ -279,14 +289,14 @@ class ADTResults():
 
         # Add a retry URL and trigger to test results for the newest version
         if retry_url and retry_params:
+            self.trigger = retry_params['trigger'].replace('%2F', '/')
             for result in self.get_results(version=newest_version):
                 url = retry_url
                 url = url.replace('__ARCH__', result[0]['arch'])
                 url = url.replace('__PACKAGE__', result[0]['package'])
-                trigger = retry_params['trigger'].replace('%2F', '/')
                 result[0].update({
                     'retry_url': url,
-                    'retry_trigger': trigger,
+                    'retry_trigger': self.trigger,
                 })
 
         if self.debug:
@@ -527,24 +537,6 @@ class AutoPkgTest():
 
         return resp
 
-    def get_status_link(self, test_url, arch, trigger):
-        url = test_url + '/' + self.series + '/' + arch
-        resp = requests.get(url)
-        if resp.status_code != 200:
-            error(url)
-            error('Failed to get test results ({})'.format(resp.status_code))
-            sys.exit(1)
-
-        found_trigger = False
-        for line in resp.text.split('\n'):
-            if found_trigger and '/log.gz' in line:
-                print(line)
-                break
-            if trigger in line:
-                found_trigger = True
-            elif '<tr>' in line:
-                found_trigger = False
-
 # -----------------------------------------------------------------------------
 # Subcommands
 
@@ -581,22 +573,21 @@ def do_results(args, results):
     results_list = results.get_results(version=version)
 
     # Query autopktest.ubuntu.com for test status
-    if args.tests and results_list and results_list[0].get('retry_trigger'):
-        apt = AutoPkgTest(results.series, results_list[0]['retry_trigger'],
-                          args.debug)
+    if args.tests and results_list:
+        apt = AutoPkgTest(results.series, results.trigger, debug=args.debug)
         for result in results_list:
             test_status = '----'
-            for test in apt.get_tests(package=result['package'],
-                                      arch=result['arch']):
+            for test in apt.get_tests(package=result[-1]['package'],
+                                      arch=result[-1]['arch']):
                 test_status = test['status']
                 if test_status == 'RUNNING':
                     break
-            result['test_status'] = test_status
+            result[-1]['test_status'] = test_status
         args.format = 't' + args.format.replace('t', '')
 
     print_header(results.adt_url_html, results.series, results.source,
                  timestamp=results.timestamp)
-    print_table(results_list, args.format)
+    print_table(results_list, fmt=args.format)
 
 @add_help('Retry ADT tests.',
           help='Retry ADT tests.')
@@ -611,11 +602,9 @@ def do_results(args, results):
 @add_arg('-t', '--trigger', action='append', help='Add an additional ' +
          'trigger. Can be provided multiple times.')
 def do_retry(args, results):
-    version = results.versions[-1]
     package = None
     arch = None
     status = None
-
     if args.status_package.isupper() or args.status_package == '----':
         status = args.status_package
     elif '/' in args.status_package:
@@ -623,14 +612,15 @@ def do_retry(args, results):
     else:
         package = args.status_package
 
-    results_list = results.get_results(version=version, package=package,
-                                       arch=arch, status=status)[0]
+    newest_version = results.versions[-1]
+    results_list = results.get_results(version=newest_version, package=package,
+                                       arch=arch, status=status)
 
     # Filter out running and queued tests
-    apt = AutoPkgTest(results.series, results.source, args.debug)
+    apt = AutoPkgTest(results.series, results.trigger, debug=args.debug)
     results_list = [result for result in results_list if not
-                    apt.get_tests(package=result['package'],
-                                  arch=result['arch'])]
+                    apt.get_tests(package=result[0]['package'],
+                                  arch=result[0]['arch'])]
 
     # Add the additional triggers
     if args.trigger:
@@ -639,7 +629,7 @@ def do_retry(args, results):
                 '&trigger='.join([t.replace('/', '%2F') for t in args.trigger])
 
     print_header(results.adt_url_html, results.series, results.source)
-    print_table(results_list, args.format)
+    print_table(results_list, fmt=args.format)
 
     if args.dry_run:
         print('\nDry-run, exiting...')
@@ -651,9 +641,9 @@ def do_retry(args, results):
     # Retry the tests
     print()
     for result in results_list:
-        print('Retry {}/{} ... '.format(result['package'], result['arch']),
-              end='', flush=True)
-        retry_url = result['retry_url']
+        print('Retry {}/{} ... '.format(result[0]['package'],
+                                        result[0]['arch']), end='', flush=True)
+        retry_url = result[0]['retry_url']
         resp = requests.get(retry_url, cookies=cookies)
         if resp.status_code == 200:
             if 'Log in with Ubuntu SSO' in resp.text:
@@ -671,11 +661,11 @@ def do_versions(_args, results):
 
 @add_help('Show running and queued autopkgtest tests.')
 def do_tests(args, results):
-    apt = AutoPkgTest(results.series, results.source, args.debug)
+    apt = AutoPkgTest(results.series, results.trigger, debug=args.debug)
     tests_list = apt.get_tests()
 
     print_header(results.adt_url_html, results.series, results.source)
-    print_table(tests_list, 'pas')
+    print_table(tests_list)
 
 # -----------------------------------------------------------------------------
 # Main entry point
@@ -714,7 +704,7 @@ def main():
     series, source = handle_to_series_source(args.handle)
     if not source.startswith('linux-meta'):
         source = source.replace('linux', 'linux-meta')
-    results = ADTResults(series, source, args.debug, args.ppa)
+    results = ADTResults(series, source, debug=args.debug, ppa=args.ppa)
 
     # Call the subcommand
     args.func(args, results)
