@@ -96,6 +96,8 @@ def colored_status(status):
         'NEVER': lightgreen,
         'REGR': tomato,
         'REGN': red,
+        'RUNNING': lightgreen,
+        'QUEUED': yellow,
     }
     return color.get(status, nocolor) + status + nocolor
 
@@ -576,12 +578,14 @@ def do_results(args, results):
     if args.tests and results_list:
         apt = AutoPkgTest(results.series, results.trigger, debug=args.debug)
         for result in results_list:
-            test_status = '----'
-            for test in apt.get_tests(package=result[-1]['package'],
-                                      arch=result[-1]['arch']):
-                test_status = test['status']
-                if test_status == 'RUNNING':
-                    break
+            tests = apt.get_tests(package=result[-1]['package'],
+                                  arch=result[-1]['arch'])
+            if not tests:
+                test_status = '----'
+            elif tests[0]['status']['running']:
+                test_status = colored_status('RUNNING')
+            else:
+                test_status = colored_status('QUEUED')
             result[-1]['test_status'] = test_status
         args.format = 't' + args.format.replace('t', '')
 
