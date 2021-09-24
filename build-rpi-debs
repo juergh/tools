@@ -3,10 +3,110 @@
 # Build a Raspberry Pi kernel package that is installable on Ubuntu
 #
 
+# List of 'minimal' module config options
+MINIMAL_MODULES=(
+	# List of modules loaded on a Pi 4B with vc4-kms-v3d enabled
+	ASYNC_CORE
+	ASYNC_MEMCPY
+	ASYNC_PQ
+	ASYNC_RAID6_RECOV
+	ASYNC_XOR
+	BCM2835_VCHIQ_MMAL
+	BCM_VC_SM_CMA
+	BLK_DEV_DM
+	BLK_DEV_MD
+	BRCMFMAC
+	BRCMUTIL
+	BT
+	BTRFS_FS
+	BT_BCM
+	BT_BNEP
+	BT_HCIUART
+	BT_RFCOMM
+	CFG80211
+	CRYPTO_AES_ARM64
+	CRYPTO_BLAKE2B
+	CRYPTO_CMAC
+	CRYPTO_ECC
+	CRYPTO_ECDH
+	CRYPTO_SHA256
+	CRYPTO_USER_API
+	CRYPTO_USER_API_HASH
+	CRYPTO_USER_API_SKCIPHER
+	DRM
+	DRM_KMS_HELPER
+	DRM_PANEL_ORIENTATION_QUIRKS
+	DRM_SCHED
+	DRM_V3D
+	DRM_VC4
+	FB_SYS_COPYAREA
+	FB_SYS_FILLRECT
+	FB_SYS_FOPS
+	FB_SYS_IMAGEBLIT
+	FUSE_FS
+	I2C_BCM2835
+	I2C_BRCMSTB
+	IPV6
+	IP_NF_IPTABLES
+	MD_LINEAR
+	MD_RAID0
+	MD_RAID1
+	MD_RAID10
+	MD_RAID456
+	MEDIA_SUPPORT
+	NETFILTER_XTABLES
+	NET_SCH_FQ_CODEL
+	NVMEM_RMEM
+	PMAC_BACKLIGHT
+	RAID6_PQ
+	RAS_CEC
+	RFKILL
+	RPIVID_MEM
+	SENSORS_RASPBERRYPI_HWMON
+	SND
+	SND_BCM2835
+	SND_COMPRESS_OFFLOAD
+	SND_DMAENGINE_PCM
+	SND_PCM
+	SND_PCM_OSS
+	SND_RAWMIDI
+	SND_SEQUENCER
+	SND_SEQ_DEVICE
+	SND_SEQ_MIDI
+	SND_SEQ_MIDI_EVENT
+	SND_SOC
+	SND_SOC_HDMI_CODEC
+	SND_TIMER
+	SPI_BCM2835
+	SPI_SPIDEV
+	SQUASHFS
+	UIO
+	UIO_PDRV_GENIRQ
+	USB_DWC2
+	USB_ROLE_SWITCH
+	V4L2_MEM2MEM_DEV
+	VIDEOBUF2_CORE
+	VIDEOBUF2_DMA_CONTIG
+	VIDEOBUF2_MEMOPS
+	VIDEOBUF2_V4L2
+	VIDEOBUF2_VMALLOC
+	VIDEO_BCM2835
+	VIDEO_CODEC_BCM2835
+	VIDEO_ISP_BCM2835
+	VIDEO_V4L2
+	XOR_BLOCKS
+	XOR_BLOCKS
+	ZSTD_COMPRESS
+
+	# Required for boot from USB
+	USB_STORAGE
+	USB_UAS
+)
+
 function usage()
 {
 	cat <<EOF
-Usage: build-rpi-deb [-c CPUS] [-h] [-u] v7|v7l|v8 [[--] [ARGS...]]
+Usage: build-rpi-deb [-c CPUS] [-h] [-m] [-u] v7|v7l|v8 [[--] [ARGS...]]
 
 Build Raspberry Pi kernel packages that are installable on Ubuntu.
 
@@ -20,6 +120,7 @@ Optional arguments:
   -c, --cpus CPUS  Number of CPUs to use for compiling. If not specified,
                    defaults to the number of online CPUs.
   -h, --help       Show this help text and exit.
+  -m, --minimal    Build only a minimal set of modules.
   -u, --ubuntu     Use the Ubuntu kernel config rather than the raspberrypi
                    config.
 EOF
@@ -28,6 +129,7 @@ EOF
 version=
 ubuntu=0
 cpus=$(getconf _NPROCESSORS_ONLN)
+minimal=0
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -38,6 +140,9 @@ while [ ${#} -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-m|--minimal)
+			minimal=1
 			;;
 		-u|--ubuntu)
 			ubuntu=1
@@ -100,8 +205,14 @@ else
 		debian.raspi/config/"${ubuntu_arch}"/config.common."${ubuntu_arch}" \
 		debian.raspi/config/"${ubuntu_arch}"/"${ubuntu_config}" > \
 		buildd/.config
-	make O=buildd olddefconfig
 fi
+
+if [ ${minimal} -eq 1 ] ; then
+	sed -i -e '/^.*=m$/d' buildd/.config
+	printf "CONFIG_%s=m\n" "${MINIMAL_MODULES[@]}" >> buildd/.config
+fi
+
+make O=buildd olddefconfig
 
 sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=""/' buildd/.config
 
