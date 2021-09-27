@@ -129,11 +129,13 @@ Positional arguments:
   v7               Build a 32-bit kernel.
   v7l              Build a 32-bit LPAE kernel.
   v8               Build a 64-bit kernel.
-  ARGS             Additional arguments passed to kernel make.
+  ARGS             Additional arguments passed to kernel make. If not provided,
+                   defaults to 'bindeb-pkg' (to build binary Debian packages).
 
 Optional arguments:
   -c, --cpus CPUS  Number of CPUs to use for compiling. If not specified,
                    defaults to the number of online CPUs.
+  -d, --dbg-pkg    Also build the debug package.
   -h, --help       Show this help text and exit.
   -m, --minimal    Build only a minimal set of modules.
   -u, --ubuntu     Use the Ubuntu kernel config rather than the raspberrypi
@@ -141,16 +143,21 @@ Optional arguments:
 EOF
 }
 
-version=
-ubuntu=0
 cpus=$(getconf _NPROCESSORS_ONLN)
+debug=0
 minimal=0
+ubuntu=0
+args=("bindeb-pkg")
+version=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
 		-c|--cpus)
 			shift
 			cpus=${1}
+			;;
+		-d|--debug)
+			debug=1
 			;;
 		-h|--help)
 			usage
@@ -164,6 +171,7 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		--)
 			shift
+			args=("${@}")
 			break
 			;;
 		v7|v7l|v8)
@@ -213,23 +221,38 @@ esac
 
 mkdir -p buildd
 
+# Generate the base config file
 if [ "${ubuntu}" -eq 0 ] ; then
+	echo "-- Using config ${defconfig}..."
 	make O=buildd "${defconfig}"
 else
+	echo "-- Using config ${ubuntu_config}..."
 	cat debian.raspi/config/config.common.ubuntu \
 		debian.raspi/config/"${ubuntu_arch}"/config.common."${ubuntu_arch}" \
 		debian.raspi/config/"${ubuntu_arch}"/"${ubuntu_config}" > \
 		buildd/.config
 fi
 
+# Only enable the minimal set of modules
 if [ ${minimal} -eq 1 ] ; then
+	echo "-- Enabling minimal set of moudles..."
 	sed -i -e '/^.*=m$/d' buildd/.config
 	printf "CONFIG_%s=m\n" "${MINIMAL_MODULES[@]}" >> buildd/.config
 fi
 
-make O=buildd olddefconfig
+# Disable the build of the debug package
+if [ ${debug} -eq 0 ] ; then
+	echo "-- Disabling the build of the debug package..."
+	sed -i -e 's/^CONFIG_DEBUG_INFO=y$/# CONFIG_DEBUG_INFO is not set/' \
+		buildd/.config
+fi
 
+# Purge the local version
 sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=""/' buildd/.config
 
-version=$(cat buildd/.version || echo 1)
-make O=buildd LOCALVERSION="-${version}-raspi" -j"${cpus}" "${@}" bindeb-pkg
+make O=buildd olddefconfig
+
+version=$((9000 + $(cat buildd/.version || echo 1)))
+
+echo "-- Running: make O=buildd LOCALVERSION=-${version}-raspi -j${cpus} ${args[*]}"
+make O=buildd LOCALVERSION="-${version}-raspi" -j"${cpus}" "${args[@]}"
