@@ -39,6 +39,7 @@ function push_all()
 
 	if [ -z "${tag}" ] || [ -z "${branch}" ] ; then
 		echo "Head commit not tagged or not on a branch" >&2
+		echo
 		return
 	fi
 
