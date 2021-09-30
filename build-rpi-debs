@@ -252,7 +252,21 @@ sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=""/' buildd/.config
 
 make O=buildd olddefconfig
 
-version=$((9000 + $(cat buildd/.version || echo 1)))
+kernel_version=$(make -k kernelversion)
+build_version=$(cat buildd/.version || echo 1)
+abi_version=$((9000 + build_version))
+curr_commit=$(git rev-parse HEAD)
 
-echo "-- Running: make O=buildd LOCALVERSION=-${version}-raspi -j${cpus} ${args[*]}"
-make O=buildd LOCALVERSION="-${version}-raspi" -j"${cpus}" "${args[@]}"
+local_version=-${abi_version}-raspi
+pkg_version=${kernel_version}-${abi_version}+git${curr_commit::8}-1
+
+make_opts=(
+	"O=buildd"
+	"LOCALVERSION=${local_version}"
+	"KDEB_PKGVERSION=${pkg_version}"
+	"-j${cpus}"
+	"${args[@]}"
+)
+
+echo "-- Running: make ${make_opts[*]}"
+make "${make_opts[@]}"
