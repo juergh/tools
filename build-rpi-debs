@@ -235,7 +235,7 @@ fi
 
 # Only enable the minimal set of modules
 if [ ${minimal} -eq 1 ] ; then
-	echo "-- Enabling minimal set of moudles..."
+	echo "-- Enabling minimal set of modules..."
 	sed -i -e '/^.*=m$/d' buildd/.config
 	printf "CONFIG_%s=m\n" "${MINIMAL_MODULES[@]}" >> buildd/.config
 fi
@@ -258,7 +258,7 @@ abi_version=$((9000 + build_version))
 curr_commit=$(git rev-parse HEAD)
 
 local_version=-${abi_version}-raspi
-pkg_version=${kernel_version}-${abi_version}+git${curr_commit::8}-1
+pkg_version=${kernel_version}-${abi_version}-1+git${curr_commit::8}
 
 make_opts=(
 	"O=buildd"
