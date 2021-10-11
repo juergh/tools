@@ -4,7 +4,7 @@
 #
 
 # List of 'minimal' module config options
-MINIMAL_MODULES=(
+minimal_modules=(
 	# List of modules loaded on a Pi 4B with vc4-kms-v3d enabled
 	AC97_BUS
 	ASYNC_CORE
@@ -242,7 +242,7 @@ fi
 if [ ${minimal} -eq 1 ] ; then
 	echo "-- Enabling minimal set of modules..."
 	sed -i -e '/^.*=m$/d' "${buildd}"/.config
-	printf "CONFIG_%s=m\n" "${MINIMAL_MODULES[@]}" >> "${buildd}"/.config
+	printf "CONFIG_%s=m\n" "${minimal_modules[@]}" >> "${buildd}"/.config
 fi
 
 # Disable the build of the debug package
