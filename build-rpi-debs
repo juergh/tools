@@ -223,7 +223,7 @@ esac
 buildd=$(pwd)/buildd
 if ! [ -d "${buildd}" ] ; then
 	mkdir "${buildd}"
-	echo 0 > "${buildd}"/.version
+	echo 1 > "${buildd}"/.version
 fi
 
 # Generate the base config file
