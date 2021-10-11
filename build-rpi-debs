@@ -219,41 +219,46 @@ case "${version}" in
 		;;
 esac
 
-mkdir -p buildd
+# Initialize the build directory
+buildd=$(pwd)/buildd
+if ! [ -d "${buildd}" ] ; then
+	mkdir "${buildd}"
+	echo 0 > "${buildd}"/.version
+fi
 
 # Generate the base config file
 if [ "${ubuntu}" -eq 0 ] ; then
 	echo "-- Using config ${defconfig}..."
-	make O=buildd "${defconfig}"
+	make O="${buildd}" "${defconfig}"
 else
 	echo "-- Using config ${ubuntu_config}..."
 	cat debian.raspi/config/config.common.ubuntu \
 		debian.raspi/config/"${ubuntu_arch}"/config.common."${ubuntu_arch}" \
 		debian.raspi/config/"${ubuntu_arch}"/"${ubuntu_config}" > \
-		buildd/.config
+		"${buildd}"/.config
 fi
 
 # Only enable the minimal set of modules
 if [ ${minimal} -eq 1 ] ; then
 	echo "-- Enabling minimal set of modules..."
-	sed -i -e '/^.*=m$/d' buildd/.config
-	printf "CONFIG_%s=m\n" "${MINIMAL_MODULES[@]}" >> buildd/.config
+	sed -i -e '/^.*=m$/d' "${buildd}"/.config
+	printf "CONFIG_%s=m\n" "${MINIMAL_MODULES[@]}" >> "${buildd}"/.config
 fi
 
 # Disable the build of the debug package
 if [ ${debug} -eq 0 ] ; then
 	echo "-- Disabling the build of the debug package..."
 	sed -i -e 's/^CONFIG_DEBUG_INFO=y$/# CONFIG_DEBUG_INFO is not set/' \
-		buildd/.config
+		"${buildd}"/.config
 fi
 
 # Purge the local version
-sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=""/' buildd/.config
+sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=""/' "${buildd}"/.config
 
-make O=buildd olddefconfig
+make O="${buildd}" olddefconfig
 
 kernel_version=$(make -k kernelversion)
-build_version=$(cat buildd/.version || echo 1)
+build_version=$(cat "${buildd}"/.version)
 abi_version=$((9000 + build_version))
 curr_commit=$(git rev-parse HEAD)
 
@@ -261,7 +266,7 @@ local_version=-${abi_version}-raspi
 pkg_version=${kernel_version}-${abi_version}-1+git${curr_commit::8}
 
 make_opts=(
-	"O=buildd"
+	"O=${buildd}"
 	"LOCALVERSION=${local_version}"
 	"KDEB_PKGVERSION=${pkg_version}"
 	"-j${cpus}"
