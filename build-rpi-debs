@@ -273,5 +273,5 @@ make_opts=(
 	"${args[@]}"
 )
 
-echo "-- Running: make ${make_opts[*]}"
-make "${make_opts[@]}"
+echo "-- Running: make ${make_opts[*]} 2>&1 | tee build.log"
+make "${make_opts[@]}" 2>&1 | tee build.log
