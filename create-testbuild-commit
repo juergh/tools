@@ -22,7 +22,7 @@ Create a 'closing' commit for a test build.
 
 Positional arguments:
   SUFFIX      The suffix to append to the current package version. if not
-              provided, the default is: '+<date>.<git_hash>[.<branch_name>]'.
+              provided, the default is: '+<date>.<git_hash>'.
 
 Optional arguments:
   -h, --help  Show this help text and exit.
@@ -67,10 +67,6 @@ fi
 # Generate the version suffix
 if [ -z "${suffix}" ] ; then
 	suffix=$(date +%Y%m%d).git$(git log --abbrev=8 --format=%h -1)
-	branch=$(git rev-parse --abbrev-ref HEAD)
-	if [ "${branch}" != "HEAD" ] ; then
-		suffix=${suffix}.${branch}
-	fi
 fi
 
 # Strip '-' from the version suffix as it confused the debian build rules
