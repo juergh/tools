@@ -83,19 +83,27 @@ else
 fi
 
 if [ -z "${commit2}" ] ; then
+	show_opts=()
 	commit2=$(grep -P '(cherry picked|(back|forward )ported) from commit [0-9a-f]{40}' \
 				   "${patch1}" | grep -oP '[0-9a-f]{40}' || true)
-	if [ -z "${commit2}" ] ; then
-		echo "Unable to find second commit hash in first commit message" >&2
-		exit 1
-	fi
+fi
+
+if [ -z "${commit2}" ] ; then
+	show_opts=("-R")
+	commit2=$(grep -P 'This reverts commit [0-9a-f]{40}' \
+				   "${patch1}" | grep -oP '[0-9a-f]{40}' || true)
+fi
+
+if [ -z "${commit2}" ] ; then
+	echo "Unable to find second commit hash in first commit message" >&2
+	exit 1
 fi
 
 if [ -e "${commit2}" ] ; then
 	patch2=${commit2}
 else
 	TMP2=$(mktemp)
-	git show "${commit2}" > "${TMP2}"
+	git show "${show_opts[@]}" "${commit2}" > "${TMP2}"
 	patch2=${TMP2}
 fi
 
