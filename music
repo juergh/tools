@@ -6,7 +6,6 @@ import subprocess
 import sys
 import warnings
 
-import librosa
 import taglib
 
 from PIL import Image
@@ -60,6 +59,8 @@ def do_mp3_bpm_show(args):
     """
     Show mp3 file BPM information
     """
+    import librosa
+
     # Supress 'UserWarning: PySoundFile failed. Trying audioread instead.'
     warnings.filterwarnings("ignore")
 
