@@ -121,14 +121,15 @@ minimal_modules=(
 function usage()
 {
 	cat <<EOF
-Usage: build-rpi-deb [-c CPUS] [-h] [-m] [-u] v7|v7l|v8 [[--] [ARGS...]]
+Usage: build-rpi-deb [-c CPUS] [-h] [-m] [-u] v6|v7|v7l|v8 [[--] [ARGS...]]
 
 Build Raspberry Pi kernel packages that are installable on Ubuntu.
 
 Positional arguments:
-  v7               Build a 32-bit kernel.
-  v7l              Build a 32-bit LPAE kernel.
-  v8               Build a 64-bit kernel.
+  v6               Build an ARMv6 32-bit kernel.
+  v7               Build an ARMv7 32-bit kernel.
+  v7l              Build an ARMv7 32-bit LPAE kernel.
+  v8               Build an ARMv8 64-bit kernel.
   ARGS             Additional arguments passed to kernel make. If not provided,
                    defaults to 'bindeb-pkg' (to build binary Debian packages).
 
@@ -174,7 +175,7 @@ while [ ${#} -gt 0 ] ; do
 			args=("${@}")
 			break
 			;;
-		v7|v7l|v8)
+		v6|v7|v7l|v8)
 			if [ -z "${version}" ] ; then
 				version=${1}
 			else
@@ -192,24 +193,33 @@ while [ ${#} -gt 0 ] ; do
 done
 
 case "${version}" in
+	v6)
+		if [ "${ubuntu}" -eq 1 ] ; then
+			echo "Ubuntu does not support ARMv6" >&2
+			exit 1
+		fi
+		export ARCH=arm
+		export CROSS_COMPILE=arm-linux-gnueabihf-
+		defconfig=bcmrpi_defconfig
+		;;
 	v7)
 		export ARCH=arm
 		export CROSS_COMPILE=arm-linux-gnueabihf-
-		defconfig=bcm2709_defconfig  # v7
+		defconfig=bcm2709_defconfig
 		ubuntu_config=config.flavour.raspi-nolpae
 		ubuntu_arch=armhf
 		;;
 	v7l)
 		export ARCH=arm
 		export CROSS_COMPILE=arm-linux-gnueabihf-
-		defconfig=bcm2711_defconfig  # v7l
+		defconfig=bcm2711_defconfig
 		ubuntu_config=config.flavour.raspi
 		ubuntu_arch=armhf
 		;;
 	v8)
 		export ARCH=arm64
 		export CROSS_COMPILE=aarch64-linux-gnu-
-		defconfig=bcm2711_defconfig  # v8
+		defconfig=bcm2711_defconfig
 		ubuntu_config=config.flavour.raspi
 		ubuntu_arch=arm64
 		;;
