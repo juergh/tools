@@ -1,0 +1,60 @@
+#!/bin/bash -eu
+#
+# Install Raspberry Pi kernel packages
+#
+
+dpkg -i "${@}"
+
+release=
+version=
+for deb in "${@}" ; do
+	deb=${deb##*/}
+	case "${deb}" in
+		linux-image-*)
+			release=${deb#linux-image-}
+			release=${release%%_*}
+			version=${deb##*-1+}
+			version=${version%%+*}
+			break
+			;;
+	esac
+done
+
+if [ -z "${release}" ] || [ -z "${version}" ] ; then
+	exit
+fi
+
+vmlinuz=/boot/vmlinuz-"${release}"
+initrd=/boot/initrd.img-"${release}"
+
+if [ -d /boot/firmware ] ; then
+	boot_dir=/boot/firmware
+else
+	boot_dir=/boot
+fi
+
+if [ -e "${boot_dir}"/vmlinuz ] ; then
+	echo "-- Copy kernel to ${boot_dir}/vmlinuz"
+	cp "${vmlinuz}" "${boot_dir}"/vmlinuz
+
+	echo "-- Copy initrd to ${boot_dir}/initrd.img"
+	cp "${initrd}" "${boot_dir}"/initrd.img
+else
+	if [ "${version}" = "v6" ] ; then
+		version=
+	fi
+	echo "-- Copy kernel to ${boot_dir}/kernel${version#v}.img"
+	cp "${vmlinuz}" "${boot_dir}"/kernel"${version#v}".img
+fi
+
+echo "-- Copy DTBs to ${boot_dir}/"
+find /usr/lib/linux-image-"${release}"/ -name '*.dtb' -print0 | \
+	xargs -0 -I{} cp '{}' "${boot_dir}"/
+
+echo "-- Copy DTB overlays to ${boot_dir}/overlays/"
+find /usr/lib/linux-image-"${release}"/ -name '*.dtbo' -print0 | \
+	xargs -0 -I{} cp '{}' "${boot_dir}"/overlays/
+
+if [ -e "${boot_dir}"/overlay_map.dtb ] ; then
+	mv "${boot_dir}"/overlay_map.dtb "${boot_dir}"/overlays/
+fi
