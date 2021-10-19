@@ -1,6 +1,6 @@
 #!/bin/bash -eu
 #
-# Build a Raspberry Pi kernel package that is installable on Ubuntu
+# Build Raspberry Pi kernel packages
 #
 
 # List of 'minimal' module config options
@@ -275,10 +275,10 @@ curr_commit=$(git rev-parse HEAD)
 
 if [ ${raspi_flavor} -eq 1 ] ; then
 	local_version=-${version}
-	pkg_version=${kernel_version}-1+git${curr_commit::8}
+	pkg_version=${kernel_version}-1+${version}+git${curr_commit::8}
 else
-	local_version=-${abi_version}-raspi
-	pkg_version=${kernel_version}-${abi_version}-1+git${curr_commit::8}
+	local_version=-${abi_version}-${ubuntu_flavor}
+	pkg_version=${kernel_version}-${abi_version}-1+${version}+git${curr_commit::8}
 fi
 
 make_opts=(
