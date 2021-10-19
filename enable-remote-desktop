@@ -1,0 +1,61 @@
+#!/bin/bash -eu
+#
+# Enable remote desktop
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h]
+
+Enable GNOME remote desktop. Uses PASSWORD if set, otherwise prompts for the
+password.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+# Network connection UUID
+uuid=$(nmcli conn | awk '$(NF-1) == "ethernet" { print $(NF-2) }')
+if [ -z "${uuid}" ] ; then
+	echo "Unable to determine UUID of network connection" >&2
+	exit 1
+fi
+
+password=${PASSWORD:-}
+if [ -z "${password}" ] ; then
+	read -s -p "Password: " password
+	echo
+fi
+
+# Disable the automatic screen lock
+gsettings set org.gnome.desktop.screensaver lock-enabled false
+
+# Remote desktop configuration
+gsettings set org.gnome.desktop.remote-desktop.vnc auth-method 'password'
+gsettings set org.gnome.desktop.remote-desktop.vnc view-only false
+gsettings set org.gnome.settings-daemon.plugins.sharing.service:/org/gnome/settings-daemon/plugins/sharing/gnome-remote-desktop/ enabled-connections "['${uuid}']"
+
+# Unlock the keyring and set the remote desktop password
+killall gnome-keyring-daemon
+echo -n "${password}" | $(which gnome-keyring-daemon) --daemonize --login
+echo -n "${password}" | \
+	secret-tool store --label='GNOME Remote Desktop VNC password' xdg:schema org.gnome.RemoteDesktop.VncPassword
+
+# (Re-)start the service
+systemctl --user restart gnome-remote-desktop
