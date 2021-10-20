@@ -121,9 +121,10 @@ modules=(
 function usage()
 {
 	cat <<EOF
-Usage: build-rpi-deb [-c CPUS] [-h] [-m] [-u] v6|v7|v7l|v8 [--] [ARGS...]
+Usage: build-rpi-deb [-c CPUS] [-d] [-f] [-h] [-m] [-o] v6|v7|v7l|v8
+                     [--] [ARGS...]
 
-Build Raspberry Pi kernel packages that are installable on Ubuntu.
+Build Raspberry Pi kernel packages.
 
 Positional arguments:
   v6                     Build an ARMv6 32-bit kernel.
@@ -138,19 +139,19 @@ Optional arguments:
   -c, --cpus CPUS        Number of CPUs to use for compiling. If not specified,
                          defaults to the number of online CPUs.
   -d, --dbg-pkg          Also build the debug package.
+  -f, --ubuntu-flavor    Use the Ubuntu kernel flavor name rather than the
+                         raspberrypi flavor name.
   -h, --help             Show this help text and exit.
   -m, --minimal-modules  Build only a minimal set of modules.
-  -r, --raspi-flavor     Use the raspberrypi kernel flavor name rather than the
-                         ubuntu flavor name.
-  -u, --ubuntu-config    Use the Ubuntu kernel config rather than the
+  -o, --ubuntu-config    Use the Ubuntu kernel config rather than the
                          raspberrypi config.
 EOF
 }
 
 cpus=$(getconf _NPROCESSORS_ONLN)
-debug=0
+dbg_pkg=0
+ubuntu_flavor=0
 minimal_modules=0
-raspi_flavor=0
 ubuntu_config=0
 args=("bindeb-pkg")
 version=
@@ -161,8 +162,11 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			cpus=${1}
 			;;
-		-d|--debug)
-			debug=1
+		-d|--dbg-pkg)
+			dbg_pkg=1
+			;;
+		-f|--ubuntu-flavor)
+			ubuntu_flavor=1
 			;;
 		-h|--help)
 			usage
@@ -171,10 +175,7 @@ while [ ${#} -gt 0 ] ; do
 		-m|--minimal-modules)
 			minimal_modules=1
 			;;
-		-r|--raspi-flavor)
-			raspi_flavor=1
-			;;
-		-u|--ubuntu-config)
+		-o|--ubuntu-config)
 			ubuntu_config=1
 			;;
 		--)
@@ -207,21 +208,21 @@ case "${version}" in
 		export ARCH=arm
 		export CROSS_COMPILE=arm-linux-gnueabihf-
 		defconfig=bcm2709_defconfig
-		ubuntu_flavor=raspi-nolpae
+		ubuntu_flavorname=raspi-nolpae
 		ubuntu_arch=armhf
 		;;
 	v7l)
 		export ARCH=arm
 		export CROSS_COMPILE=arm-linux-gnueabihf-
 		defconfig=bcm2711_defconfig
-		ubuntu_flavor=raspi
+		ubuntu_flavorname=raspi
 		ubuntu_arch=armhf
 		;;
 	v8)
 		export ARCH=arm64
 		export CROSS_COMPILE=aarch64-linux-gnu-
 		defconfig=bcm2711_defconfig
-		ubuntu_flavor=raspi
+		ubuntu_flavorname=raspi
 		ubuntu_arch=arm64
 		;;
 	*)
@@ -239,10 +240,10 @@ fi
 
 # Generate the base config file
 if [ ${ubuntu_config} -eq 1 ] ; then
-	echo "-- Using Ubuntu config ${ubuntu_arch}/${ubuntu_flavor}..."
+	echo "-- Using Ubuntu config ${ubuntu_arch}/${ubuntu_flavorname}..."
 	cat debian.raspi/config/config.common.ubuntu \
 		debian.raspi/config/"${ubuntu_arch}"/config.common."${ubuntu_arch}" \
-		debian.raspi/config/"${ubuntu_arch}"/config.flavour."${ubuntu_flavor}" > \
+		debian.raspi/config/"${ubuntu_arch}"/config.flavour."${ubuntu_flavorname}" > \
 		"${buildd}"/.config
 else
 	echo "-- Using raspberrypi config ${ARCH}/${defconfig}..."
@@ -257,7 +258,7 @@ if [ ${minimal_modules} -eq 1 ] ; then
 fi
 
 # Disable the build of the debug package
-if [ ${debug} -eq 0 ] ; then
+if [ ${dbg_pkg} -eq 0 ] ; then
 	echo "-- Disabling the build of the debug package..."
 	sed -i -e 's/^CONFIG_DEBUG_INFO=y$/# CONFIG_DEBUG_INFO is not set/' \
 		"${buildd}"/.config
@@ -273,12 +274,12 @@ build_version=$(cat "${buildd}"/.version)
 abi_version=$((9000 + build_version))
 curr_commit=$(git rev-parse HEAD)
 
-if [ ${raspi_flavor} -eq 1 ] ; then
+if [ ${ubuntu_flavor} -eq 1 ] ; then
+	local_version=-${abi_version}-${ubuntu_flavorname}
+	pkg_version=${kernel_version}-${abi_version}-1+${version}+git${curr_commit::8}
+else
 	local_version=-${version}
 	pkg_version=${kernel_version}-1+${version}+git${curr_commit::8}
-else
-	local_version=-${abi_version}-${ubuntu_flavor}
-	pkg_version=${kernel_version}-${abi_version}-1+${version}+git${curr_commit::8}
 fi
 
 make_opts=(
