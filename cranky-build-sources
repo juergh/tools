@@ -109,7 +109,33 @@ if [ "${force}" -eq 0 ] ; then
 	fi
 fi
 
-if [ "${pocket}" != "none" ] ; then
+if [ "${pocket}" = "none" ] ; then
+	# Use the previous package versions
+	while IFS= read -r path ; do
+		package=$(dpkg-parsechangelog -l "${path}"/debian/changelog -o 1 -c 1 \
+									  -S source)
+		version=$(dpkg-parsechangelog -l "${path}"/debian/changelog -o 1 -c 1 \
+									  -S version)
+		case "${package}" in
+			linux-meta*)
+				bo_meta+=("-v${version}")
+				;;
+			linux-signed*)
+				bo_signed+=("-v${version}")
+				;;
+			linux-restricted-modules*)
+				bo_restricted_modules+=("-v${version}")
+				;;
+			linux*)
+				bo_main+=("-v${version}")
+				;;
+			*)
+				echo "Unsupported package: ${package}" >&2
+				exit 1
+		esac
+	done < <(cranky shell-helper source-packages-path)
+
+elif [ "${pocket}" != "none" ] ; then
 	# Get the previous versions from the provided pocket
 	found=0
 	while IFS=' ' read -r package version rest ; do
@@ -132,11 +158,10 @@ if [ "${pocket}" != "none" ] ; then
 				exit 1
 		esac
 	done < <(cranky rmadison -s -p "${pocket}")
-fi
-
-if [ ${found} -eq 0 ] ; then
-	echo "Invalid pocket: ${pocket}" >&2
-	exit 1
+	if [ ${found} -eq 0 ] ; then
+		echo "Invalid pocket: ${pocket}" >&2
+		exit 1
+	fi
 fi
 
 if [ ${#bo_meta[@]} -ne 0 ] ; then
