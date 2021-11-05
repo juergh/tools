@@ -232,7 +232,7 @@ case "${version}" in
 esac
 
 # Initialize the build directory
-buildd=$(pwd)/buildd
+buildd=$(pwd)/buildd/${version}
 if ! [ -d "${buildd}" ] ; then
 	mkdir "${buildd}"
 fi
