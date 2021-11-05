@@ -235,6 +235,10 @@ esac
 buildd=$(pwd)/buildd
 if ! [ -d "${buildd}" ] ; then
 	mkdir "${buildd}"
+fi
+
+# Initialize the build version
+if ! [ -e "${buildd}"/.version ] ; then
 	echo 1 > "${buildd}"/.version
 fi
 
