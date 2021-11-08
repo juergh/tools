@@ -274,9 +274,17 @@ if [ ${minimal_modules} -eq 1 ] ; then
 	printf "CONFIG_%s=m\n" "${modules[@]}" >> "${buildd}"/.config
 fi
 
-config_cmds=()
+# Disable the build of the debug package
+if [ ${dbg_pkg} -eq 0 ] ; then
+	echo "-- Disabling the build of the debug package..."
+	configs+=("DEBUG_INFO:u")
+fi
+
+# Purge the local version
+configs+=("LOCALVERSION:s=")
 
 # Set/modify additional options
+config_cmds=()
 for cfg_val in "${configs[@]}" ; do
 	cfg=${cfg_val%%:*}
 	val=${cfg_val#*:}
@@ -305,17 +313,6 @@ for cfg_val in "${configs[@]}" ; do
 			;;
 	esac
 done
-
-# Disable the build of the debug package
-if [ ${dbg_pkg} -eq 0 ] ; then
-	echo "-- Disabling the build of the debug package..."
-	config_cmds+=("DEBUG_INFO:u")
-fi
-
-# Purge the local version
-config_cmds+=("LOCALVERSION:s=''")
-
-# Finally update the kernel config file
 if [ ${#config_cmds[@]} -gt 0 ] ; then
 	./scripts/config --file "${buildd}"/.config "${config_cmds[@]}"
 fi
