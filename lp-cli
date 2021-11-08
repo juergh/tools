@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+#
+# CLI interface to Launchpad
+#
+
+import argparse
+import sys
+
+from launchpadlib.launchpad import Launchpad
+
+# -----------------------------------------------------------------------------
+# Helper functions
+
+def _dec(name, *args, **kwargs):
+    def _decorator(func):
+        # Because of the sematics of decorator composition if we just append
+        # to the options list positional options will appear to be backwards.
+        func.__dict__.setdefault(name, []).insert(0, (args, kwargs))
+        return func
+    return _decorator
+
+
+def add_help(*args, **kwargs):
+    return _dec('help', *args, **kwargs)
+
+def add_arg(*args, **kwargs):
+    return _dec('arg', *args, **kwargs)
+
+# -----------------------------------------------------------------------------
+# Subcommands
+
+@add_help('Subscribe a person to a bug')
+@add_arg('lp_id', help='Launchpad ID of person to subscribe to bug')
+@add_arg('lp_bug', help='Launchpad bug number')
+def do_subscribe_bug(args):
+    person = args.lp.people[args.lp_id]
+    bug = args.lp.bugs[args.lp_bug]
+    bug.subscribe(person=person)
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+
+    # Add subparsers for the subcommands and walk through the 'do_' functions
+    subparsers = parser.add_subparsers(dest='subcommand', title='subcommands',
+                                       required=True)
+    module = sys.modules[__name__]
+    for attr in (a for a in dir(module) if a.startswith('do_')):
+        cmd_name = attr[3:].replace('_', '-')
+        cmd_cb = getattr(module, attr)
+        cmd_desc = cmd_cb.__doc__ or ''
+        cmd_help = getattr(cmd_cb, 'help', [])
+        cmd_args = getattr(cmd_cb, 'arg', [])
+
+        sparser = subparsers.add_parser(cmd_name, help=cmd_help[0][0][0],
+                                        description=cmd_desc, add_help=False)
+        sparser.add_argument('-h', '--help', action='help')
+        for (args, kwargs) in cmd_args:
+            sparser.add_argument(*args, **kwargs)
+        sparser.set_defaults(func=cmd_cb)
+
+    # Parse the arguments
+    args = parser.parse_args()
+
+    # Log into launchpad and call the subcommand
+    args.lp = Launchpad.login_with('tools', 'production', version='devel')
+    args.func(args)
