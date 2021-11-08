@@ -121,7 +121,7 @@ modules=(
 function usage()
 {
 	cat <<EOF
-Usage: build-rpi-deb [-c CPUS] [-d] [-f] [-h] [-m] [-n CFG=VAL] [-o]
+Usage: build-rpi-deb [-c CPUS] [-d] [-f] [-h] [-m] [-n CFG:VAL] [-o]
                      v6|v7|v7l|v8 [-- ARGS...]
 
 Build Raspberry Pi kernel packages.
@@ -143,7 +143,14 @@ Optional arguments:
                          raspberrypi flavor name.
   -h, --help             Show this help text and exit.
   -m, --minimal-modules  Build only a minimal set of modules.
-  -n, --config CFG=VAL   Set kernel config option CFG to value VAL.
+  -n, --config CFG:VAL   Set kernel config option CFG to value VAL.
+                         Possible values for VAL:
+                           e:     Enable option
+                           d:     Disable option
+                           m:     Turn option into a module
+                           u:     Undefine option
+                           s=foo: Set option to string 'foo'
+                           v=bar: Set option to value bar
   -o, --ubuntu-config    Use the Ubuntu kernel config rather than the
                          raspberrypi config.
 EOF
@@ -275,20 +282,38 @@ if [ ${dbg_pkg} -eq 0 ] ; then
 fi
 
 # Set/modify additional options
+cmds=()
 for cfg_val in "${configs[@]}" ; do
-	cfg=${cfg_val%=*}
-	val=${cfg_val#*=}
+	cfg=${cfg_val%%:*}
+	val=${cfg_val#*:}
 	case "${val}" in
-		y) cmd="-e" ;;
-		n) cmd="-d" ;;
-		m) cmd="-m" ;;
+		e)
+			cmds+=("--enable" "${cfg}")  # Enable option
+			;;
+		d)
+			cmds+=("--disable" "${cfg}")  # Disable option
+			;;
+		m)
+			cmds+=("--module" "${cfg}")  # Turn option into a module
+			;;
+		u)
+			cmds+=("--undefine" "${cfg}")  # Undefine option
+			;;
+		s=*)
+			cmds+=("--set-str" "${cfg}" "${val#*=}")  # Set option to string
+			;;
+		v=*)
+			cmds+=("--set-val" "${cfg}" "${val#*=}")  # Set option to value
+			;;
 		*)
 			echo "-- Ignoring invalid config option: ${cfg_val}" >&2
 			continue
 			;;
 	esac
-	./scripts/config --file "${buildd}"/.config "${cmd}" "${cfg}"
 done
+if [ ${#cmds[@]} -gt 0 ] ; then
+	./scripts/config --file "${buildd}"/.config "${cmds[@]}"
+fi
 
 # Purge the local version
 sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=""/' "${buildd}"/.config
