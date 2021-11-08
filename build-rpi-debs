@@ -116,6 +116,9 @@ modules=(
 	# Required for boot from USB
 	USB_STORAGE
 	USB_UAS
+
+	# Required for local setup
+	USB_RTL8152
 )
 
 function usage()
