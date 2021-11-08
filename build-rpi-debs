@@ -121,8 +121,8 @@ modules=(
 function usage()
 {
 	cat <<EOF
-Usage: build-rpi-deb [-c CPUS] [-d] [-f] [-h] [-m] [-o] v6|v7|v7l|v8
-                     [--] [ARGS...]
+Usage: build-rpi-deb [-c CPUS] [-d] [-f] [-h] [-m] [-n CFG=VAL] [-o]
+                     v6|v7|v7l|v8 [-- ARGS...]
 
 Build Raspberry Pi kernel packages.
 
@@ -143,6 +143,7 @@ Optional arguments:
                          raspberrypi flavor name.
   -h, --help             Show this help text and exit.
   -m, --minimal-modules  Build only a minimal set of modules.
+  -n, --config CFG=VAL   Set kernel config option CFG to value VAL.
   -o, --ubuntu-config    Use the Ubuntu kernel config rather than the
                          raspberrypi config.
 EOF
@@ -152,6 +153,7 @@ cpus=$(getconf _NPROCESSORS_ONLN)
 dbg_pkg=0
 ubuntu_flavor=0
 minimal_modules=0
+configs=()
 ubuntu_config=0
 args=("bindeb-pkg")
 version=
@@ -174,6 +176,10 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-m|--minimal-modules)
 			minimal_modules=1
+			;;
+		-n|--config)
+			shift
+			configs+=("${1}")
 			;;
 		-o|--ubuntu-config)
 			ubuntu_config=1
@@ -234,7 +240,7 @@ esac
 # Initialize the build directory
 buildd=$(pwd)/buildd/${version}
 if ! [ -d "${buildd}" ] ; then
-	mkdir "${buildd}"
+	mkdir -p "${buildd}"
 fi
 
 # Initialize the build version
@@ -267,6 +273,22 @@ if [ ${dbg_pkg} -eq 0 ] ; then
 	sed -i -e 's/^CONFIG_DEBUG_INFO=y$/# CONFIG_DEBUG_INFO is not set/' \
 		"${buildd}"/.config
 fi
+
+# Set/modify additional options
+for cfg_val in "${configs[@]}" ; do
+	cfg=${cfg_val%=*}
+	val=${cfg_val#*=}
+	case "${val}" in
+		y) cmd="-e" ;;
+		n) cmd="-d" ;;
+		m) cmd="-m" ;;
+		*)
+			echo "-- Ignoring invalid config option: ${cfg_val}" >&2
+			continue
+			;;
+	esac
+	./scripts/config --file "${buildd}"/.config "${cmd}" "${cfg}"
+done
 
 # Purge the local version
 sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=""/' "${buildd}"/.config
