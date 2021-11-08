@@ -274,36 +274,30 @@ if [ ${minimal_modules} -eq 1 ] ; then
 	printf "CONFIG_%s=m\n" "${modules[@]}" >> "${buildd}"/.config
 fi
 
-# Disable the build of the debug package
-if [ ${dbg_pkg} -eq 0 ] ; then
-	echo "-- Disabling the build of the debug package..."
-	sed -i -e 's/^CONFIG_DEBUG_INFO=y$/# CONFIG_DEBUG_INFO is not set/' \
-		"${buildd}"/.config
-fi
+config_cmds=()
 
 # Set/modify additional options
-cmds=()
 for cfg_val in "${configs[@]}" ; do
 	cfg=${cfg_val%%:*}
 	val=${cfg_val#*:}
 	case "${val}" in
 		e)
-			cmds+=("--enable" "${cfg}")  # Enable option
+			config_cmds+=("--enable" "${cfg}")  # Enable option
 			;;
 		d)
-			cmds+=("--disable" "${cfg}")  # Disable option
+			config_cmds+=("--disable" "${cfg}")  # Disable option
 			;;
 		m)
-			cmds+=("--module" "${cfg}")  # Turn option into a module
+			config_cmds+=("--module" "${cfg}")  # Turn option into a module
 			;;
 		u)
-			cmds+=("--undefine" "${cfg}")  # Undefine option
+			config_cmds+=("--undefine" "${cfg}")  # Undefine option
 			;;
 		s=*)
-			cmds+=("--set-str" "${cfg}" "${val#*=}")  # Set option to string
+			config_cmds+=("--set-str" "${cfg}" "${val#*=}")  # Set option to string
 			;;
 		v=*)
-			cmds+=("--set-val" "${cfg}" "${val#*=}")  # Set option to value
+			config_cmds+=("--set-val" "${cfg}" "${val#*=}")  # Set option to value
 			;;
 		*)
 			echo "-- Ignoring invalid config option: ${cfg_val}" >&2
@@ -311,13 +305,20 @@ for cfg_val in "${configs[@]}" ; do
 			;;
 	esac
 done
-if [ ${#cmds[@]} -gt 0 ] ; then
-	./scripts/config --file "${buildd}"/.config "${cmds[@]}"
+
+# Disable the build of the debug package
+if [ ${dbg_pkg} -eq 0 ] ; then
+	echo "-- Disabling the build of the debug package..."
+	config_cmds+=("DEBUG_INFO:u")
 fi
 
 # Purge the local version
-sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=""/' "${buildd}"/.config
+config_cmds+=("LOCALVERSION:s=''")
 
+# Finally update the kernel config file
+if [ ${#config_cmds[@]} -gt 0 ] ; then
+	./scripts/config --file "${buildd}"/.config "${config_cmds[@]}"
+fi
 make O="${buildd}" olddefconfig
 
 kernel_version=$(make -k kernelversion)
