@@ -2,4 +2,4 @@
 
 export PATH=/srv/git/tools:${PATH}
 
-git-fetch-daily /srv/git 2>&1 | tee /srv/git/git-fetch-daily.log
+git-fetch-daily /srv/git > /srv/git/git-fetch-daily.log 2>&1

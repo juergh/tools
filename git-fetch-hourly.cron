@@ -2,4 +2,4 @@
 
 export PATH=/srv/git/tools:${PATH}
 
-git-fetch-hourly /srv/git 2>&1 | tee /srv/git/git-fetch-hourly.log
+git-fetch-hourly /srv/git > /srv/git/git-fetch-hourly.log 2>&1
