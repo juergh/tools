@@ -1,0 +1,30 @@
+#!/bin/bash -eu
+#
+# Diff two kernel logs
+#
+
+function filter()
+{
+	local infile=${1}
+
+	python3 -c "
+import re
+import sys
+
+with open('${infile}') as fh:
+    for line in fh:
+        line = line.strip()
+
+        line = re.sub(r'^\[[^\]]+\] ', '', line)
+        line = re.sub(r'\d+ MB/', 'xxx MB/', line)
+        print(line)
+"
+}
+
+trap "rm -f /tmp/.{1,2}" INT TERM EXIT HUP
+
+filter "${1}" > /tmp/.1
+filter "${2}" > /tmp/.2
+
+colordiff -y -W "$(tput cols)" /tmp/.1 /tmp/.2 || true
+rm -f /tmp/.1 /tmp/.2
