@@ -1,11 +1,52 @@
 #!/bin/bash -u
+#
+# Download debs from CBD
+#
 
-job_id=${1}
+function usage()
+{
+	cat <<EOF
+Usage: cbd-download [-h] JOB_ID
+
+Download Debian packages from a CBD job.
+
+Positional arguments:
+  JOB_ID      CBD job ID to download debs from.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+job_id=
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -z "${job_id}" ] ; then
+				job_id=${1}
+			else
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+	esac
+	shift
+done
+
+if [ -z "${job_id}" ] ; then
+	usage
+	exit 2
+fi
 
 tmpd=/tmp/${job_id%%/*}
 
 mkdir -p "${tmpd}"
+# shellcheck disable=SC2064
 trap "rm -rf ${tmpd}" EXIT
 
+# shellcheck disable=SC2029
 ssh cbd tarball "${job_id}" | ( cd "${tmpd}" && tar -xzvf - )
-find "${tmpd}" -name '*.deb' | xargs -I{} mv '{}' .
+find "${tmpd}" -name '*.deb' -print0 | xargs -0 -I{} mv '{}' .
