@@ -88,6 +88,10 @@ function set_globals()
 	DISTRO=
 	if [ -n "${CHANGELOG}" ] ; then
 		DISTRO=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Distribution)
+		if [ "${DISTRO}" = "UNRELEASED" ] ; then
+			DISTRO=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Distribution \
+				  -o 1 -c 1)
+		fi
 	fi
 
 	# Set the release
