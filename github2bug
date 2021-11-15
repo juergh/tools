@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+#
+# Create a Launchpad bug from a Github issue (or pull request)
+#
+
+import argparse
+import sys
+
+import requests
+
+from launchpadlib.launchpad import Launchpad
+
+def main():
+    parser = argparse.ArgumentParser('Create a Launchpad bug from a Github issue')
+    parser.add_argument('-d', '--dry-run', action='store_true',
+                        help='Show the bug title and description but don\'t ' +
+                        'create it')
+    parser.add_argument('-s', '--source', required=True,
+                        help='Ubuntu source package name')
+    parser.add_argument('-u', '--user', required=True, help='Gihub user name')
+    parser.add_argument('-r', '--repo', required=True, help='Gihub repo name')
+    parser.add_argument('issue', help='Github issue (or pull request) number')
+    args = parser.parse_args()
+
+    # Pull the data from Github
+    found = False
+    for path in ('issues', 'pulls'):
+        url = 'https://api.github.com/repos/{}/{}/{}/{}'.format(
+            args.user, args.repo, path, args.issue)
+        issue = requests.get(url).json()
+        if 'html_url' in issue and 'title' in issue and 'body' in issue:
+            found = True
+            break
+
+    if not found:
+        print('Failed to get Github issue', file=sys.stderr)
+        return 1
+
+    bug_title = issue['title']
+    bug_desc = '[From]\n' + issue['html_url'] + '\n\n' + '[Description]\n' + \
+        issue['body']
+
+    if args.dry_run:
+        print(bug_title)
+        print()
+        print(bug_desc)
+        print()
+        print('Dry-run, exciting...')
+        return 0
+
+    lp = Launchpad.login_with('tools', 'production', version='devel')
+    project = lp.projects['ubuntu']
+    target = lp.load(project.self_link + "/+source/" + args.source)
+    bug = lp.bugs.createBug(target=target, title=bug_title,
+                            description=bug_desc, tags=[], private=False)
+
+    print("https://bugs.launchpad.net/bugs/%s" % (bug.id))
+
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())
