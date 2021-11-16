@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+
+import yaml
+
+with open('/srv/git/kteam-tools/info/kernel-series.yaml') as fh:
+    info = yaml.safe_load(fh)
+
+
+for series in info:
+    data = info[series]
+    if data.get('supported'):
+        print(series + ' - ' + data['codename'])
+        for src in data['sources']:
+            print('  ' + src)
+        print()
