@@ -1,15 +1,37 @@
 #!/usr/bin/env python3
+#
+# List supported Ubuntu kernels
+#
 
+import argparse
 import yaml
 
+parser = argparse.ArgumentParser()
+parser.add_argument('series', nargs='?')
+args = parser.parse_args()
+
 with open('/srv/git/kteam-tools/info/kernel-series.yaml') as fh:
-    info = yaml.safe_load(fh)
+    kernel_series = yaml.safe_load(fh)
 
+first = True
+for series in kernel_series:
+    series_data = kernel_series[series]
+    if not series_data.get('supported'):
+        continue
+    codename = series_data['codename']
 
-for series in info:
-    data = info[series]
-    if data.get('supported'):
-        print(series + ' - ' + data['codename'])
-        for src in data['sources']:
-            print('  ' + src)
-        print()
+    if not args.series:
+        if first:
+            first = False
+        else:
+            print()
+        print(series + ' - ' + codename)
+
+    for source in series_data['sources']:
+        source_data = series_data['sources'][source]
+        if not source_data.get('supported'):
+            continue
+        if not args.series:
+            print('  ' + source)
+        elif args.series == codename:
+            print(source)
