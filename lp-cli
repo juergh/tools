@@ -66,7 +66,7 @@ def do_show_source(args):
         pockets = ('Updates', 'Release')
     source = lp_get_sources(args.lp, args.source, args.series, pockets)
     if source:
-        print('{} all {} {}'.format(args.source, source.source_package_version,
+        print('{} {} all {}'.format(args.source, source.source_package_version,
                                     source.pocket.lower()))
 
 @add_help('Show latest binary packages information')
@@ -84,8 +84,8 @@ def do_show_binaries(args):
         for binary in source.getPublishedBinaries():
             arch = binary.distro_arch_series_link.split('/')[-1]
             print('{} {} {} {}'.format(binary.binary_package_name,
-                                       arch,
                                        binary.binary_package_version,
+                                       arch,
                                        binary.pocket.lower()))
 
 # -----------------------------------------------------------------------------
