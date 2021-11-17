@@ -6,24 +6,35 @@
 function usage()
 {
 	cat <<EOF
-Usage: cbd-download [-h] JOB_ID
+Usage: cbd-download [-h] [-o DIR] JOB_ID
 
 Download Debian packages from a CBD job.
 
 Positional arguments:
-  JOB_ID      CBD job ID to download debs from.
+  JOB_ID            CBD job ID.
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -h, --help        Show this help text and exit.
+  -o, --output DIR  Directory to download the Debian packages to.
 EOF
 }
 
 job_id=
+output_dir=
+
 while [ $# -gt 0 ] ; do
 	case "${1}" in
 		-h|--help)
 			usage
 			exit
+			;;
+		-o|--output)
+			shift
+			output_dir=${1}
+			;;
+		-*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
 			;;
 		*)
 			if [ -z "${job_id}" ] ; then
@@ -49,4 +60,10 @@ trap "rm -rf ${tmpd}" EXIT
 
 # shellcheck disable=SC2029
 ssh cbd tarball "${job_id}" | ( cd "${tmpd}" && tar -xzvf - )
-find "${tmpd}" -name '*.deb' -print0 | xargs -0 -I{} mv '{}' .
+
+if [ -z "${output_dir}" ] ; then
+	output_dir=.
+else
+	mkdir -p "${output_dir}"
+fi
+find "${tmpd}" -name '*.deb' -print0 | xargs -0 -I{} mv '{}' "${output_dir}"
