@@ -1,0 +1,55 @@
+#!/bin/bash -eu
+#
+# Show the commits introduced by the previous rebase
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: cranky-show-rebase-commits [-h] [OPTS] [-- PATH]
+
+Positional arguments:
+  OPTS        Additional options for 'git log'.
+  PATH        Show only commits that touch the provided PATH.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+opts=()
+paths=()
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		--)
+			shift
+			paths=("--" "${@}")
+			break
+			;;
+		*)
+			opts+=("${1}")
+			;;
+	esac
+	shift
+done
+
+# The current master version
+curr=$(dpkg-parsechangelog -l debian.master/changelog -S Version)
+
+# Find the previous master version
+prev=$(grep -m1 -P '^  \[ Ubuntu: \d+' debian.raspi/changelog | \
+		   sed -e 's/.* Ubuntu: //' -e 's/ .*//')
+
+curr_commit=$(git log --oneline | \
+				  grep -m1 -P "^[0-9a-f]{8,} UBUNTU: Ubuntu-${curr}$" | \
+				  awk '{ print $1 }')
+prev_commit=$(git log --oneline | \
+				  grep -m1 -P "^[0-9a-f]{8,} UBUNTU: Ubuntu-${prev}$" | \
+				  awk '{ print $1 }')
+
+git log "${opts[@]}" "${prev_commit}".."${curr_commit}" "${paths[@]}"
