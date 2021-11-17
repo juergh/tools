@@ -3,12 +3,13 @@
 function usage()
 {
 	cat <<EOF
-Usage: cranky-check-debian-master [-h] [OPTS]
+Usage: cranky-show-debian-master [-h] [OPTS]
 
 Show the commits that modified debian/master since the previous main kernel
 version.
 
-OPTS  Additional options for 'git log'.
+Positional arguments:
+  OPTS        Additional options for 'git log'.
 
 Optional arguments:
   -h, --help  Show this help text and exit.
@@ -25,6 +26,7 @@ while [ $# -gt 0 ] ; do
 		*)
 			opts=("${@}")
 			break
+			;;
 	esac
 	shift
 done
