@@ -1,0 +1,103 @@
+#!/bin/bash -eu
+
+function usage()
+{
+	cat <<EOF
+Usage: cranky-show-rpi-rebase-commits [-h] [OPTS]
+
+Show the commits that modify Raspberry Pi files since the previous main kernel
+version.
+
+Positional arguments:
+  OPTS        Additional options for 'git log'.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+opts=()
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			opts=("${@}")
+			break
+			;;
+	esac
+	shift
+done
+
+# Determine the 'start' of the derivative
+master_version=$(dpkg-parsechangelog -l debian.master/changelog -S Version)
+master_source=$(dpkg-parsechangelog -l debian.master/changelog -S Source)
+master_source=${master_source#linux}
+master_tag=Ubuntu${master_source}-${master_version}
+tmp=$(git log --oneline -2000 | \
+                  grep -m1 -P "^[0-9a-f]{12} UBUNTU: ${master_tag}$" || true)
+master_commit=${tmp%% *}
+if [ -z "${master_commit}" ] ; then
+        echo "Failed to determine Ubuntu master commit: ${master_tag}" >&2
+        exit 1
+fi
+
+# Collect the list of Raspberry Pi files
+declare -A rpi_files
+while IFS= read -r line ; do
+	rpi_files[${line}]=1
+done < <(git log --format= --name-only "${master_commit}".. | \
+			 grep -vP '^(debian|ubuntu|\.)' | sort -u)
+
+# The current master versions
+curr=$(dpkg-parsechangelog -l debian.master/changelog -S Version)
+
+# Find the previous master version
+prev=$(grep -m1 -P '^  \[ Ubuntu: \d+' debian.raspi/changelog | \
+           sed -e 's/.* Ubuntu: //' -e 's/ .*//')
+
+curr_commit=$(git log --oneline | \
+                  grep -m1 -P "^[0-9a-f]{8,} UBUNTU: Ubuntu-${curr}$" | \
+                  awk '{ print $1 }')
+prev_commit=$(git log --oneline | \
+                  grep -m1 -P "^[0-9a-f]{8,} UBUNTU: Ubuntu-${prev}$" | \
+                  awk '{ print $1 }')
+
+# Collect the list of commits that modify Raspberry Pi files
+commits=()
+while IFS= read -r line ; do
+	if [ -z "${line}" ] ; then
+		continue
+	fi
+	if [ "${line% *}" = "COMMIT" ] ; then
+		commit=${line#* }
+		continue
+	fi
+	if [ ${#commits[@]} -gt 0 ] && [ ${commits[-1]} = "${commit}" ] ; then
+		continue
+	fi
+	if [ "${rpi_files[${line}]:-0}" -eq 1 ] ; then
+		commits+=("${commit}")
+	fi
+done < <(git log --format="COMMIT %h" --name-only \
+			 "${prev_commit}".."${curr_commit}")
+
+do_echo=1
+for opt in "${opts[@]}" ; do
+	if [ "${opt}" = "--oneline" ] ; then
+		do_echo=0
+		break
+	fi
+done
+
+# List the collected commits
+echo "Ubuntu-${prev} to Ubuntu-${curr}"
+echo
+for commit in "${commits[@]}" ; do
+	git --no-pager log --color=always "${opts[@]}" "${commit}" -1
+	if [ ${do_echo} -eq 1 ] ; then
+		echo
+	fi
+done
