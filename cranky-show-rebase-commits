@@ -8,6 +8,8 @@ function usage()
 	cat <<EOF
 Usage: cranky-show-rebase-commits [-h] [OPTS] [-- PATH]
 
+Show the commits introduced by the most recent rebase.
+
 Positional arguments:
   OPTS        Additional options for 'git log'.
   PATH        Show only commits that touch the provided PATH.
@@ -42,7 +44,8 @@ done
 curr=$(dpkg-parsechangelog -l debian.master/changelog -S Version)
 
 # Find the previous master version
-prev=$(grep -m1 -P '^  \[ Ubuntu: \d+' debian.raspi/changelog | \
+. debian/debian.env
+prev=$(grep -m1 -P '^  \[ Ubuntu: \d+' "${DEBIAN}"/changelog | \
 		   sed -e 's/.* Ubuntu: //' -e 's/ .*//')
 
 curr_commit=$(git log --oneline | \
