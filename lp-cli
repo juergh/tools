@@ -69,6 +69,25 @@ def do_show_source(args):
         print('{} all {} {}'.format(args.source, source.source_package_version,
                                     source.pocket.lower()))
 
+@add_help('Show latest binary packages information')
+@add_arg('source', help='Source package name')
+@add_arg('series', help='Ubuntu series name')
+@add_arg('-p', '--proposed', action='store_true', help='Also query the ' +
+         'proposed pocket')
+def do_show_binaries(args):
+    if args.proposed:
+        pockets = ('Proposed', 'Updates', 'Release')
+    else:
+        pockets = ('Updates', 'Release')
+    source = lp_get_sources(args.lp, args.source, args.series, pockets)
+    if source:
+        for binary in source.getPublishedBinaries():
+            arch = binary.distro_arch_series_link.split('/')[-1]
+            print('{} {} {} {}'.format(binary.binary_package_name,
+                                       arch,
+                                       binary.binary_package_version,
+                                       binary.pocket.lower()))
+
 # -----------------------------------------------------------------------------
 # Main entry point
 
