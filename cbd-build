@@ -1,0 +1,54 @@
+#!/bin/bash -eu
+#
+# Build and download debs using CBD
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: cbd-build [-h] [OPTS]
+
+Build and download Debian packages using CBD.
+
+Optional arguments:
+  -h, --help        Show this help text and exit.
+  OPTS              Additional options for 'git push cbd'.
+EOF
+}
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
+
+# Add cbd remote if necessary
+if ! git remote | grep -q '^cbd$' ; then
+	# shellcheck disable=SC1091
+	. debian/debian.env
+	series=$(dpkg-parsechangelog "${DEBIAN}"/changelog -S Distribution)
+	git remote add cbd cbd:"${series}".git
+fi
+
+# Build
+git push cbd -o wait=quiet "${@}" 2>&1 | tee cbd-build.log
+
+job_id=$(grep -m1 '/BUILD-OK' cbd-build.log)
+job_id=${job_id%%/*}
+job_id=${job_id##* }
+
+if [ -z "${job_id}" ] ; then
+	echo "No build artifacts to download" >&2
+	exit 1
+fi
+
+# Download
+echo "-- Downloading build artifacts to cbdd/"
+cbd-download -o cbdd "${job_id}"
