@@ -37,6 +37,32 @@ def do_subscribe_bug(args):
     bug = args.lp.bugs[args.lp_bug]
     bug.subscribe(person=person)
 
+@add_help('Show latest source package version')
+@add_arg('source', help='Source package name')
+@add_arg('series', help='Ubuntu series name')
+@add_arg('-p', '--proposed', action='store_true',
+         help='Also query the proposed pocket')
+def do_show_source_version(args):
+    archive = args.lp.archives.getByReference(reference='ubuntu')
+    series = args.lp.distributions['ubuntu'].getSeries(
+        name_or_version=args.series)
+    if args.proposed:
+        pockets = ('Proposed', 'Updates', 'Release')
+    else:
+        pockets = ('Updates', 'Release')
+    for pocket in pockets:
+        sources = archive.getPublishedSources(source_name=args.source,
+                                              distro_series=series,
+                                              pocket=pocket,
+                                              exact_match=True,
+                                              order_by_date=True,
+                                              status='Published')
+        if sources:
+            print('{} {} {}'.format(args.source,
+                                    sources[0].source_package_version,
+                                    pocket.lower()))
+            return
+
 # -----------------------------------------------------------------------------
 # Main entry point
 
