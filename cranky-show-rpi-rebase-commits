@@ -55,7 +55,9 @@ done < <(git log --format= --name-only "${master_commit}".. | \
 curr=$(dpkg-parsechangelog -l debian.master/changelog -S Version)
 
 # Find the previous master version
-prev=$(grep -m1 -P '^  \[ Ubuntu: \d+' debian.raspi/changelog | \
+# shellcheck disable=SC1091
+. debian/debian.env
+prev=$(grep -m1 -P '^  \[ Ubuntu: \d+' "${DEBIAN}"/changelog | \
            sed -e 's/.* Ubuntu: //' -e 's/ .*//')
 
 curr_commit=$(git log --oneline | \
@@ -75,7 +77,7 @@ while IFS= read -r line ; do
 		commit=${line#* }
 		continue
 	fi
-	if [ ${#commits[@]} -gt 0 ] && [ ${commits[-1]} = "${commit}" ] ; then
+	if [ ${#commits[@]} -gt 0 ] && [ "${commits[-1]}" = "${commit}" ] ; then
 		continue
 	fi
 	if [ "${rpi_files[${line}]:-0}" -eq 1 ] ; then
