@@ -6,24 +6,29 @@
 function usage()
 {
 	cat <<EOF
-Usage: cranky-show-rebase-commits [-h] [OPTS] [-- PATH]
+Usage: cranky-show-rebase-commits [-d] [-h] [OPTS] [-- PATH]
 
-Show the commits introduced by the most recent rebase.
+Show the commits added by the most recent rebase.
 
 Positional arguments:
-  OPTS        Additional options for 'git log'.
-  PATH        Show only commits that touch the provided PATH.
+  OPTS              Additional options for 'git log'.
+  PATH              Show only commits that touch the provided PATH.
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -d, --derivative  Show only commits that touch the derivative's files.
+  -h, --help        Show this help text and exit.
 EOF
 }
 
+derivative=0
 opts=()
 paths=()
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
+		-d|--derivative)
+			derivative=1
+			;;
 		-h|--help)
 			usage
 			exit
@@ -44,6 +49,7 @@ done
 curr=$(dpkg-parsechangelog -l debian.master/changelog -S Version)
 
 # Find the previous master version
+# shellcheck disable=SC1091
 . debian/debian.env
 prev=
 for offset in $(seq 0 9) ; do
@@ -67,4 +73,62 @@ prev_commit=$(git log --oneline | \
 				  grep -m1 -P "^[0-9a-f]{8,} UBUNTU: Ubuntu-${prev}$" | \
 				  awk '{ print $1 }')
 
-git log "${opts[@]}" "${prev_commit}".."${curr_commit}" "${paths[@]}"
+echo "Ubuntu-${prev} to Ubuntu-${curr}"
+echo
+
+if [ ${derivative} -eq 0 ] ; then
+	git log "${opts[@]}" "${prev_commit}".."${curr_commit}" "${paths[@]}"
+
+else
+	master_source=$(dpkg-parsechangelog -l debian.master/changelog -S Source | \
+						sed 's/^linux//')
+	master_subject="UBUNTU: Ubuntu${master_source}-${curr}"
+	master_commit=$(git log --oneline -2000 | \
+						grep -m1 -P "^[0-9a-f]{8,} ${master_subject}$" | \
+						sed 's/ .*//')
+	if [ -z "${master_commit}" ] ; then
+        echo "Failed to determine Ubuntu master commit: ${master_subject}" >&2
+        exit 1
+	fi
+
+	# Collect the list of derivative files
+	declare -A deriv_files
+	while IFS= read -r line ; do
+		deriv_files[${line}]=1
+	done < <(git log --format= --name-only "${master_commit}".. | sort -u)
+
+	# Collect the list of commits that modify the derivative's files
+	commits=()
+	while IFS= read -r line ; do
+		if [ -z "${line}" ] ; then
+			continue
+		fi
+		if [ "${line% *}" = "COMMIT" ] ; then
+			commit=${line#* }
+			continue
+		fi
+		if [ ${#commits[@]} -gt 0 ] && [ "${commits[-1]}" = "${commit}" ] ; then
+			continue
+		fi
+		if [ "${deriv_files[${line}]:-0}" -eq 1 ] ; then
+			commits+=("${commit}")
+		fi
+	done < <(git log --format="COMMIT %h" --name-only \
+				 "${prev_commit}".."${curr_commit}")
+
+	do_echo=1
+	for opt in "${opts[@]}" ; do
+		if [ "${opt}" = "--oneline" ] ; then
+			do_echo=0
+			break
+		fi
+	done
+
+	# List the collected commits
+	for commit in "${commits[@]}" ; do
+		git --no-pager log --color=always "${opts[@]}" "${commit}" -1
+		if [ ${do_echo} -eq 1 ] ; then
+			echo
+		fi
+	done
+fi
