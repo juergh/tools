@@ -47,12 +47,21 @@ else
 	cp "${vmlinuz}" "${boot_dir}"/kernel"${version#v}".img
 fi
 
+if [ -d /lib/firmware/"${release}"/device-tree ] ; then
+	dtb_dir=/lib/firmware/${release}/device-tree
+elif [ -d /usr/lib/linux-image-"${release}" ] ; then
+	dtb_dir=/usr/lib/linux-image-${release}
+else
+	echo "-- Failed to find DTB directory" >&2
+	exit 1
+fi
+
 echo "-- Copy DTBs to ${boot_dir}/"
-find /usr/lib/linux-image-"${release}"/ -name '*.dtb' -print0 | \
+find "${dtb_dir}" -name '*.dtb' -print0 | \
 	xargs -0 -I{} cp '{}' "${boot_dir}"/
 
 echo "-- Copy DTB overlays to ${boot_dir}/overlays/"
-find /usr/lib/linux-image-"${release}"/ -name '*.dtbo' -print0 | \
+find "${dtb_dir}" -name '*.dtbo' -print0 | \
 	xargs -0 -I{} cp '{}' "${boot_dir}"/overlays/
 
 if [ -e "${boot_dir}"/overlay_map.dtb ] ; then
