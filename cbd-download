@@ -15,12 +15,13 @@ Positional arguments:
 
 Optional arguments:
   -h, --help        Show this help text and exit.
-  -o, --output DIR  Directory to download the Debian packages to.
+  -o, --output DIR  Directory to download the Debian packages to. If not
+                    provided, defaults to the current directory.
 EOF
 }
 
 job_id=
-output_dir=
+output_dir=.
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -61,9 +62,6 @@ trap "rm -rf ${tmpd}" EXIT
 # shellcheck disable=SC2029
 ssh cbd tarball "${job_id}" | ( cd "${tmpd}" && tar -xzvf - )
 
-if [ -z "${output_dir}" ] ; then
-	output_dir=.
-else
-	mkdir -p "${output_dir}"
-fi
+# Copy the debs to the provided output directory
+mkdir -p "${output_dir}"
 find "${tmpd}" -name '*.deb' -print0 | xargs -0 -I{} mv '{}' "${output_dir}"
