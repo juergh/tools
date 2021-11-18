@@ -6,21 +6,29 @@
 function usage()
 {
 	cat <<EOF
-Usage: cbd-build [-h] [OPTS]
+Usage: cbd-build [-h] [-o DIR] [OPTS]
 
 Build and download Debian packages using CBD.
 
 Optional arguments:
   -h, --help        Show this help text and exit.
+  -o, --output DIR  Directory to download the Debian packages to. If not
+                    provided, defaults to 'cbdd'.
   OPTS              Additional options for 'git push cbd'.
 EOF
 }
+
+output_dir=cbdd
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
 		-h|--help)
 			usage
 			exit
+			;;
+		-o|--output)
+			shift
+			output_dir=${1}
 			;;
 		*)
 			break
@@ -51,4 +59,4 @@ fi
 
 # Download
 echo "-- Downloading build artifacts to cbdd/"
-cbd-download -o cbdd "${job_id}"
+cbd-download -o "${output_dir}" "${job_id}"
