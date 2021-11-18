@@ -26,10 +26,28 @@ def add_help(*args, **kwargs):
 def add_arg(*args, **kwargs):
     return _dec('arg', *args, **kwargs)
 
+def from_handle(handle):
+    '''
+    Return a (series, source) tuple for the provided handle
+    '''
+    for delim in (':', '/'):
+        if delim in handle:
+            series, source = handle.split(delim)
+            if not source.startswith('linux'):
+                source = 'linux-' + source
+            return series, source
+
+    # No delimiter in handle so assume handle is just the series
+    return handle, 'linux'
+
 # -----------------------------------------------------------------------------
 # Launchpad helpers
 
-def lp_get_sources(lp, source, series, pockets):
+def lp_get_sources(lp, handle, pockets):
+    '''
+    Return the latest source of the provided handle and pockets
+    '''
+    series, source = from_handle(handle)
     lp_archive = lp.archives.getByReference(reference='ubuntu')
     lp_series = lp.distributions['ubuntu'].getSeries(name_or_version=series)
     for pocket in pockets:
@@ -55,8 +73,7 @@ def do_subscribe_bug(args):
     bug.subscribe(person=person)
 
 @add_help('Show latest source package information')
-@add_arg('source', help='Source package name')
-@add_arg('series', help='Ubuntu series name')
+@add_arg('handle', help='Source package handle (series/source)')
 @add_arg('-p', '--proposed', action='store_true', help='Also query the ' +
          'proposed pocket')
 def do_show_source(args):
@@ -64,14 +81,14 @@ def do_show_source(args):
         pockets = ('Proposed', 'Updates', 'Release')
     else:
         pockets = ('Updates', 'Release')
-    source = lp_get_sources(args.lp, args.source, args.series, pockets)
+    source = lp_get_sources(args.lp, args.handle, pockets)
     if source:
-        print('{} {} all {}'.format(args.source, source.source_package_version,
+        print('{} {} all {}'.format(source.source_package_name,
+                                    source.source_package_version,
                                     source.pocket.lower()))
 
 @add_help('Show latest binary packages information')
-@add_arg('source', help='Source package name')
-@add_arg('series', help='Ubuntu series name')
+@add_arg('handle', help='Source package handle (series/source)')
 @add_arg('-p', '--proposed', action='store_true', help='Also query the ' +
          'proposed pocket')
 def do_show_binaries(args):
@@ -79,7 +96,7 @@ def do_show_binaries(args):
         pockets = ('Proposed', 'Updates', 'Release')
     else:
         pockets = ('Updates', 'Release')
-    source = lp_get_sources(args.lp, args.source, args.series, pockets)
+    source = lp_get_sources(args.lp, args.handle, pockets)
     if source:
         for binary in source.getPublishedBinaries():
             arch = binary.distro_arch_series_link.split('/')[-1]
