@@ -43,9 +43,9 @@ def from_handle(handle):
 # -----------------------------------------------------------------------------
 # Launchpad helpers
 
-def lp_get_sources(lp, handle, pockets):
+def lp_get_source(lp, handle, pockets):
     '''
-    Return the latest source of the provided handle and pockets
+    Return the latest source of the provided handle and pocket list
     '''
     series, source = from_handle(handle)
     lp_archive = lp.archives.getByReference(reference='ubuntu')
@@ -60,6 +60,15 @@ def lp_get_sources(lp, handle, pockets):
         if lp_sources:
             return lp_sources[0]
     return None
+
+def lp_get_binaries(lp, handle, pockets):
+    '''
+    Return the binaries of the provided source handle and pocket list
+    '''
+    source = lp_get_source(lp, handle, pockets)
+    if source:
+        return source.getPublishedBinaries()
+    return []
 
 # -----------------------------------------------------------------------------
 # Subcommands
@@ -81,7 +90,7 @@ def do_show_source(args):
         pockets = ('Proposed', 'Updates', 'Release')
     else:
         pockets = ('Updates', 'Release')
-    source = lp_get_sources(args.lp, args.handle, pockets)
+    source = lp_get_source(args.lp, args.handle, pockets)
     if source:
         print('{} {} all {}'.format(source.source_package_name,
                                     source.source_package_version,
@@ -96,14 +105,13 @@ def do_show_binaries(args):
         pockets = ('Proposed', 'Updates', 'Release')
     else:
         pockets = ('Updates', 'Release')
-    source = lp_get_sources(args.lp, args.handle, pockets)
-    if source:
-        for binary in source.getPublishedBinaries():
-            arch = binary.distro_arch_series_link.split('/')[-1]
-            print('{} {} {} {}'.format(binary.binary_package_name,
-                                       binary.binary_package_version,
-                                       arch,
-                                       binary.pocket.lower()))
+    binaries = lp_get_binaries(args.lp, args.handle, pockets)
+    for binary in binaries:
+        arch = binary.distro_arch_series_link.split('/')[-1]
+        print('{} {} {} {}'.format(binary.binary_package_name,
+                                   binary.binary_package_version,
+                                   arch,
+                                   binary.pocket.lower()))
 
 # -----------------------------------------------------------------------------
 # Main entry point
