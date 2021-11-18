@@ -57,8 +57,21 @@ curr=$(dpkg-parsechangelog -l debian.master/changelog -S Version)
 # Find the previous master version
 # shellcheck disable=SC1091
 . debian/debian.env
-prev=$(grep -m1 -P '^  \[ Ubuntu: \d+' "${DEBIAN}"/changelog | \
-           sed -e 's/.* Ubuntu: //' -e 's/ .*//')
+prev=
+for offset in $(seq 0 9) ; do
+	prev=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -o "${offset}" -c 1 | \
+			   grep -m1 -P '^   \[ Ubuntu: \d+' || true)
+	prev=${prev#* Ubuntu: }
+	prev=${prev%% *}
+	if [ -n "${prev}" ] && [ "${prev}" != "${curr}" ] ; then
+		break
+	fi
+done
+if [ -z "${prev}" ] ; then
+	echo "Failed to find previous master version" >&2
+	exit 1
+fi
+
 
 curr_commit=$(git log --oneline | \
                   grep -m1 -P "^[0-9a-f]{8,} UBUNTU: Ubuntu-${curr}$" | \
