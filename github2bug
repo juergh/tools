@@ -36,15 +36,16 @@ def main():
         print('Failed to get Github issue', file=sys.stderr)
         return 1
 
-    bug_title = issue['title']
-    bug_desc = '[From]\n' + issue['html_url'] + '\n\n' + '[Description]\n' + \
-        issue['body']
+    bug_title = '{} (GH: {}/{}/{})'.format(issue['title'], args.user,
+                                           args.repo, args.issue)
+    bug_desc = '[From]\n{}\n\n[Description]\n{}'.format(issue['html_url'],
+                                                        issue['body'])
 
     if args.dry_run:
         print(bug_title)
-        print()
+        print('---')
         print(bug_desc)
-        print()
+        print('---')
         print('Dry-run, exciting...')
         return 0
 
