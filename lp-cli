@@ -33,12 +33,10 @@ def from_handle(handle):
     for delim in (':', '/'):
         if delim in handle:
             series, source = handle.split(delim)
-            if not source.startswith('linux'):
-                source = 'linux-' + source
             return series, source
 
-    # No delimiter in handle so assume handle is just the series
-    return handle, 'linux'
+    print('Invalid handle: {}'.format(handle), file=sys.stderr)
+    sys.exit(2)
 
 # -----------------------------------------------------------------------------
 # Launchpad helpers
