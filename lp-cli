@@ -98,6 +98,8 @@ def do_show_source(args):
 
 @add_help('Show latest binary packages information')
 @add_arg('handle', help='Source package handle (series/source)')
+@add_arg('-a', '--arch', nargs='*', help='Show binaries for the provided ' +
+         'architecure. Can be specified multiple times.')
 @add_arg('-p', '--proposed', action='store_true', help='Also query the ' +
          'proposed pocket')
 def do_show_binaries(args):
@@ -108,10 +110,13 @@ def do_show_binaries(args):
     binaries = lp_get_binaries(args.lp, args.handle, pockets)
     for binary in binaries:
         arch = binary.distro_arch_series_link.split('/')[-1]
-        print('{} {} {} {}'.format(binary.binary_package_name,
-                                   binary.binary_package_version,
-                                   arch,
-                                   binary.pocket.lower()))
+        if args.arch and arch not in args.arch:
+            continue
+        print('{} {} {} {} {}'.format(binary.binary_package_name,
+                                      binary.binary_package_version,
+                                      arch,
+                                      binary.pocket.lower(),
+                                      binary.binaryFileUrls()[0]))
 
 # -----------------------------------------------------------------------------
 # Main entry point
