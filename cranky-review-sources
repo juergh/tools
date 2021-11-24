@@ -139,29 +139,35 @@ function review_src()
 function usage()
 {
 	cat <<EOF
-Usage: cranky review-sources [-h] [POCKET|VERSION]
+Usage: cranky review-sources [-c] [-h] [POCKET|VERSION]
 
 Review the differences between the current kernel source packages and
 previous source packages.
 
 Positional arguments:
-  POCKET       The name of the pocket that contains the previous kernel
-               packages to compare against. If set to 'none', uses the version
-               from the previous changelog entry.
-  VERSION      The version of the previous dsc file to compare against.
+  POCKET         The name of the pocket that contains the previous kernel
+                 packages to compare against. If set to 'none', uses the
+                 version from the previous changelog entry.
+  VERSION        The version of the previous dsc file to compare against.
 
   If neither POCKET nor VERSION is provided, process the existing debdiff.
 
 Optional arguments:
-  -h, --help   Show this help message and exit.
+  -c, --current  Only review the source package built from the current
+                 directory.
+  -h, --help     Show this help message and exit.
 EOF
 }
 
+current=0
 POCKET=
 VERSION=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-c|--current)
+			current=1
+			;;
 		-h|--help)
 			usage
 			exit
@@ -201,5 +207,7 @@ if [ -n "${POCKET}" ] && [ "${POCKET}" != "none" ] ; then
 fi
 
 for src_dir in "${src_dirs[@]}" ; do
-	review_src "${src_dir}"
+	if [ ${current} -eq 0 ] || [ "${src_dir}" = "$(pwd)" ] ; then
+		review_src "${src_dir}"
+	fi
 done
