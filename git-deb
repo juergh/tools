@@ -46,6 +46,7 @@ function set_globals()
 	DERIVATIVE=
 	SRU=0
 	RELEASE=
+	TOKEN=()
 
 	# Figure out what type of repo this is
 	if [ "${repo_name}" = kteam-tools ] ; then
@@ -70,7 +71,13 @@ function set_globals()
 				DERIVATIVE=${DERIVATIVE#-}
 				SRU=1
 				;;
+			linux-firmware)
+				REPO="ubuntu-firmware"
+				TOKEN+=("linux-firmware")
+				SRU=1
+				;;
 			*)
+				# shellcheck disable=SC2034
 				REPO="debian-generic"
 				RELEASE="none"
 				;;
@@ -383,7 +390,7 @@ Optional arguments:
   -r, --release RELEASE     The release to include in the subject prefix.
   -s, --resend              Add RESEND to the subject prefix.
   -t, --token TEXT          Add an additional token [TEXT] to the subject
-                            prefix.
+                            prefix. Can be provided multiple times.
   -ns, --no-sru             Don't include [SRU] in the subject prefix.
   -v, --version NUM         The revision number of the patch to include in the
                             subject prefix.
@@ -401,7 +408,6 @@ DRY_RUN=0
 IN_REPLY_TO=
 ORIG=0
 resend=0
-token=
 version=0
 cmd=
 
@@ -433,7 +439,7 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-t|--token)
 			shift
-			token=${1}
+			TOKEN+=("${1}")
 			;;
 		-ns|--no-sru)
 			SRU=0
@@ -469,9 +475,9 @@ fi
 if [ -n "${RELEASE}" ] && [ "${RELEASE}" != "none" ] ; then
 	SUBJECT_PREFIX="${SUBJECT_PREFIX}][${RELEASE}"
 fi
-if [ -n "${token}" ] ; then
+for token in "${TOKEN[@]}" ; do
 	SUBJECT_PREFIX="${SUBJECT_PREFIX}][${token}"
-fi
+done
 SUBJECT_PREFIX="${SUBJECT_PREFIX}][PATCH"
 if [ "${version}" -gt 0 ] ; then
 	SUBJECT_PREFIX="${SUBJECT_PREFIX} v${version}"
