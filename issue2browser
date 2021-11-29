@@ -1,0 +1,74 @@
+#!/bin/bash
+#
+# Open a JIRA issue and associated LP bug in browser windows
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] ISSUE [ISSUE...]
+
+Open a Jira issue and/or the associated Launchpad bug in a browser window.
+
+Positional arguments:
+  ISSUE  Jira issue. If it's only a number, will be prefixed with 'KERN-'.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+  -j, --jira  Open only the Jira issue.
+  -l, --lp    Open only the associated Launchpad bug.
+EOF
+}
+
+jira=0
+lp=0
+issues=()
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-j|--jira)
+			jira=1
+			;;
+		-l|--lp)
+			lp=1
+			;;
+		*)
+			issues=("${@}")
+			break
+			;;
+	esac
+	shift
+done
+
+if [ ${#issues[@]} -eq 0 ] ; then
+	usage
+	exit 2
+fi
+
+if [ ${jira} -eq 0 ] && [ ${lp} -eq 0 ] ; then
+	jira=1
+	lp=1
+fi
+
+for issue in "${issues[@]}" ; do
+	if [ "${issue//-/}" = "${issue}" ] ; then
+		issue=KERN-${issue}
+	fi
+	if [ ${jira} -eq 1 ] ; then
+		xdg-open https://warthogs.atlassian.net/browse/"${issue}"
+	fi
+	if [ ${lp} -eq 1 ] ; then
+		summary=$(python3 -c "
+from jira import JIRA
+print(JIRA('https://warthogs.atlassian.net').issue('${issue}').fields.summary)
+")
+
+		bug=${summary#*\#}
+		bug=${bug%% *}
+		xdg-open https://bugs.launchpad.net/bugs/"${bug}"
+	fi
+done
