@@ -327,16 +327,6 @@ EOF
 		"${branch}":"${remote_branch}"
 }
 
-do_tag()
-{
-	local version tag
-
-	version=$(dpkg-parsechangelog -S Version)
-	tag=v${version}
-
-	git tag -s -m "${tag}" "${tag}"
-}
-
 do_build_source()
 {
 	local opts
@@ -379,7 +369,6 @@ Supported commands:
   send-patch [COMMIT]       Send the commit COMMIT as a patch email. If COMMIT
                             is not provided, defaults to HEAD.
   request-pull [COMMIT]     Create a pull request.
-  tag                       Tag the HEAD commit.
 
 Optional arguments:
   -c, --cover-letter        Add a cover letter.
@@ -448,7 +437,7 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			version=${1}
 			;;
-		build-source|info|format-patch|send-patch|request-pull|tag)
+		build-source|info|format-patch|send-patch|request-pull)
 			cmd=${1//-/_}
 			;;
 		*)
