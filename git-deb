@@ -26,6 +26,25 @@ function pr_warn()
 	echo -e "\033[33m${*}\033[0m"
 }
 
+function do_colordiff()
+{
+    local line color
+
+    while IFS= read -r line ; do
+        color="\e[0m"  # no color
+        case "${line}" in
+            "-"*)     color="\e[31m"      ;;  # red
+            "+"*)     color="\e[32m"      ;;  # green
+            "!"*)     color="\e[33m"      ;;  # brown
+            "@@"*)    color="\e[36m"      ;;  # cyan
+            "diff "*) color="\e[1m\e[36m" ;;  # bold cyan
+        esac
+        echo -ne "${color}"
+        echo -n "${line}"
+        echo -e "\e[0m"
+    done
+}
+
 function set_globals()
 {
 	local remote repo_name distro
@@ -353,6 +372,41 @@ do_build_source()
 	dpkg-buildpackage "${opts[@]}"
 }
 
+function do_debdiff()
+{
+	local prev_version=${1:-}
+	local version prev_dsc dsc
+
+	version=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Version)
+	prev_dsc=${SOURCE}_${prev_version}.dsc
+	dsc=${SOURCE}_${version}.dsc
+	debdiff=${SOURCE}_${version}.debdiff
+	changes=${SOURCE}_${version}_source.changes
+
+	if [ -n "${prev_version}" ] ; then
+		echo "Generating ../${dsc} ..."
+		debdiff ../"${prev_dsc}" ../"${dsc}" > ../"${debdiff}"
+	else
+		# lsdiff .debdiff
+        echo
+        echo -e "\e[96m*** lsdiff ${debdiff} ***\e[0m"
+        echo
+        lsdiff -s ../"${debdiff}" | do_colordiff
+
+        # filterdiff .debdiff
+        echo
+        echo -e "\e[96m*** filterdiff ${debdiff} ***\e[0m"
+        echo
+        filterdiff ../"${debdiff}" | do_colordiff
+
+        # Content of .changes
+        echo
+        echo -e "\e[96m*** cat ${changes} ***\e[0m"
+        echo
+        cat ../"${changes}"
+	fi
+}
+
 function usage()
 {
 	cat <<EOF
@@ -437,15 +491,14 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			version=${1}
 			;;
-		build-source|info|format-patch|send-patch|request-pull)
+		build-source|info|format-patch|send-patch|request-pull|debdiff)
 			cmd=${1//-/_}
+			shift
+			break
 			;;
 		*)
-			if [ -z "${cmd}" ] ; then
-				pr_error "Unexpected argument: ${1}" >&2
-				exit 1
-			fi
-			break
+			pr_error "Invalid argument: ${1}" >&2
+			exit 2
 			;;
 	esac
 	shift
