@@ -6,6 +6,16 @@
 LINUX_FIXES=/srv/git/linux.fixes
 LINUX_REPO=/srv/git/linux.git
 
+function pr_error()
+{
+	echo -e "\033[31m${*}\033[0m" 1>&2
+}
+
+function pr_warn()
+{
+	echo -e "\033[33m${*}\033[0m"
+}
+
 function find_fixes()
 {
 	local commit=${1} indent=${2:-2}
@@ -15,7 +25,7 @@ function find_fixes()
 
 	for fix in "${fixes[@]}" ; do
 		printf "%0.s " $(seq "${indent}")
-		echo "${fix%% __FIXES__*}"
+		pr_warn "${fix%% __FIXES__*}"
 		find_fixes "${fix%% *}" "$((indent + 2))"
 	done
 }
@@ -56,14 +66,15 @@ function process_commit()
 	else
 		# Check if the commit exists in the current repo
 		if ! git cat-file -e "${commit}^{commit}" 2>/dev/null ; then
-			echo "Error: Commit ${commit} not found" >&2
+			pr_error "Commit ${commit} not found"
 			return
 		fi
 
 		# Try to find an upstream commit reference in the commit message
 		upstream=$(get_upstream_commit "${commit}")
 		if [ -z "${upstream}" ] ; then
-			echo "Error: No upstream commit found for commit ${commit}" >&2
+			subject=$(git log --format="%s" "${commit}" -1)
+			pr_error "No upstream commit found: ${commit} ${subject}"
 			return
 		fi
 
@@ -71,7 +82,7 @@ function process_commit()
 		subject=$(git --git-dir="${LINUX_REPO}" log --format="%s" \
 					  "${upstream}" -1 2>/dev/null || true)
 		if [ -z "${subject}" ] ; then
-			echo "Error: Upstream commit ${commit} not found" >&2
+			pr_error "Upstream commit not found: ${commit}"
 			return
 		fi
 
