@@ -55,12 +55,12 @@ fi
 # Build
 git push cbd -o wait=quiet "${@}" 2>&1 | tee cbd-build.log
 
-job_id=$(grep -m1 '/BUILD-OK' cbd-build.log)
-job_id=${job_id%%/*}
-job_id=${job_id##* }
+job_id=$(grep ' ssh cbd ls ' cbd-build.log)
+job_id=${job_id#* ssh cbd ls }
+job_id=${job_id%% *}
 
 if [ -z "${job_id}" ] ; then
-	echo "No build artifacts to download" >&2
+	echo "Job ID not found" >&2
 	exit 1
 fi
 
