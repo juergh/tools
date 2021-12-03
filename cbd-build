@@ -6,15 +6,17 @@
 function usage()
 {
 	cat <<EOF
-Usage: cbd-build [-h] [-o DIR] [OPTS]
+Usage: cbd-build [-h] [-o DIR] [-- OPTS]
 
 Build and download Debian packages using CBD.
+
+Positional arguments:
+  OPTS              Additional options for 'git push cbd'.
 
 Optional arguments:
   -h, --help        Show this help text and exit.
   -o, --output DIR  Directory to download the Debian packages to. If not
                     provided, defaults to 'cbdd'.
-  OPTS              Additional options for 'git push cbd'.
 EOF
 }
 
@@ -30,8 +32,13 @@ while [ $# -gt 0 ] ; do
 			shift
 			output_dir=${1}
 			;;
-		*)
+		--)
+			shift
 			break
+			;;
+		-*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
 			;;
 	esac
 	shift
