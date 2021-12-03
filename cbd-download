@@ -65,3 +65,15 @@ ssh cbd tarball "${job_id}" | ( cd "${tmpd}" && tar -xzvf - )
 # Copy the debs to the provided output directory
 mkdir -p "${output_dir}"
 find "${tmpd}" -name '*.deb' -print0 | xargs -0 -I{} mv '{}' "${output_dir}"
+
+# Copy the build logs
+if [ -e "${tmpd}"/build.log ] ; then
+	cp "${tmpd}"/build.log "${output_dir}"
+fi
+for log in "${tmpd}"/*/build.log ; do
+	if [ -e "${log}" ] ; then
+		arch=${log%/build.log}
+		arch=${arch##*/}
+		cp "${log}" "${output_dir}"/build_"${arch}".log
+	fi
+done
