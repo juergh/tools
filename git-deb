@@ -137,7 +137,7 @@ function print_globals()
 
 	for var in REPO CHANGELOG SOURCE DERIVATIVE SRU RELEASE DISTRO \
 					COVER_LETTER DRY_RUN IN_REPLY_TO ORIG SUBJECT_PREFIX; do
-		printf "%-14s : %s\n" "${var}" "${!var}"
+		printf "%-14s : %s\n" "${var}" "${!var}" >&2
 	done
 }
 
@@ -343,7 +343,8 @@ Signed-off-by: ${name} <${email}>
 
 EOF
 	git request-pull "${start}" "$(git config "remote.${remote}.url")" \
-		"${branch}":"${remote_branch}"
+		"${branch}":"${remote_branch}" | \
+		sed 's,git+ssh://[^@]*@git,https://git,'
 }
 
 do_build_source()
