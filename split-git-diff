@@ -1,0 +1,59 @@
+#!/bin/bash -eu
+#
+# Split a git diff into individual hunks
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [OUTDIR]
+
+Read a git diff from standard input and split it into individual hunks.
+
+Positional arguments:
+  OUTDIR      Output directory for the individual hungs. If not provided,
+              defaults to the current directory.
+
+Postional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+outdir=
+
+while [ ${#} -ne 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${outdir}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			outdir=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${outdir}" ] ; then
+	outdir=.
+fi
+mkdir -p "${outdir}"
+
+outfile=${outdir}/0000.diff
+rm -f "${outfile}"
+
+num=0
+while IFS= read -r line ; do
+	if [ "${line#diff --git }" != "${line}" ] ; then
+		num=$((num + 1 ))
+		outfile=$(printf "%s/%04d.diff" "${outdir}" "${num}")
+		rm -f "${outfile}"
+	fi
+	echo "${line}" >> "${outfile}"
+done
+
+echo "Wrote ${num} diff hunks to ${outdir}"
