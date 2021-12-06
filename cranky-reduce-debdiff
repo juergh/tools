@@ -1,0 +1,154 @@
+#!/bin/bash -eu
+#
+# Reduce a derivative debdiff by filtering out master changes
+#
+
+function find_master_commit()
+{
+	local changelog=${1} version=${2}
+	local found mversion
+
+	found=0
+	while IFS= read -r line ; do
+		case "${line}" in
+			"linux"*"(${version})"*)
+				found=1
+				;;
+			"  [ Ubuntu: "*)
+				if [ ${found} -eq 1 ] ; then
+					mversion=${line##* Ubuntu: }
+					mversion=${mversion%% *}
+					git log --oneline | \
+						grep -m1 -P "^[0-9a-f]+ UBUNTU: Ubuntu-${mversion}$" | \
+						sed 's/ .*//'
+					return
+				fi
+				;;
+		esac
+	done < <(cat "${changelog}")
+}
+
+function calc_patch_id()
+{
+	local name=${1}
+	local patch_id
+
+	# File modes can be different in a debdiff due to 'reconstruct' and that
+	# screws up patch-id, so filter them out
+	patch_id=$(sed 's/file mode [0-9]*/file mode XXXXXX/' "${name}" | \
+				   git patch-id)
+
+	echo "${patch_id% *}"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h]
+
+Reduce a derivative debdiff by filtering out master changes.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+while [ ${#} -ne 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+if ! [ -e debian/debian.env ] ; then
+	echo "The current repo is not an Ubuntu kernel repo" >&2
+	exit 1
+fi
+
+
+# shellcheck disable=SC1091
+. debian/debian.env
+if [ "${DEBIAN}" = "debian.master" ] ; then
+	echo "The current repo is not a derivative kernel repo"
+	exit
+fi
+
+source=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Version)
+debdiff=../${source}_${version}.debdiff
+reduced_debdiff=../${source}_${version}.reduced.debdiff
+
+if ! [ -e "${debdiff}" ] ; then
+	echo "No such debdiff: ${debdiff}" >&2
+	exit 1
+fi
+
+echo "Reducing debdiff ${debdiff}"
+
+# Pull the previous version from the debdiff
+prev_version=$(head -1 "${debdiff}")
+prev_version=${prev_version%.*}
+prev_version=${prev_version#*_}
+
+# Source and destination prefixes
+prefix=${source}_${version}
+prev_prefix=${source}_${prev_version}
+
+# Find the master commits
+master_commit=$(find_master_commit "${DEBIAN}"/changelog "${version}")
+master_prev_commit=$(find_master_commit "${DEBIAN}"/changelog "${prev_version}")
+
+echo "Creating master diff hunks ..."
+rm -rf .master.d
+git diff --src-prefix=___AAA___/ --dst-prefix=___BBB___/ \
+	"${master_prev_commit}" "${master_commit}" | ~/git/juergh/tools/split-git-diff .master.d
+
+# Fix the source destination prefixes
+for f in .master.d/* ; do
+	if grep -m1 -q '^--- /dev/null' "${f}" ; then
+		# Added
+		aaa=${prefix}
+		bbb=${prefix}
+	else
+		# Modified
+		aaa=${prev_prefix}
+		bbb=${prefix}
+	fi
+	sed -i -e "s/___AAA___/${aaa}/g" -e "s/___BBB___/${bbb}/g" "${f}"
+done
+
+echo "Creating debdiff diff hunks ..."
+rm -rf .debdiff.d
+~/git/juergh/tools/split-git-diff .debdiff.d < "${debdiff}"
+
+# Collect patch IDs from debdiff hunks
+declare -A hunks=()
+for f in .debdiff.d/*.diff ; do
+	patch_id=$(calc_patch_id "${f}")
+	if [ -n "${patch_id}" ] ; then
+		hunks[${patch_id}]=${f}
+	fi
+done
+
+# Collect patch IDs from master diff hunks and filter out any debdiff hunk
+# matches
+for f in .master.d/*.diff ; do
+	patch_id=$(calc_patch_id "${f}")
+	if [ -n "${patch_id}" ] ; then
+		hunk=${hunks[${patch_id}]:-}
+		if [ -n "${hunk}" ] ; then
+			mv "${hunk}" "${hunk}".master
+		fi
+	fi
+done
+
+# Assemble the reduced debdiff
+cat .debdiff.d/*.diff > "${reduced_debdiff}"
+echo "Wrote reduced debdiff ${reduced_debdiff}"
