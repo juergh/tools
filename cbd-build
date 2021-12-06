@@ -16,11 +16,11 @@ Positional arguments:
 Optional arguments:
   -h, --help        Show this help text and exit.
   -o, --output DIR  Directory to download the Debian packages to. If not
-                    provided, defaults to 'cbdd'.
+                    provided, defaults to 'cbdd/<git_hash>'.
 EOF
 }
 
-output_dir=cbdd
+output_dir=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -62,6 +62,13 @@ job_id=${job_id%% *}
 if [ -z "${job_id}" ] ; then
 	echo "Job ID not found" >&2
 	exit 1
+fi
+
+if [ -z "${output_dir}" ] ; then
+	git_hash=${job_id%-*}
+	git_hash=${git_hash##*-}
+	output_dir=cbdd/${git_hash}
+	rm -rf "${output_dir}"
 fi
 
 # Download
