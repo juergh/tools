@@ -48,7 +48,7 @@ done
 if ! git remote | grep -q '^cbd$' ; then
 	# shellcheck disable=SC1091
 	. debian/debian.env
-	series=$(dpkg-parsechangelog "${DEBIAN}"/changelog -S Distribution)
+	series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
 	git remote add cbd cbd:"${series}".git
 fi
 
