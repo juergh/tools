@@ -11,7 +11,7 @@ Usage: $(basename "${0}") [-h] [OUTDIR]
 Read a git diff from standard input and split it into individual hunks.
 
 Positional arguments:
-  OUTDIR      Output directory for the individual hungs. If not provided,
+  OUTDIR      Output directory for the individual hunks. If not provided,
               defaults to the current directory.
 
 Postional arguments:
@@ -47,13 +47,25 @@ outfile=${outdir}/0000.diff
 rm -f "${outfile}"
 
 num=0
+is_header=0
 while IFS= read -r line ; do
 	if [ "${line#diff --git }" != "${line}" ] ; then
+		# First line of a header
+		is_header=1
+		header=()
+	fi
+	if [ "${line#@@ }" != "${line}" ] ; then
+		# First line of a hunk
+		is_header=0
 		num=$((num + 1 ))
 		outfile=$(printf "%s/%04d.diff" "${outdir}" "${num}")
-		rm -f "${outfile}"
+		printf "%s\n" "${header[@]}" > "${outfile}"
 	fi
-	echo "${line}" >> "${outfile}"
+	if [ ${is_header} -eq 1 ] ; then
+		header+=("${line}")
+	else
+		echo "${line}" >> "${outfile}"
+	fi
 done
 
 echo "Wrote ${num} diff hunks to ${outdir}"
