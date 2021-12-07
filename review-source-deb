@@ -71,7 +71,7 @@ if ! [ -e ../"${debdiff}" ] ; then
 		( cd .. && pull-lp-source -d "${src}" "${prev_version}" )
 	fi
 
-	debdiff ../"${prev_dsc}" ../"${dsc}" > ../"${debdiff}"
+	debdiff ../"${prev_dsc}" ../"${dsc}" > ../"${debdiff}" || true
 fi
 
 review-debdiff ../"${debdiff}"
