@@ -38,6 +38,16 @@ def from_handle(handle):
     print('Invalid handle: {}'.format(handle), file=sys.stderr)
     sys.exit(2)
 
+def pocket_list(pocket, all_pockets):
+    '''
+    Return a list of pockets
+    '''
+    if pocket:
+        return [args.pocket.capitalize()]
+    if all_pockets:
+        return ['Proposed', 'Updates', 'Release']
+    return ['Updates', 'Release']
+
 # -----------------------------------------------------------------------------
 # Launchpad helpers
 
@@ -81,13 +91,11 @@ def do_subscribe_bug(args):
 
 @add_help('Show latest source package information')
 @add_arg('handle', help='Source package handle (series/source)')
-@add_arg('-p', '--proposed', action='store_true', help='Also query the ' +
-         'proposed pocket')
+@add_arg('-i', '--all', action='store_true', help='Query all pockets, ' +
+         'including proposed')
+@add_arg('-p', '--pocket', help='Query only the specified pocket')
 def do_show_source(args):
-    if args.proposed:
-        pockets = ('Proposed', 'Updates', 'Release')
-    else:
-        pockets = ('Updates', 'Release')
+    pockets = pocket_list(args.pocket, args.all)
     source = lp_get_source(args.lp, args.handle, pockets)
     if source:
         print('{} {} all {}'.format(source.source_package_name,
@@ -98,13 +106,11 @@ def do_show_source(args):
 @add_arg('handle', help='Source package handle (series/source)')
 @add_arg('-a', '--arch', nargs='*', help='Show binaries for the provided ' +
          'architecure. Can be specified multiple times.')
-@add_arg('-p', '--proposed', action='store_true', help='Also query the ' +
-         'proposed pocket')
+@add_arg('-i', '--all', action='store_true', help='Query all pockets, ' +
+         'including proposed')
+@add_arg('-p', '--pocket', help='Query only the specified pocket')
 def do_show_binaries(args):
-    if args.proposed:
-        pockets = ('Proposed', 'Updates', 'Release')
-    else:
-        pockets = ('Updates', 'Release')
+    pockets = pocket_list(args.pocket, args.all)
     binaries = lp_get_binaries(args.lp, args.handle, pockets)
     for binary in binaries:
         arch = binary.distro_arch_series_link.split('/')[-1]
