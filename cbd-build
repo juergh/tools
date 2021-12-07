@@ -72,5 +72,5 @@ if [ -z "${output_dir}" ] ; then
 fi
 
 # Download
-echo "-- Downloading build artifacts to cbdd/"
+echo "-- Downloading build artifacts to ${output_dir}"
 cbd-download -o "${output_dir}" "${job_id}"
