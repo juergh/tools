@@ -6,12 +6,13 @@
 function usage()
 {
 	cat <<EOF
-Usage: review-source-deb [-h]
+Usage: review-source-deb [-h] [-r]
 
 Review a debian source package.
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -h, --help      Show this help text and exit.
+  -r, --recreate  Recreate the debdiff.
 EOF
 }
 
