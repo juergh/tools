@@ -1,4 +1,7 @@
 #!/bin/bash -eu
+#
+# Review a debdiff file
+#
 
 function do_colordiff()
 {
@@ -18,7 +21,7 @@ function do_colordiff()
 			"@@"*)
 				echo -e "\e[36m${line}\e[0m"
 				;;
-			"diff --git "*)
+			"diff "*)
 				echo -e "\e[1m\e[36m${line}\e[0m"
 				;;
 			*)
@@ -28,29 +31,68 @@ function do_colordiff()
 	done
 }
 
-debdiff=$1
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] DEBDIFF
 
-src=${debdiff%_*}
+Review a debdiff file.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+debdiff=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${debdiff}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			debdiff=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${debdiff}" ] ; then
+	usage
+	exit 2
+fi
+
+if ! [ -e "${debdiff}" ] ; then
+	echo "No such file: ${debdiff}" >&2
+	exit 1
+fi
+
+source=${debdiff%_*}
 changes=${debdiff%.debdiff}_source.changes
 
 # lsdiff .debdiff
 echo
-echo -e "\e[96m*** ${src} [1/3]: lsdiff ${debdiff} ***\e[0m"
+echo -e "\e[96m*** [1/3] lsdiff -s ${debdiff} ***\e[0m"
 echo
 lsdiff -s "${debdiff}" | do_colordiff
 
 # filterdiff .debdiff
 echo
-echo -e "\e[96m*** ${src} [2/3]: filterdiff ${debdiff} ***\e[0m"
+echo -e "\e[96m*** [2/3] filterdiff ${debdiff} ***\e[0m"
 echo
 filterdiff -x '*/abi/*' "${debdiff}" | do_colordiff
 
 # Content of .changes
 echo
-echo -e "\e[96m*** ${src} [3/3]: cat ${changes} ***\e[0m"
+echo -e "\e[96m*** [3/3] cat ${changes} ***\e[0m"
 echo
 if [ -e "${changes}" ] ; then
 	cat "${changes}"
 else
-	echo "No such .changes file: ${changes}"
+	echo "No such file: ${changes}"
 fi
