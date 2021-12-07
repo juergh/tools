@@ -6,7 +6,7 @@
 function usage()
 {
 	cat <<EOF
-Usage: build-source-deb [-h] [-o] [-r RELEASE]
+Usage: build-source-deb [-h] [-o] [-r RELEASE] [-v VERSION]
 
 Build a Debian source package in a schroot.
 
@@ -14,11 +14,13 @@ Optional arguments:
   -h, --help             Show this help text and exit.
   -o, --orig             Include the original source tarball.
   -r, --release RELEASE  Use RELEASE rather than querying the changelog.
+  -v, --version VERSION  Previous source package version.
 EOF
 }
 
 orig=0
 release=
+opts=()
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -32,6 +34,10 @@ while [ ${#} -gt 0 ] ; do
 		-r|--release)
 			shift
 			release=${1}
+			;;
+		-v|--version)
+			shift
+			opts+=("-v${1}")
 			;;
 		*)
 			echo "Invalid argument: ${1}" 2>/dev/null
@@ -56,7 +62,7 @@ fi
 
 run-chroot "${release}" -- fakeroot ./debian/rules clean
 
-opts=(
+opts+=(
 	"-S"   # Build sources
 	"-i"   # Exclude revision control files and directories (diff)
 	"-I"   # Exclude revision control files and directories (tarball)
