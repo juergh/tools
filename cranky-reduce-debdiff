@@ -18,9 +18,7 @@ function find_master_commit()
 				if [ ${found} -eq 1 ] ; then
 					mversion=${line##* Ubuntu: }
 					mversion=${mversion%% *}
-					git log --oneline | \
-						grep -m1 -P "^[0-9a-f]+ UBUNTU: Ubuntu-${mversion}$" | \
-						sed 's/ .*//'
+					git log --oneline | grep -m1 -P "^[0-9a-f]+ UBUNTU: Ubuntu-${mversion}$"
 					return
 				fi
 				;;
@@ -102,13 +100,14 @@ prefix=${source}_${version}
 prev_prefix=${source}_${prev_version}
 
 # Find the master commits
-master_commit=$(find_master_commit "${DEBIAN}"/changelog "${version}")
-master_prev_commit=$(find_master_commit "${DEBIAN}"/changelog "${prev_version}")
+master=$(find_master_commit "${DEBIAN}"/changelog "${version}")
+master_prev=$(find_master_commit "${DEBIAN}"/changelog "${prev_version}")
 
-echo "Creating master diff hunks ..."
+# Create master diff hunks
+echo "Creating master diff hunks for ${master_prev##* }..${master##* }"
 rm -rf .master.d
 git diff --src-prefix=___AAA___/ --dst-prefix=___BBB___/ \
-	"${master_prev_commit}" "${master_commit}" | ~/git/juergh/tools/split-git-diff .master.d
+	"${master_prev%% *}" "${master%% *}" | ~/git/juergh/tools/split-git-diff .master.d
 
 # Fix the source destination prefixes
 for f in .master.d/* ; do
@@ -124,30 +123,41 @@ for f in .master.d/* ; do
 	sed -i -e "s/___AAA___/${aaa}/g" -e "s/___BBB___/${bbb}/g" "${f}"
 done
 
-echo "Creating debdiff diff hunks ..."
+# Create debdiff diff hunks
+echo "Creating debdiff diff hunks"
 rm -rf .debdiff.d
 ~/git/juergh/tools/split-git-diff .debdiff.d < "${debdiff}"
 
-# Collect patch IDs from debdiff hunks
-declare -A hunks=()
-for f in .debdiff.d/*.diff ; do
-	patch_id=$(calc_patch_id "${f}")
-	if [ -n "${patch_id}" ] ; then
-		hunks[${patch_id}]=${f}
+# Collect patch IDs from master hunks
+master_patch_ids=()
+for name in .master.d/* ; do
+	patch_id=$(calc_patch_id "${name}")
+	if [ -z "${patch_id}" ] ; then
+		continue
 	fi
+	master_patch_ids+=("${patch_id}")
 done
 
-# Collect patch IDs from master diff hunks and filter out any debdiff hunk
-# matches
-for f in .master.d/*.diff ; do
-	patch_id=$(calc_patch_id "${f}")
-	if [ -n "${patch_id}" ] ; then
-		hunk=${hunks[${patch_id}]:-}
-		if [ -n "${hunk}" ] ; then
-			mv "${hunk}" "${hunk}".master
-		fi
-	fi
+# Collect patch IDs from debdiff hunks
+declare -A debdiffs=()
+for name in .debdiff.d/* ; do
+	patch_id=$(calc_patch_id "${name}")
+	debdiffs[${name}]=${patch_id}
 done
+
+# Remove matching debdiff hunks
+count=0
+for master_patch_id in "${master_patch_ids[@]}" ; do
+	for name in .debdiff.d/* ; do
+		patch_id=${debdiffs[${name}]}
+		if [ "${patch_id}" = "${master_patch_id}" ] ; then
+			rm "${name}"
+			count=$((count + 1))
+			break
+		fi
+	done
+done
+echo "Removed ${count} matching master hunks"
 
 # Assemble the reduced debdiff
 cat .debdiff.d/*.diff > "${reduced_debdiff}"
