@@ -3,6 +3,19 @@
 # Reduce a derivative debdiff by filtering out master changes
 #
 
+function out()
+{
+    local rc=${?}
+
+    trap - EXIT INT TERM HUP
+
+    if [ "${rc}" -ne 0 ] ; then
+        echo "Script failed" >&2
+    fi
+
+    exit "${rc}"
+}
+
 function find_master_commit()
 {
 	local changelog=${1} version=${2}
@@ -78,6 +91,8 @@ if [ "${DEBIAN}" = "debian.master" ] ; then
 	exit
 fi
 
+trap out EXIT INT TERM HUP
+
 source=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
 version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Version)
 debdiff=../${source}_${version}.debdiff
@@ -95,21 +110,20 @@ prev_version=$(head -1 "${debdiff}")
 prev_version=${prev_version%.*}
 prev_version=${prev_version#*_}
 
-# Source and destination prefixes
-prefix=${source}_${version}
-prev_prefix=${source}_${prev_version}
-
 # Find the master commits
 master=$(find_master_commit "${DEBIAN}"/changelog "${version}")
 master_prev=$(find_master_commit "${DEBIAN}"/changelog "${prev_version}")
 
 # Create master diff hunks
-echo "Creating master diff hunks for ${master_prev##* }..${master##* }"
+echo "Creating master diff hunks for ${master_prev%% *}..${master%% *}" \
+	 "(${master_prev##* }..${master##* })"
 rm -rf .master.d
 git diff --src-prefix=___AAA___/ --dst-prefix=___BBB___/ \
-	"${master_prev%% *}" "${master%% *}" | ~/git/juergh/tools/split-git-diff .master.d
+	"${master_prev%% *}" "${master%% *}" | split-git-diff .master.d
 
-# Fix the source destination prefixes
+# Fix the source and destination prefixes
+prefix=${source}_${version}
+prev_prefix=${source}_${prev_version}
 for f in .master.d/* ; do
 	if grep -m1 -q '^--- /dev/null' "${f}" ; then
 		# Added
@@ -126,7 +140,7 @@ done
 # Create debdiff diff hunks
 echo "Creating debdiff diff hunks"
 rm -rf .debdiff.d
-~/git/juergh/tools/split-git-diff .debdiff.d < "${debdiff}"
+split-git-diff .debdiff.d < "${debdiff}"
 
 # Collect patch IDs from master hunks
 master_patch_ids=()
