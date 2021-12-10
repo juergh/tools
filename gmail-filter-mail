@@ -24,7 +24,7 @@ function move_mail()
 	cat <<__EOF__
 
 print('')
-print("-- Move mail: ${op}")
+print('-- Move mail: ${op//\'/\\\'}')
 messages = account['${src}']:${op}
 move_messages(messages, account['${dst}'])
 __EOF__
@@ -86,10 +86,10 @@ function usage()
 	cat <<EOF
 Usage: gmail-filter-mail [-a] [-d] [-h] [-q] USERNAME
 
-Filter gmail mails using imapfilter.
+Filter Gmail mail using imapfilter.
 
 Positional arguments:
-  USERNAME       The gmail username
+  USERNAME       Gmail username.
 
 Optional arguments:
   -d, --dry-run  Dump the imapfilter config file but do not run it.
@@ -150,11 +150,9 @@ trap out EXIT INT TERM HUP
 cwd=$(dirname "$(readlink -e "${0}")")
 CONFIG=$(mktemp)
 
-# Pull in the library
-cat "${cwd}/config/imapfilter/lib.lua" > "${CONFIG}"
-
-# Common/global options
-cat <<EOF >>"${CONFIG}"
+# Create the imapfilter config file
+cat <<EOF >"${CONFIG}"
+$(cat "${cwd}/config/imapfilter/lib.lua")
 
 options.timeout = 120
 options.subscribe = true
@@ -168,10 +166,11 @@ account = IMAP {
    password = show_pass('google.com/${username}'),
    ssl = 'tls1.2',
 }
-EOF
 
-# Per-account config options
-"${filter}" >> "${CONFIG}"
+$("${filter}")
+
+print('')
+EOF
 
 # Is this a dry-run?
 if [ "${dry_run}" -eq 1 ] ; then
