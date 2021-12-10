@@ -54,6 +54,17 @@ for folder, sender in pairs(noise) do
    messages = account[folder]:contain_from(sender)
    move_messages(messages, account[folder .. '/noise'])
 end
+
+-- Mark APPLIED threads as read
+-- mail_dirs = {
+--    'Mailing List/Canonical/canonical-kernel-team',
+--    'Mailing List/Ubuntu/kernel-team',
+-- }
+-- for _, mail_dir in ipairs(mail_dirs) do
+--    results = account[mail_dir]:is_unseen():contain_subject('APPLIED')
+--    results = find_related(results)
+--    results:mark_seen()
+-- end
 __EOF__
 }
 
