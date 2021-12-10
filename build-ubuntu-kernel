@@ -1,0 +1,58 @@
+#!/bin/bash -eu
+#
+# Build an Ubuntu kernel from a git repo
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-a ARCH] [-h] TARGET [TARGET...]
+
+Build an Ubuntu kernel from a git repo.
+
+Positional arguments:
+  TARGET           Debian build target (build, binary, build-generic, ...)
+
+Optional arguments:
+  -a, --arch ARCH  Architecture of the kernel to build.
+  -h, --help       Show this help text and exit.
+EOF
+}
+
+targets=()
+arch=$(dpkg-architecture -q DEB_BUILD_ARCH)
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-a|--arch)
+			shift
+			arch=${1}
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			targets=("${@}")
+			break
+			;;
+	esac
+	shift
+done
+
+if [ ${#targets[@]} -eq 0 ] ; then
+	usage
+	exit 2
+fi
+
+# shellcheck disable=SC1091
+. debian/debian.env
+series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
+
+run-chroot "${series}" -- <<EOF
+export \$(dpkg-architecture -a "${arch}")
+if [ "\${DEB_BUILD_ARCH}" != "\${DEB_HOST_ARCH}" ] ; then
+  export CROSS_COMPILE=\${DEB_HOST_GNU_TYPE}-
+fi
+fakeroot debian/rules "${targets[@]}"
+EOF
