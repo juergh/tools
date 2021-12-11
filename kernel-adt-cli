@@ -551,7 +551,9 @@ class AutoPkgTest():
 @add_arg('-t', '--tests', action='store_true',
          help='Show running and queued test status.')
 @add_arg('-f', '--format', default='n', help=table_format_help('n'))
-def do_results(args, results):
+def do_results(args):
+    results = ADTResults(args.series, args.source, debug=args.debug,
+                         ppa=args.ppa)
     if args.version:
         found = False
         for version in results.results:
@@ -605,10 +607,12 @@ def do_results(args, results):
 @add_arg('-f', '--format', default='r', help=table_format_help('r'))
 @add_arg('-t', '--trigger', action='append', help='Add an additional ' +
          'trigger. Can be provided multiple times.')
-def do_retry(args, results):
+def do_retry(args):
     package = None
     arch = None
     status = None
+    results = ADTResults(args.series, args.source, debug=args.debug,
+                         ppa=args.ppa)
     if args.status_package.isupper() or args.status_package == '----':
         status = args.status_package
     elif '/' in args.status_package:
@@ -660,11 +664,15 @@ def do_retry(args, results):
             print('Failed ({})'.format(resp.status_code))
 
 @add_help('Show kernel versions.')
-def do_versions(_args, results):
-    print(' '.join(results.versions))
+def do_versions(args):
+    results = ADTResults(args.series, args.source, debug=args.debug,
+                         ppa=args.ppa)
+    print('\n'.join(results.versions))
 
 @add_help('Show running and queued autopkgtest tests.')
-def do_tests(args, results):
+def do_tests(args):
+    results = ADTResults(args.series, args.source, debug=args.debug,
+                         ppa=args.ppa)
     apt = AutoPkgTest(results.series, results.trigger, debug=args.debug)
     tests_list = apt.get_tests()
 
@@ -708,10 +716,11 @@ def main():
     series, source = handle_to_series_source(args.handle)
     if not source.startswith('linux-meta'):
         source = source.replace('linux', 'linux-meta')
-    results = ADTResults(series, source, debug=args.debug, ppa=args.ppa)
+    args.series = series
+    args.source = source
 
     # Call the subcommand
-    args.func(args, results)
+    args.func(args)
 
 if __name__ == '__main__':
     main()
