@@ -109,6 +109,9 @@ def print_table(data, fmt=''):
     '''
     Pretty print a table
     '''
+    if not data:
+        return
+
     fmt_map = {
         'a': ['ADT URL', 'adt_url'],
         'f': ['Artifacts URL', 'artifacts_url'],
@@ -119,34 +122,32 @@ def print_table(data, fmt=''):
         't': ['Test', 'test_status'],
     }
 
-    if not data:
-        return
-
-    table = prettytable.PrettyTable()
-
+    # Assemble the table header
     header = ['Package', 'Arch']
-    if isinstance(data[0], list):
-        for result in data[0]:
-            header.append(result['source_version'])
-    else:
-        header.append('Status')
-    header.extend([fmt_map[f][0] for f in fmt])
+    results = data[0]
+    if not isinstance(results, list):
+        results = [data[0]]
+    for result in results:
+        header.append(result['source_version'])
+        header.extend([fmt_map[f][0] for f in fmt])
+
+    # Create the table
+    table = prettytable.PrettyTable()
     table.field_names = header
 
-    for test in data:
-        if isinstance(test, list):
-            row = [test[-1]['package'], test[-1]['arch']]
-            for result in test:
-                row.append(colored_status(result['status']))
-            for f in fmt:
-                d = test[-1].get(fmt_map[f][1])
-                if d is None:
-                    d = '----'
-                row.append(d)
-        else:
-            row = [test['package'], test['arch'], test['status']]
+    # Populate the table rows
+    for results in data:
+        if not isinstance(results, list):
+            results = [results]
+        row = [results[-1]['package'], results[-1]['arch']]
+        for result in results:
+            row.append(colored_status(result['status']))
+        for f in fmt:
+            d = result[-1].get(fmt_map[f][1])
+            row.append('----' if d is None else d)
         table.add_row(row)
 
+    # Print the table
     table.align = 'l'
     print(table)
 
