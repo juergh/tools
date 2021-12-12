@@ -5,7 +5,9 @@
 
 import argparse
 import json
+import lzma
 import sys
+import yaml
 
 import natsort
 import prettytable
@@ -87,6 +89,7 @@ def colored_status(status):
     red = '\033[38;5;196m'
     color = {
         'GOOD': green,
+        'PASS': green,
         'NONE': green,
         'RUN': yellow,
         'MISS': yellow,
@@ -96,6 +99,7 @@ def colored_status(status):
         'NEVER': lightgreen,
         'REGR': tomato,
         'REGN': red,
+        'REGRESSION': red,
         'RUNNING': lightgreen,
         'QUEUED': yellow,
     }
@@ -103,12 +107,14 @@ def colored_status(status):
 
 def print_table(data, fmt=''):
     '''
-    Prtty print a table
+    Pretty print a table
     '''
     fmt_map = {
-        'n': ['Annotation', 'annotation'],
-        'l': ['Log URL ', 'log_url'],
+        'a': ['ADT URL', 'adt_url'],
         'f': ['Artifacts URL', 'artifacts_url'],
+        'l': ['Log URL ', 'log_url'],
+        'n': ['Annotation', 'annotation'],
+        'p': ['Autopkgtest URL', 'apt_url'],
         'r': ['Retry URL', 'retry_url'],
         't': ['Test', 'test_status'],
     }
@@ -142,9 +148,9 @@ def print_table(data, fmt=''):
 
 def table_format_help(default):
     return ('Table formatter string. Specifies additional columns to ' +
-            'display: a(n)otation, (l)og, arti(f)acts, (r)etry_url, ' +
-            '(t)est_status. If not provided, defaults to \'' + default +
-            '\'.')
+            'display: (a)dt_url, arti(f)acts, (l)og_url, a(n)otation, ' +
+            '(r)etry_url, (t)est_status. If not provided, defaults to ' +
+            '\'' + default + '\'.')
 
 def to_list(data, default=None):
     '''
@@ -156,6 +162,24 @@ def to_list(data, default=None):
                 return d
             return [d]
     return []
+
+def all_keys(data):
+    '''
+    Return lists of all versions, packages and architectures for the given dict
+    '''
+    versions = {}
+    packages = {}
+    arches = {}
+    for l1 in natsort.natsorted(data):
+        versions[l1] = 1
+        for l2 in natsort.natsorted(data[l1]):
+            packages[l2] = 1
+            for l3 in natsort.natsorted(data[l1][l2]):
+                arches[l3] = 1
+
+    return (natsort.natsorted(list(versions)),
+            natsort.natsorted(list(packages)),
+            natsort.natsorted(list(arches)))
 
 # -----------------------------------------------------------------------------
 # ADT test results class
@@ -323,8 +347,8 @@ class ADTResults():
         if not self.timestamp:
             error('Unable to find ADT matrix update timestamp')
 
-    def get_results(self, version=None, package=None, arch=None,
-                    status=None, fmt='list'):
+    def get_results(self, version=None, package=None, arch=None, status=None,
+                    fmt='list'):
         '''
         Return the results for the provided selectors
         '''
@@ -540,7 +564,108 @@ class AutoPkgTest():
         return resp
 
 # -----------------------------------------------------------------------------
+# Migration excuses class
+
+class MigrationExcuses():
+    def __init__(self, series, source, debug=False):
+        self.series = series
+        self.source = source
+        self.debug = debug
+
+        self.excuses_url = 'http://people.canonical.com/~ubuntu-archive/' + \
+            'proposed-migration/' + self.series + '/update_excuses.yaml.xz'
+        self.excuses_url_html = 'http://people.canonical.com/~ubuntu-archive/' + \
+            'proposed-migration/' + self.series + '/update_excuses.html'
+
+        self.excuses = None   # Migration excuses
+        self.versions = None  # List of all kernel versions
+        self.packages = None  # List of all packages
+        self.arches = None    # List of all architectures
+
+        self._get_excuses()
+
+    def _get_excuses(self):
+        '''
+        Get -proposed migration excuses
+        '''
+        # Get excuses
+        resp = requests.get(self.excuses_url)
+        if resp.status_code != 200:
+            error(self.excuses_url)
+            error('Failed to get excuses ({})'.format(resp.status_code))
+            sys.exit(1)
+
+        excuses = yaml.safe_load(lzma.decompress(resp.content))
+        sources = [e for e in excuses['sources'] if e['item-name'] == self.source]
+        if not sources:
+            return
+
+        # Rearrange the migration excuses
+        # self.excuses: version -> package -> arch -> [excuses details]
+        self.excuses = {}
+        for source in sources:
+            version = source['new-version']
+            self.excuses[version] = {}
+            for package, arches in source['policy_info']['autopkgtest'].items():
+                if not isinstance(arches, dict):
+                    continue
+                package_name, package_version = package.split('/')
+                for arch, details in arches.items():
+                    if package_name not in self.excuses[version]:
+                        self.excuses[version][package_name] = {}
+                    self.excuses[version][package_name][arch] = {
+                        'series': self.series,
+                        'source': self.source,
+                        'source_version': version,
+                        'package': package_name,
+                        'version': package_version,
+                        'arch': arch,
+                        'status': details[0],
+                        'log_url': details[1],
+                        'apt_url': details[2],
+                        'retry_url': details[4],
+                    }
+
+        # Get the lists of all versions, packages and architectures
+        self.versions, self.packages, self.arches = all_keys(self.excuses)
+
+        if self.debug:
+            print('+++ Rearranged excuses:')
+            print(json.dumps(self.excuses, indent=4, sort_keys=True))
+
+    def get_excuses(self):
+        '''
+        Return the list of excuses
+        '''
+        excuses_list = []
+        for package in self.packages:
+            for arch in self.arches:
+                row = []
+                empty_row = True
+                for version in self.versions:
+                    excuse = self.excuses[version].get(package, {}).get(arch)
+                    row.append(excuse)
+                    if excuse:
+                        empty_row = False
+                if not empty_row:
+                    excuses_list.append(row)
+
+        if self.debug:
+            print('+++ Selected excuses:')
+            print(json.dumps(excuses_list, indent=4, sort_keys=True))
+
+        return excuses_list
+
+# -----------------------------------------------------------------------------
 # Subcommands
+
+@add_help('Show migration excuses.')
+@add_arg('-f', '--format', default='r', help=table_format_help('r'))
+def do_excuses(args):
+    excuses = MigrationExcuses(args.series, args.source, debug=args.debug)
+    excuses_list = excuses.get_excuses()
+    print_header(excuses.excuses_url_html, excuses.series, excuses.source)
+    print_table(excuses_list, fmt=args.format)
 
 @add_help('Show ADT test results.')
 @add_arg('version', nargs='?',
