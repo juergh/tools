@@ -138,7 +138,11 @@ def print_table(data, fmt=''):
             row = [test[-1]['package'], test[-1]['arch']]
             for result in test:
                 row.append(colored_status(result['status']))
-            row.extend([test[-1].get(fmt_map[f][1], '') for f in fmt])
+            for f in fmt:
+                d = test[-1].get(fmt_map[f][1])
+                if d is None:
+                    d = '----'
+                row.append(d)
         else:
             row = [test['package'], test['arch'], test['status']]
         table.add_row(row)
@@ -147,10 +151,12 @@ def print_table(data, fmt=''):
     print(table)
 
 def table_format_help(default):
-    return ('Table formatter string. Specifies additional columns to ' +
-            'display: (a)dt_url, arti(f)acts, (l)og_url, a(n)otation, ' +
-            '(r)etry_url, (t)est_status. If not provided, defaults to ' +
-            '\'' + default + '\'.')
+    help_text = 'Table formatter string. Specifies additional columns to ' + \
+        'display: (a)dt_url, arti(f)acts, (l)og_url, a(n)otation, ' + \
+        'auto(p)ackagetest_url, (r)etry_url, (t)est_status.'
+    if default != '':
+        help_text += ' If not provided, defaults to \'' + default + '\'.'
+    return help_text
 
 def to_list(data, default=None):
     '''
@@ -660,7 +666,7 @@ class MigrationExcuses():
 # Subcommands
 
 @add_help('Show migration excuses.')
-@add_arg('-f', '--format', default='r', help=table_format_help('r'))
+@add_arg('-f', '--format', default='', help=table_format_help(''))
 def do_excuses(args):
     excuses = MigrationExcuses(args.series, args.source, debug=args.debug)
     excuses_list = excuses.get_excuses()
