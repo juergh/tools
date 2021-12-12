@@ -188,6 +188,30 @@ def all_keys(data):
             natsort.natsorted(list(packages)),
             natsort.natsorted(list(arches)))
 
+def retry_tests(retry_list):
+    '''
+    Retry the provided list of tests
+    '''
+    # Get the auth cookies from the browsers
+    cookies = get_browser_cookies()
+
+    # Retry the tests
+    print()
+    for result in retry_list:
+        print('Retry {}/{} ... '.format(result['package'],
+                                        result['arch']), end='', flush=True)
+        retry_url = result['retry_url']
+        resp = requests.get(retry_url, cookies=cookies)
+        if resp.status_code == 200:
+            if 'Log in with Ubuntu SSO' in resp.text:
+                print('Failed (no auth)')
+                error('You need to log in at: {}'.format(
+                    retry_url.split('?')[0]))
+                sys.exit(1)
+            print('OK')
+        else:
+            print('Failed ({})'.format(resp.status_code))
+
 # -----------------------------------------------------------------------------
 # ADT test results class
 
@@ -667,12 +691,33 @@ class MigrationExcuses():
 # Subcommands
 
 @add_help('Show migration excuses.')
+@add_arg('-d', '--dry-run', action='store_true',
+         help='Only show which tests would be retried.')
 @add_arg('-f', '--format', default='', help=table_format_help(''))
+@add_arg('-r', '--retry', action='store_true', help='Retry failed tests.')
 def do_excuses(args):
     excuses = MigrationExcuses(args.series, args.source, debug=args.debug)
     excuses_list = excuses.get_excuses()
+
     print_header(excuses.excuses_url_html, excuses.series, excuses.source)
-    print_table(excuses_list, fmt=args.format)
+
+    if not args.retry:
+        print_table(excuses_list, fmt=args.format)
+        return
+
+    # Create the retry list (tests that have a retry url)
+    retry_list = []
+    for package in excuses_list:
+        if package[-1].get('retry_url') is not None:
+            retry_list.append(package[-1])
+    print_table(retry_list, fmt=args.format)
+
+    if args.dry_run:
+        print('\nDry-run, exiting...')
+        return
+
+    # Do the actual retry
+    retry_tests(retry_list)
 
 @add_help('Show ADT test results.')
 @add_arg('version', nargs='?',
