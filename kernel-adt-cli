@@ -227,6 +227,7 @@ def retry_tests(retry_list):
     # Retry the tests
     print()
     for result in retry_list:
+        result = result[-1]
         print('Retry {}/{} ... '.format(result['package'],
                                         result['arch']), end='', flush=True)
         retry_url = result['retry_url']
@@ -727,7 +728,7 @@ def do_excuses(args):
     retry_list = []
     for package in excuses_list:
         if package[-1].get('retry_url') is not None:
-            retry_list.append(package[-1])
+            retry_list.append([package[-1]])
     print_table(retry_list, fmt=args.format)
 
     if args.dry_run:
