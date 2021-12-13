@@ -188,6 +188,35 @@ def all_keys(data):
             natsort.natsorted(list(packages)),
             natsort.natsorted(list(arches)))
 
+def test_dict_to_list(test_dict):
+    '''
+    Convert a test dict to a list and return it
+    '''
+    all_versions = {}
+    all_packages = {}
+    all_arches = {}
+    for v in test_dict:
+        all_versions[v] = 1
+        for p in test_dict[v]:
+            all_packages[p] = 1
+            for a in test_dict[v][p]:
+                all_arches[a] = 1
+
+    test_list = []
+    for p in natsort.natsorted(all_packages.keys()):
+        for a in natsort.natsorted(all_arches.keys()):
+            row = []
+            row_valid = False
+            for v in natsort.natsorted(all_versions.keys()):
+                result = test_dict.get(v, {}).get(p, {}).get(a, {})
+                if result:
+                    row.append(result)
+                    row_valid = True
+            if row_valid:
+                test_list.append(row)
+
+    return test_list
+
 def retry_tests(retry_list):
     '''
     Retry the provided list of tests
@@ -664,22 +693,11 @@ class MigrationExcuses():
             print('+++ Rearranged excuses:')
             print(json.dumps(self.excuses, indent=4, sort_keys=True))
 
-    def get_excuses(self):
+    def get_excuses(self, version=None, package=None, arch=None, status=None):
         '''
-        Return the list of excuses
+        Return a list of filtered excuses
         '''
-        excuses_list = []
-        for package in self.packages:
-            for arch in self.arches:
-                row = []
-                empty_row = True
-                for version in self.versions:
-                    excuse = self.excuses[version].get(package, {}).get(arch)
-                    row.append(excuse)
-                    if excuse:
-                        empty_row = False
-                if not empty_row:
-                    excuses_list.append(row)
+        excuses_list = test_dict_to_list(self.excuses)
 
         if self.debug:
             print('+++ Selected excuses:')
