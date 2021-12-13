@@ -839,25 +839,8 @@ def do_retry(args):
         print('\nDry-run, exiting...')
         return
 
-    # Get the auth cookies from the browsers
-    cookies = get_browser_cookies()
-
-    # Retry the tests
-    print()
-    for result in results_list:
-        print('Retry {}/{} ... '.format(result[0]['package'],
-                                        result[0]['arch']), end='', flush=True)
-        retry_url = result[0]['retry_url']
-        resp = requests.get(retry_url, cookies=cookies)
-        if resp.status_code == 200:
-            if 'Log in with Ubuntu SSO' in resp.text:
-                print('Failed (no auth)')
-                error('You need to log in at: {}'.format(
-                    retry_url.split('?')[0]))
-                sys.exit(1)
-            print('OK')
-        else:
-            print('Failed ({})'.format(resp.status_code))
+    # Do the actual retry
+    retry_tests(results_list)
 
 @add_help('Show kernel versions.')
 def do_versions(args):
