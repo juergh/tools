@@ -57,6 +57,11 @@ function canonical_filter_mail()
 			  "Canonical/SalesForce" \
 			  "contain_subject('SFDC')"
 
+	# Move linux-firmware mail
+	move_mail "Mailing List/Ubuntu/kernel-team" \
+			  "Mailing List/Ubuntu/kernel-team/linux-firmware" \
+			  "contain_subject('linux-firmware')"
+
 	# Move noise mail
 	move_noise_mail "Mailing List/Ubuntu/kernel-team" \
 					"contain_subject(' uploaded (ABI bump)')"
