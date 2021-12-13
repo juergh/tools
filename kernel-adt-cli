@@ -693,7 +693,7 @@ class MigrationExcuses():
             print('+++ Rearranged excuses:')
             print(json.dumps(self.excuses, indent=4, sort_keys=True))
 
-    def get_excuses(self, version=None, package=None, arch=None, status=None):
+    def get_excuses(self):
         '''
         Return a list of filtered excuses
         '''
