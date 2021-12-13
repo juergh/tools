@@ -1,0 +1,61 @@
+#!/bin/bash -eu
+#
+# Commit a modified ADT hints config file
+#
+
+function usage()
+{
+    cat <<EOF
+Usage: $(basename "${0}") [-h] CONF
+
+Commit a modified ADT hints config file.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+conf=
+
+while [ ${#} -gt 0 ] ; do
+    case "${1}" in
+        -h|--help)
+            usage
+            exit
+            ;;
+        *)
+            if [ -n "${conf}" ] ; then
+                echo "Invalid argument: ${1}" >&2
+                exit 2
+            fi
+            conf=${1}
+            ;;
+    esac
+    shift
+done
+
+if [ -z "${conf}" ] ; then
+	usage
+	exit 2
+fi
+
+pkgs=
+while IFS= read -r line ; do
+	readarray -t data < <(echo "${line}" | tr ' ' '\n')
+	series=${data[1]}
+	source=${data[2]}
+	source=${source#linux-meta}
+	source=${source#-}
+	if [ -z "${source}" ] ; then
+		source=linux
+	fi
+	version=${data[3]}
+	pkgs=${pkgs},${data[4]}
+done < <(git diff "${conf}" | grep '^+result')
+
+pkgs=${pkgs:1}
+subject="${series}/${source}: hint ${pkgs} for ${version}"
+
+git add "${conf}"
+git commit -s -m "${subject}"
+git show
