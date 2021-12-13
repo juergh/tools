@@ -794,11 +794,13 @@ def do_results(args):
           help='Retry ADT tests.')
 @add_arg('-d', '--dry-run', action='store_true',
          help='Only show which tests would be retried.')
-@add_arg('status_package', metavar='status|package', default='MISS', nargs='?',
+@add_arg('status_package', metavar='status[,status...]|package',
+         default='MISS', nargs='?',
          help='Either a test status or a package name. If a test status, ' +
-         'retry all packages showing the provided status. If a package name, ' +
-         'retry the provided package. If not provided, retry all packages ' +
-         'showing a \'MISS\' test status.')
+         'retry all packages showing the provided status. Can be a ' +
+         'comma-separated list of statuses. If a package name, retry the ' +
+         'provided package. If not provided, retry all packages showing a ' +
+         '\'MISS\' test status.')
 @add_arg('-f', '--format', default='r', help=table_format_help('r'))
 @add_arg('-t', '--trigger', action='append', help='Add an additional ' +
          'trigger. Can be provided multiple times.')
@@ -806,18 +808,17 @@ def do_retry(args):
     package = None
     arch = None
     status = None
-    results = ADTResults(args.series, args.source, debug=args.debug,
-                         ppa=args.ppa)
-    if args.status_package.isupper() or args.status_package == '----':
-        status = args.status_package
-    elif '/' in args.status_package:
+    if '/' in args.status_package:
         package, arch = args.status_package.split('/')
     else:
-        package = args.status_package
+        status = args.status_package.split(',')
 
-    newest_version = results.versions[-1]
-    results_list = results.get_results(version=newest_version, package=package,
-                                       arch=arch, status=status)
+    # Get the specified ADT results
+    results = ADTResults(args.series, args.source, debug=args.debug,
+                         ppa=args.ppa)
+    results_list = results.get_results(version=results.versions[-1],
+                                       package=package, arch=arch,
+                                       status=status)
 
     # Filter out running and queued tests
     apt = AutoPkgTest(results.series, results.trigger, debug=args.debug)
