@@ -48,9 +48,9 @@ function canonical_filter_mail()
 			  "contain_subject('[ACTIVITY]')"
 
 	# Move 'The Daily Bug report' mail
-	move_mail "Mailing List/Canonical/canonical-kernel-team" \
+	move_mail "Mailing List/Ubuntu/kernel-team" \
 			  "Canonical/Bugs" \
-			  "contain_subject('The Daily Bug report for')"
+			  "contain_subject('The Daily Bug report for ')"
 
 	# Mofe SalesForce mail
 	move_mail "Mailing List/Canonical/canonical-kernel-team" \
