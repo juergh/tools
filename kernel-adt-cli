@@ -129,7 +129,7 @@ def print_table(data, fmt=''):
         results = [data[0]]
     for result in results:
         header.append(result['source_version'])
-        header.extend([fmt_map[f][0] for f in fmt])
+    header.extend([fmt_map[f][0] for f in fmt])
 
     # Create the table
     table = prettytable.PrettyTable()
@@ -143,7 +143,7 @@ def print_table(data, fmt=''):
         for result in results:
             row.append(colored_status(result['status']))
         for f in fmt:
-            d = result[-1].get(fmt_map[f][1])
+            d = result.get(fmt_map[f][1])
             row.append('----' if d is None else d)
         table.add_row(row)
 
