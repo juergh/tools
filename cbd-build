@@ -53,19 +53,20 @@ if ! git remote | grep -q '^cbd$' ; then
 fi
 
 # Build
-git push cbd -o wait=quiet "${@}" 2>&1 | tee cbd-build.log
+git push cbd -o vars "${@}" 2>&1 | tee cbd-build.log
 
-job_id=$(grep ' ssh cbd ls ' cbd-build.log)
-job_id=${job_id#* ssh cbd ls }
-job_id=${job_id%% *}
+while IFS= read -r var ; do
+	export "${var?}"
+done < <(grep "^remote: CBD_" cbd-build.log | \
+			 sed -e "s/^remote: //" -e "s/\s*$//")
 
-if [ -z "${job_id}" ] ; then
+if [ -z "${CBD_JOB}" ] ; then
 	echo "Job ID not found" >&2
 	exit 1
 fi
 
 if [ -z "${output_dir}" ] ; then
-	git_hash=${job_id%-*}
+	git_hash=${CBD_JOB%-*}
 	git_hash=${git_hash##*-}
 	output_dir=../cbdd/${git_hash}
 	rm -rf "${output_dir}"
@@ -73,4 +74,4 @@ fi
 
 # Download
 echo "-- Downloading build artifacts to ${output_dir}"
-cbd-download -o "${output_dir}" "${job_id}"
+cbd-download -o "${output_dir}" "${CBD_JOB}"
