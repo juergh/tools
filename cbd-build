@@ -55,20 +55,15 @@ fi
 # Build
 git push cbd -o vars "${@}" 2>&1 | tee cbd-build.log
 
-while IFS= read -r var ; do
-	export "${var?}"
-done < <(grep "^remote: CBD_" cbd-build.log | \
-			 sed -e "s/^remote: //" -e "s/\s*$//")
-
-if [ -z "${CBD_JOB}" ] ; then
-	echo "Job ID not found" >&2
+# Source the CBD variables
+eval "$(sed -n 's/^remote: CBD/CBD/p' cbd-build.log)"
+if [ -z "${CBD_JOB:-}" ] || [ -z "${CBD_GIT_HASH:-}" ] ; then
+	echo "Failed to source CBD variables" >&2
 	exit 1
 fi
 
 if [ -z "${output_dir}" ] ; then
-	git_hash=${CBD_JOB%-*}
-	git_hash=${git_hash##*-}
-	output_dir=../cbdd/${git_hash}
+	output_dir=../cbdd/${CBD_GIT_HASH}
 	rm -rf "${output_dir}"
 fi
 
