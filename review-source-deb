@@ -38,8 +38,6 @@ done
 src=$(dpkg-parsechangelog -S Source)
 version=$(dpkg-parsechangelog -S Version)
 
-echo "Current:  ${src} (${version})"
-
 dsc=${src}_${version}.dsc
 changes=${src}_${version}_source.changes
 debdiff=${src}_${version}.debdiff
@@ -49,6 +47,8 @@ if [ "${recreate}" -eq 1 ] ; then
 fi
 
 if ! [ -e ../"${debdiff}" ] ; then
+	echo "Current:  ${src} (${version})"
+
 	# Find the oldest version mentioned in the .changes file
 	old=$(grep "^ ${src} (" ../"${changes}" | tail -1)
 	old_version=${old#* \(}
@@ -71,7 +71,11 @@ if ! [ -e ../"${debdiff}" ] ; then
 		( cd .. && pull-lp-source -d "${src}" "${prev_version}" )
 	fi
 
-	debdiff ../"${prev_dsc}" ../"${dsc}" > ../"${debdiff}" || true
+	{
+		echo "# HEADER Current:  ${dsc}"
+		echo "# HEADER Previous: ${prev_dsc}"
+		debdiff ../"${prev_dsc}" ../"${dsc}" || true
+	} > ../"${debdiff}"
 fi
 
 review-debdiff ../"${debdiff}"
