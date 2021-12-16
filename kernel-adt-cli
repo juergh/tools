@@ -259,6 +259,8 @@ class ADTResults():
             '{}-{}.html'.format(series, source)
         self.adt_url_json = self.adt_url + \
             '{}-{}-detail-results-data.json'.format(series, source)
+        self.adt_url_seeds = self.adt_url + \
+            '{}-{}.seeds'.format(series, source)
 
         self.results = None       # ADT test results
         self.versions = None      # List of all kernel versions
@@ -456,6 +458,34 @@ class ADTResults():
             print(json.dumps(resp, indent=4, sort_keys=True))
 
         return resp
+
+    def get_seeds(self, package_arch=None):
+        '''
+        Return the seed list for the provided selectors
+        '''
+        package_arches = to_list(package_arch)
+
+        resp = requests.get(self.adt_url_seeds)
+        if resp.status_code != 200:
+            error(self.adt_url_json)
+            error('Failed to get seeds ({})'.format(resp.status_code))
+            sys.exit(1)
+
+        seed_list = []
+        for line in resp.text.split('\n'):
+            if not line.startswith('result '):
+                continue
+            comps = line.split(' ')
+            p_a = comps[4] + '_' + comps[5]
+            if package_arches and p_a not in package_arches:
+                continue
+            seed_list.append(line)
+
+        if self.debug:
+            print('+++ Selected seeds:')
+            print(json.dumps(seed_list, indent=4))
+
+        return seed_list
 
 # -----------------------------------------------------------------------------
 # Autopkgtest class
@@ -708,6 +738,25 @@ class MigrationExcuses():
 
 # -----------------------------------------------------------------------------
 # Subcommands
+
+@add_help('Show ADT seeds.')
+@add_arg('status', metavar='status[,status...]', default='', nargs='?',
+         help='Test status. Can be a comma-separated list of statuses.')
+def do_seeds(args):
+    status = None
+    if args.status:
+        status = args.status.split(',')
+
+    results = ADTResults(args.series, args.source, debug=args.debug,
+                         ppa=args.ppa)
+    results_list = results.get_results(status=status)
+
+    package_arch = []
+    for result in results_list:
+        package_arch.append(result[-1]['package'] + '_' + result[-1]['arch'])
+
+    seeds = results.get_seeds(package_arch=package_arch)
+    print('\n'.join(seeds))
 
 @add_help('Show migration excuses.')
 @add_arg('-d', '--dry-run', action='store_true',
