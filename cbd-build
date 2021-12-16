@@ -6,17 +6,17 @@
 function usage()
 {
 	cat <<EOF
-Usage: cbd-build [-h] [-o DIR] [-- OPTS]
+Usage: cbd-build [-h] [-d DIR] [-- OPTS]
 
 Build and download Debian packages using CBD.
 
 Positional arguments:
-  OPTS              Additional options for 'git push cbd'.
+  OPTS                 Additional options for 'git push cbd'.
 
 Optional arguments:
-  -h, --help        Show this help text and exit.
-  -o, --output DIR  Directory to download the Debian packages to. If not
-                    provided, defaults to '../cbdd/<git_hash>'.
+  -h, --help           Show this help text and exit.
+  -d, --directory DIR  Directory to download the Debian packages to. If not
+                       provided, defaults to '../cbdd/<git_hash>'.
 EOF
 }
 
@@ -24,13 +24,13 @@ output_dir=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
+		-d|--directory)
+			shift
+			output_dir=${1}
+			;;
 		-h|--help)
 			usage
 			exit
-			;;
-		-o|--output)
-			shift
-			output_dir=${1}
 			;;
 		--)
 			shift
