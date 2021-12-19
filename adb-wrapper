@@ -25,11 +25,25 @@ function do_display_state()
 	local state
 
 	state=$(adb -s "${SERIAL}" shell dumpsys power | \
-				grep 'Display Power: state=' | sed 's/.*=//')
-	if [ -z "${state}" ] ; then
-		echo "UNKNOWN"
+				grep -P '^Display Power: state=' | sed 's/.*=//')
+	if [ -n "${state}" ] ; then
+		echo "${state}"
+		return
 	fi
-	echo "${state^^}"
+
+	# Old Android
+	state=$(adb -s "${SERIAL}" shell dumpsys power | \
+				grep -P '^\s+mPowerState=')
+	if [ -n "${state}" ] ; then
+		if [ "${state/SCREEN_ON_BIT/}" != "${state}" ] ; then
+			echo "ON"
+		else
+			echo "OFF"
+		fi
+		return
+	fi
+
+	echo "UNKNOWN"
 }
 
 function do_serials()
