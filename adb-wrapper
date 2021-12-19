@@ -1,0 +1,145 @@
+#!/bin/bash -eu
+#
+# Wrapper around common adb operations
+#
+
+# -----------------------------------------------------------------------------
+# Plumbing commands
+
+function do_display_on()
+{
+	if [ "$(do_display_state)" = "OFF" ] ; then
+		adb -s "${SERIAL}" shell input keyevent 26
+	fi
+}
+
+function do_display_off()
+{
+	if [ "$(do_display_state)" = "ON" ] ; then
+		adb -s "${SERIAL}" shell input keyevent 26
+	fi
+}
+
+function do_display_state()
+{
+	local state
+
+	state=$(adb -s "${SERIAL}" shell dumpsys power | \
+				grep 'Display Power: state=' | sed 's/.*=//')
+	if [ -z "${state}" ] ; then
+		echo "UNKNOWN"
+	fi
+	echo "${state^^}"
+}
+
+function do_serials()
+{
+	adb devices | awk '$2 == "device" { print $1 }'
+}
+
+# -----------------------------------------------------------------------------
+# Porcelain Commands
+
+function do_pull_download()
+{
+	local remotes dl_dir
+
+	mkdir -p ~/Downloads/adb
+
+	remotes=("/storage/self/primary/Download")
+	while IFS= read -r dl_dir ; do
+		if adb shell test -d "${dl_dir}"/Download ; then
+			remotes+=("${dl_dir}"/Download)
+		fi
+	done < <(adb shell ls -d /storage/*)
+
+	echo "-- Pull downloaded files from (${SERIAL}) to ~/Downloads/adb"
+	adb -s "${SERIAL}" pull "${remotes[@]}" ~/Downloads/adb
+}
+
+function do_scrcpy()
+{
+	# Unlock the device
+	do_unlock
+
+	# Run scrcpy
+	echo "-- Run scrcpy"
+	scrcpy --serial "${SERIAL}" --turn-screen-off --stay-awake
+}
+
+function do_unlock()
+{
+	local pin
+
+	# Get the pin from the password store
+	echo "-- Get pin from password store"
+	pin=$(pass show local/android/"${SERIAL}" | head -1)
+
+	# Unlock the device
+	echo "-- Unlock device (${SERIAL})"
+	adb -s "${SERIAL}" shell input keyevent 82  # Unlock
+	sleep 1
+	adb -s "${SERIAL}" shell input text "${pin}"
+	adb -s "${SERIAL}" shell input keyevent 66  # Enter
+}
+
+# -----------------------------------------------------------------------------
+# Usage and main entry point
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [-s SERIAL] COMMAND [OPTS]
+
+Wrapper around common adb operations.
+
+Plumbing commands:
+  display-state        Show display state (ON|OFF|UNKNOWN)
+  serials              List serial numbers of connected devices.
+
+Porcelain commands:
+  pull-download        Pull all downloaded files.
+  scrcpy               Run scrcpy.
+  unlock               Unlock device.
+
+Optional arguments:
+  -h, --help           Show this help text and exit.
+  -s, --serial SERIAL  Serial number of target device. If not provided, targets
+                       the first device from the list of connected devices.
+EOF
+}
+
+SERIAL=
+command=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-s|--serial)
+			SERIAL=${1}
+			;;
+		display-on|display-off|display-state|pull-dowload|scrcpy|serials|unlock)
+			command=${1}
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+if [ -z "${command}" ] ; then
+	usage
+	exit 2
+fi
+
+if [ "${command}" != "serials" ] && [ -z "${SERIAL}" ] ; then
+	# Get the serial number of the first device
+	SERIAL=$(do_serials | head -1)
+fi
+
+do_"${command//-/_}"
