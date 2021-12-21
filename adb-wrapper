@@ -6,16 +6,16 @@
 # -----------------------------------------------------------------------------
 # Plumbing commands
 
-function do_display_on()
+function do_display_off()
 {
-	if [ "$(do_display_state)" = "OFF" ] ; then
+	if [ "$(do_display_state)" = "ON" ] ; then
 		adb -s "${SERIAL}" shell input keyevent 26
 	fi
 }
 
-function do_display_off()
+function do_display_on()
 {
-	if [ "$(do_display_state)" = "ON" ] ; then
+	if [ "$(do_display_state)" = "OFF" ] ; then
 		adb -s "${SERIAL}" shell input keyevent 26
 	fi
 }
@@ -108,6 +108,8 @@ Usage: $(basename "${0}") [-h] [-s SERIAL] COMMAND [OPTS]
 Wrapper around common adb operations.
 
 Plumbing commands:
+  display-off          Turn display off.
+  display-on           Turn display on.
   display-state        Show display state (ON|OFF|UNKNOWN)
   serials              List serial numbers of connected devices.
 
