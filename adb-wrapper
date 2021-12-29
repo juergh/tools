@@ -137,7 +137,7 @@ while [ ${#} -gt 0 ] ; do
 		-s|--serial)
 			SERIAL=${1}
 			;;
-		display-on|display-off|display-state|pull-dowload|scrcpy|serials|unlock)
+		display-on|display-off|display-state|pull-download|scrcpy|serials|unlock)
 			command=${1}
 			;;
 		*)
