@@ -4,19 +4,48 @@
 #
 
 # -----------------------------------------------------------------------------
+# Helper functions
+
+function adb_send_keyevent()
+{
+	local key=${1}
+	local event
+
+	case "${key}" in
+		power)  event=26 ;;
+		enter)  event=66 ;;
+		unlock) event=82 ;;
+		*)
+			echo "-- Invalid key name: ${key}" >&2
+			return
+			;;
+	esac
+
+	echo "-- Send keyevent ${event} (${key})"
+	adb -s "${SERIAL}" shell input keyevent "${event}"
+}
+
+function adb_send_text()
+{
+	local text=${1}
+
+	adb -s "${SERIAL}" shell input text "${text}"
+}
+
+# -----------------------------------------------------------------------------
 # Plumbing commands
 
 function do_display_off()
 {
 	if [ "$(do_display_state)" = "ON" ] ; then
-		adb -s "${SERIAL}" shell input keyevent 26
+		adb_send_keyevent power
 	fi
 }
 
 function do_display_on()
 {
 	if [ "$(do_display_state)" = "OFF" ] ; then
-		adb -s "${SERIAL}" shell input keyevent 26
+		adb_send_keyevent power
 	fi
 }
 
@@ -91,10 +120,10 @@ function do_unlock()
 
 	# Unlock the device
 	echo "-- Unlock device (${SERIAL})"
-	adb -s "${SERIAL}" shell input keyevent 82  # Unlock
+	adb_send_keyevent unlock
 	sleep 1
-	adb -s "${SERIAL}" shell input text "${pin}"
-	adb -s "${SERIAL}" shell input keyevent 66  # Enter
+	adb_send_text "${pin}"
+	adb_send_keyevent enter
 }
 
 # -----------------------------------------------------------------------------
@@ -107,16 +136,16 @@ Usage: $(basename "${0}") [-h] [-s SERIAL] COMMAND [OPTS]
 
 Wrapper around common adb operations.
 
+Porcelain commands:
+  pull-download        Pull all downloaded files.
+  scrcpy               Run scrcpy.
+  unlock               Unlock device.
+
 Plumbing commands:
   display-off          Turn display off.
   display-on           Turn display on.
   display-state        Show display state (ON|OFF|UNKNOWN)
   serials              List serial numbers of connected devices.
-
-Porcelain commands:
-  pull-download        Pull all downloaded files.
-  scrcpy               Run scrcpy.
-  unlock               Unlock device.
 
 Optional arguments:
   -h, --help           Show this help text and exit.
@@ -137,7 +166,10 @@ while [ ${#} -gt 0 ] ; do
 		-s|--serial)
 			SERIAL=${1}
 			;;
-		display-on|display-off|display-state|pull-download|scrcpy|serials|unlock)
+		pull-download|scrcpy|unlock)
+			command=${1}
+			;;
+		display-off|display-on|display-state|serials)
 			command=${1}
 			;;
 		*)
