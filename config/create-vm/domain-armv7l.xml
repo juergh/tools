@@ -11,7 +11,7 @@
 
 ${XML_DIRECT_BOOT_BEGIN}
     <kernel>${XML_KERNEL_PATH}</kernel>
-    <initrd>${XML_INITRD_PATH})</initrd>
+    <initrd>${XML_INITRD_PATH}</initrd>
     <cmdline>root=LABEL=cloudimg-rootfs</cmdline>
 ${XML_DIRECT_BOOT_END}
 
