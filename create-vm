@@ -93,7 +93,7 @@ function download_image()
 	local url=${1}
 	local suffix tmp_img
 
-	pr_info "Downloading image ${url}"
+	pr_info "Download image ${url}"
 
 	tmp_img=${TMP_DIR}/base-img
 
@@ -227,7 +227,7 @@ function download_base_image()
 {
 	# Check if the image is already cached
 	if [ -e "${BASE_IMAGE}" ] && [ "${DOWNLOAD}" -eq 0 ] ; then
-		pr_info "Using cached base image"
+		pr_info "Use cached base image"
 		return
 	fi
 
@@ -255,7 +255,7 @@ function create_os_image()
 
 	# Extract the kernel and initrd from the image for direct boot
 	if [ "${BOOT_MODE}" = "direct" ] ; then
-		pr_info "Extracting kernel and initrd from base image"
+		pr_info "Extract kernel and initrd from base image"
 
 		mkdir -p "${tmp_mnt}"
 		mount_image "${BASE_IMAGE}" "${tmp_mnt}"
@@ -320,7 +320,7 @@ function create_config_drive()
 		return
 	fi
 
-	pr_info "Creating config drive"
+	pr_info "Create config drive"
 
 	public_key=$(cat ~/.ssh/id_rsa.pub)
 
@@ -397,7 +397,7 @@ function define_vm()
 {
 	local tmp_xml
 
-	pr_info "Defining VM"
+	pr_info "Define VM"
 
 	tmp_xml=${TMP_DIR}/vm-xml
 
@@ -838,6 +838,6 @@ define_vm
 
 # Start the VM
 if [ "${START}" -eq 1 ] ; then
-	pr_info "Starting VM"
+	pr_info "Start VM"
 	virsh start "${NAME}"
 fi
