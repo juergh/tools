@@ -15,6 +15,11 @@ ${XML_DIRECT_BOOT_BEGIN}
     <cmdline>root=LABEL=cloudimg-rootfs</cmdline>
 ${XML_DIRECT_BOOT_END}
 
+${XML_UEFI_BOOT_BEGIN}
+    <loader readonly='yes' type='pflash'>/usr/share/AAVMF/AAVMF32_CODE.fd</loader>
+    <nvram>/var/lib/libvirt/qemu/nvram/${XML_NAME}_VARS.fd</nvram>
+${XML_UEFI_BOOT_END}
+
     <boot dev='hd'/>
   </os>
   <features>
