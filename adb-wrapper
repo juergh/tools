@@ -21,7 +21,7 @@ function adb_send_keyevent()
 			;;
 	esac
 
-	echo "-- Send keyevent ${event} (${key})"
+	echo "-- Send keyevent: ${event} (${key})"
 	adb -s "${SERIAL}" shell input keyevent "${event}"
 }
 
@@ -30,6 +30,14 @@ function adb_send_text()
 	local text=${1}
 
 	adb -s "${SERIAL}" shell input text "${text}"
+}
+
+function adb_start_app()
+{
+	local app=${1}
+
+	echo "-- Start app: ${app}"
+	adb -s "${SERIAL}" shell monkey -p "${app}" 1
 }
 
 # -----------------------------------------------------------------------------
@@ -122,8 +130,33 @@ function do_unlock()
 	echo "-- Unlock device (${SERIAL})"
 	adb_send_keyevent unlock
 	sleep 1
+	# FIXME: Check display/lockscreen state
+	adb_send_keyevent unlock
+	sleep 1
 	adb_send_text "${pin}"
 	adb_send_keyevent enter
+}
+
+
+# -----------------------------------------------------------------------------
+# App commands
+
+function do_start()
+{
+	local app=${1}
+	local pkg
+
+	case "${app}" in
+		klapp) pkg=mobi.klapp.parent ;;
+		*)
+			echo "-- Unsupported app: ${app}" >&2
+			exit 1
+			;;
+	esac
+
+	adb_start_app "${pkg}"
+	sleep 1
+	do_scrcpy
 }
 
 # -----------------------------------------------------------------------------
@@ -135,6 +168,9 @@ function usage()
 Usage: $(basename "${0}") [-h] [-s SERIAL] COMMAND [OPTS]
 
 Wrapper around common adb operations.
+
+App commands:
+  start APP            Start an app.
 
 Porcelain commands:
   pull-download        Pull all downloaded files.
@@ -172,6 +208,11 @@ while [ ${#} -gt 0 ] ; do
 		display-off|display-on|display-state|serials)
 			command=${1}
 			;;
+		start)
+			command=${1}
+			shift
+			break
+			;;
 		*)
 			echo "Invalid argument: ${1}" >&2
 			exit 2
@@ -190,4 +231,4 @@ if [ "${command}" != "serials" ] && [ -z "${SERIAL}" ] ; then
 	SERIAL=$(do_serials | head -1)
 fi
 
-do_"${command//-/_}"
+do_"${command//-/_}" "${@}"
