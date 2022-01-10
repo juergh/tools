@@ -81,12 +81,25 @@ def lp_get_binaries(lp, handle, pockets):
 # -----------------------------------------------------------------------------
 # Subcommands
 
-@add_help('Subscribe a person to a bug')
-@add_arg('lp_id', help='Launchpad ID of person to subscribe to bug')
+@add_help('Query a bug')
 @add_arg('lp_bug', type=int, help='Launchpad bug number')
-def do_subscribe_bug(args):
-    person = args.lp.people[args.lp_id]
+@add_arg('attr', nargs='?', help='Bug attribute')
+def do_query_bug(args):
     bug = args.lp.bugs[args.lp_bug]
+    if not args.attr:
+        print('Valid attributes: {}'.format(bug.lp_attributes))
+        return
+    if args.attr not in bug.lp_attributes:
+        print('Invalid attribute: {}'.format(args.attr))
+        return
+    print(getattr(bug, args.attr))
+
+@add_help('Subscribe a person to a bug')
+@add_arg('lp_bug', type=int, help='Launchpad bug number')
+@add_arg('lp_id', help='Launchpad ID of person to subscribe to bug')
+def do_subscribe_bug(args):
+    bug = args.lp.bugs[args.lp_bug]
+    person = args.lp.people[args.lp_id]
     bug.subscribe(person=person)
 
 @add_help('Show latest source package information')
