@@ -124,44 +124,48 @@ modules=(
 function usage()
 {
 	cat <<EOF
-Usage: build-rpi-deb [-c CPUS] [-d] [-f] [-h] [-m] [-n CFG:VAL] [-o]
+Usage: build-rpi-deb [-c CPUS] [-d] [-f] [-h] [-i FILE] [-m] [-n CFG:VAL] [-o]
                      v6|v7|v7l|v8 [-- ARGS...]
 
 Build Raspberry Pi kernel packages.
 
 Positional arguments:
-  v6                     Build an ARMv6 32-bit kernel.
-  v7                     Build an ARMv7 32-bit kernel.
-  v7l                    Build an ARMv7 32-bit LPAE kernel.
-  v8                     Build an ARMv8 64-bit kernel.
-  ARGS                   Additional argument(s) passed to kernel make. If not
-                         provided, defaults to 'bindeb-pkg' (to build binary
-                         Debian packages).
+  v6                      Build an ARMv6 32-bit kernel.
+  v7                      Build an ARMv7 32-bit kernel.
+  v7l                     Build an ARMv7 32-bit LPAE kernel.
+  v8                      Build an ARMv8 64-bit kernel.
+  ARGS                    Additional argument(s) passed to kernel make. If not
+                          provided, defaults to 'bindeb-pkg' (to build binary
+                          Debian packages).
 
 Optional arguments:
-  -c, --cpus CPUS        Number of CPUs to use for compiling. If not specified,
-                         defaults to the number of online CPUs.
-  -d, --dbg-pkg          Also build the debug package.
-  -f, --ubuntu-flavor    Use the Ubuntu kernel flavor name rather than the
-                         raspberrypi flavor name.
-  -h, --help             Show this help text and exit.
-  -m, --minimal-modules  Build only a minimal set of modules.
-  -n, --config CFG:VAL   Set kernel config option CFG to value VAL.
-                         Possible values for VAL:
-                           e:     Enable option
-                           d:     Disable option
-                           m:     Turn option into a module
-                           u:     Undefine option
-                           s=foo: Set option to string 'foo'
-                           v=bar: Set option to value bar
-  -o, --ubuntu-config    Use the Ubuntu kernel config rather than the
-                         raspberrypi config.
+  -c, --cpus CPUS         Number of CPUs to use for compiling. If not provided,
+                          defaults to the number of online CPUs.
+  -d, --dbg-pkg           Also build the debug package.
+  -f, --ubuntu-flavor     Use the Ubuntu kernel flavor name rather than the
+                          raspberrypi flavor name.
+  -h, --help              Show this help text and exit.
+  -i, --config-file FILE  Use the provided config file as the base config file.
+                          If not provided, uses the raspberrypi defconfig or
+                          Ubuntu kernel config.
+  -m, --minimal-modules   Build only a minimal set of modules.
+  -n, --config CFG:VAL    Set kernel config option CFG to value VAL.
+                          Possible values for VAL:
+                            e:     Enable option
+                            d:     Disable option
+                            m:     Turn option into a module
+                            u:     Undefine option
+                            s=foo: Set option to string 'foo'
+                            v=bar: Set option to value bar
+  -o, --ubuntu-config     Use the Ubuntu kernel config rather than the
+                          raspberrypi defconfig.
 EOF
 }
 
 cpus=$(getconf _NPROCESSORS_ONLN)
 dbg_pkg=0
 ubuntu_flavor=0
+config_file=
 minimal_modules=0
 configs=()
 ubuntu_config=0
@@ -183,6 +187,10 @@ while [ ${#} -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-i|--config-file)
+			shift
+			config_file=${1}
 			;;
 		-m|--minimal-modules)
 			minimal_modules=1
@@ -247,6 +255,11 @@ case "${version}" in
 		;;
 esac
 
+if [ -n "${config_file}" ] && ! [ -e "${config_file}" ] ; then
+	echo "No such config file: ${config_file}" >&2
+	exit 1
+fi
+
 # Initialize the build directory
 buildd=$(pwd)/buildd/${version}
 if ! [ -d "${buildd}" ] ; then
@@ -259,15 +272,20 @@ if ! [ -e "${buildd}"/.version ] ; then
 fi
 
 # Generate the base config file
-if [ ${ubuntu_config} -eq 1 ] ; then
-	echo "-- Using Ubuntu config ${ubuntu_arch}/${ubuntu_flavorname}..."
-	cat debian.raspi/config/config.common.ubuntu \
-		debian.raspi/config/"${ubuntu_arch}"/config.common."${ubuntu_arch}" \
-		debian.raspi/config/"${ubuntu_arch}"/config.flavour."${ubuntu_flavorname}" > \
-		"${buildd}"/.config
+if [ -z "${config_file}" ] ; then
+	if [ ${ubuntu_config} -eq 1 ] ; then
+		echo "-- Using Ubuntu config ${ubuntu_arch}/${ubuntu_flavorname}..."
+		cat debian.raspi/config/config.common.ubuntu \
+			debian.raspi/config/"${ubuntu_arch}"/config.common."${ubuntu_arch}" \
+			debian.raspi/config/"${ubuntu_arch}"/config.flavour."${ubuntu_flavorname}" > \
+			"${buildd}"/.config
+	else
+		echo "-- Using raspberrypi config ${ARCH}/${defconfig}..."
+		make O="${buildd}" "${defconfig}"
+	fi
 else
-	echo "-- Using raspberrypi config ${ARCH}/${defconfig}..."
-	make O="${buildd}" "${defconfig}"
+	echo "-- Using config file ${config_file}..."
+	cp "${config_file}" "${buildd}"/.config
 fi
 
 # Only enable the minimal set of modules
