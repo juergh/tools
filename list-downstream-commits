@@ -3,6 +3,11 @@
 # List downstream commits
 #
 
+function pr_yellow()
+{
+    echo -e "\033[93m${*}\033[0m"
+}
+
 function out()
 {
 	local rc=${?}
@@ -28,6 +33,7 @@ Usage: list-downstream-commits [-d] [-h] [-r] [-u] [BRANCH]
 List the downstream commits on the current (or provided) branch.
 
 Optional arguments:
+  -c, --color   Color filtered commits rather than removing them from the list.
   -d, --debian  Filter debian commits.
   -h, --help    Show this help text and exit.
   -r, --revert  Filter reverted commits.
@@ -35,6 +41,7 @@ Optional arguments:
 EOF
 }
 
+color=0
 filter_debian=0
 filter_ubuntu=0
 filter_revert=0
@@ -42,6 +49,9 @@ branch=
 
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
+		-c|--color)
+			color=1
+			;;
 		-d|--debian)
 			filter_debian=1
 			;;
@@ -96,7 +106,7 @@ fi
 rev_range="${commit%% *}..${branch}"
 
 # Create a temp file for filtering reverted commits
-if [ "${filter_revert}" -eq 1 ] ; then
+if [ ${filter_revert} -eq 1 ] ; then
 	TMPF=$(mktemp)
 	git log --no-merges --format='%h __MARK__%s__MARK__' "${rev_range}" > "${TMPF}"
 fi
@@ -111,12 +121,15 @@ while IFS= read -r line ; do
 	if [ ${filter_debian} -eq 1 ] ; then
 		if ! git log --format= --name-only "${commit}" -1 | \
 			 grep -qv '^debian' ; then
+			if [ ${color} -eq 1 ] ; then
+				pr_yellow "${line}"
+			fi
 			continue
 		fi
 	fi
 
 	# Filter ubuntu commits
-	if [ "${filter_ubuntu}" -eq 1 ] ; then
+	if [ ${filter_ubuntu} -eq 1 ] ; then
 	   case "${subject}" in
 		   UBUNTU:\ Start\ new\ release|\
 		   UBUNTU:\ link-to-tracker*|\
@@ -126,14 +139,20 @@ while IFS= read -r line ; do
 		   UBUNTU:\ \[[cC]onfig\]*|\
 		   UBUNTU:\ \[[pP]ackaging\]*|\
 		   UBUNTU:\ \[[dD]ebian\]*)
+				if [ ${color} -eq 1 ] ; then
+					pr_yellow "${line}"
+				fi
 			   continue
 			   ;;
 	   esac
 	fi
 
 	# Filter reverted commits
-	if [ "${filter_revert}" -eq 1 ] ; then
+	if [ ${filter_revert} -eq 1 ] ; then
 		if [ -n "${reverted[${commit}]:-}" ] ; then
+			if [ ${color} -eq 1 ] ; then
+				pr_yellow "${line}"
+			fi
 			continue
 		fi
 
@@ -145,6 +164,9 @@ while IFS= read -r line ; do
 						sed 's, .*,,')
 			if [ -n "${match}" ] ; then
 				reverted[${match}]=1
+				if [ ${color} -eq 1 ] ; then
+					pr_yellow "${line}"
+				fi
 				continue
 			fi
 		fi
