@@ -77,3 +77,6 @@ for log in "${tmpd}"/*/build.log ; do
 		cp "${log}" "${output_dir}"/build_"${arch}".log
 	fi
 done
+
+# Save the job ID
+echo "${job_id}" > "${output_dir}"/job.id
