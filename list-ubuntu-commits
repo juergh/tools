@@ -13,10 +13,13 @@ while IFS= read -r line ; do
 	subject=${line#* }
 
 	case "${subject}" in
-		UBUNTU:\ Start\ new\ release|\
-		UBUNTU:\ link-to-tracker*|\
-		UBUNTU:\ Ubuntu-raspi-[0-9]*|\
-		UBUNTU:\ *\ updateconfigs\ after\ update\ to\ *)
+		"UBUNTU: Start new release"|\
+		"UBUNTU: link-to-tracker"*|\
+		"UBUNTU: Ubuntu-raspi-"[0-9]*|\
+		"UBUNTU: Ubuntu-raspi-unstable-"[0-9]*|\
+		"UBUNTU: "*" updateconfigs after update to "*|\
+		"UBUNTU: ["[cC]"onfig]"*|\
+		"UBUNTU: ["[pP]"ackaging]"*)
 			continue
 			;;
 		UBUNTU:\ *\ Update\ to\ upstream\ raspberrypi\ *)
