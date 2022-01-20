@@ -19,7 +19,14 @@ function out()
 function find_master_commit()
 {
 	local changelog=${1} version=${2}
-	local found mversion
+	local src tag found mversion
+
+	src=$(dpkg-parsechangelog -l "${changelog}" -S Source)
+	if [ "${src}" = "linux" ] ; then
+		tag=Ubuntu-${version//\~/_}
+	else
+		tag=Ubuntu${src#linux}-${version//\~/_}
+	fi
 
 	found=0
 	while IFS= read -r line ; do
@@ -31,7 +38,8 @@ function find_master_commit()
 				if [ ${found} -eq 1 ] ; then
 					mversion=${line##* Ubuntu: }
 					mversion=${mversion%% *}
-					git log --oneline | grep -m1 -P "^[0-9a-f]+ UBUNTU: Ubuntu-${mversion}$"
+					git log --oneline "${tag}" | \
+						grep -m1 -P "^[0-9a-f]+ UBUNTU: Ubuntu.*-${mversion}$"
 					return
 				fi
 				;;
