@@ -104,6 +104,23 @@ def do_subscribe_bug(args):
     person = args.lp.people[args.lp_id]
     bug.subscribe(person=person)
 
+@add_help('Nominate a bug for a series')
+@add_arg('lp_bug', type=int, help='Launchpad bug number')
+@add_arg('-s', '--series', required=True, help='Series name')
+def do_nominate_bug(args):
+    bug = args.lp.bugs[args.lp_bug]
+    series = None
+    for s in args.lp.distributions["Ubuntu"].series_collection:
+        if s.name == args.series:
+            series = s
+            break
+    if not series:
+        print('Invalid series: {}'.format(args.series))
+        return
+    nomination = bug.addNomination(target=series)
+    if nomination.canApprove():
+        nomination.approve()
+
 @add_help('Show latest source package information')
 @add_arg('handle', help='Source package handle (series/source)')
 @add_arg('-l', '--all', action='store_true', help='Query all pockets, ' +
