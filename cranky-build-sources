@@ -16,14 +16,14 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: cranky-build-sources [-c] [-f] [-h] [-n] [-o] POCKET
+Usage: cranky-build-sources [-c] [-f] [-h] [-n] [-o] POCKET|OFFSET
 
 Build a set of kernel packages.
 
 Positional arguments:
-  POCKET       The pocket to get the versions of the previous kernel packages
-               from. If set to 'none', uses the version from the previous
-               changelog entries.
+  POCKET       Get the previous package versions from pocket POCKET.
+  OFFSET       Get the previous package versions from the changelogs using
+               changelog entry offset OFFSET (1 == previous changelog entry).
 
 Optional arguments:
   -c, --current  Only build the source package for the current directory.
@@ -37,6 +37,7 @@ EOF
 current=0
 force=0
 pocket=
+offset=
 build_opts=()
 
 bo_meta=()
@@ -63,13 +64,19 @@ while [ "${#}" -gt 0 ] ; do
 		-o|--orig)
 			bo_main+=("-sa")
 			;;
-		updates|release|security|proposed|none)
-			if [ -z "${pocket}" ] ; then
-				pocket=${1}
-			else
+		updates|release|security|proposed)
+			if [ -n "${pocket}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
+			pocket=${1}
+			;;
+		[1-9])
+			if [ -n "${offset}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			offset=${1}
 			;;
 		*)
 			echo "Invalid argument: ${1}" >&2
@@ -79,7 +86,7 @@ while [ "${#}" -gt 0 ] ; do
 	shift
 done
 
-if [ -z "${pocket}" ] ; then
+if [ -z "${pocket}" ] && [ -z "${offset}" ] ; then
 	usage
 	exit 2
 fi
@@ -109,13 +116,13 @@ if [ "${force}" -eq 0 ] ; then
 	fi
 fi
 
-if [ "${pocket}" = "none" ] ; then
-	# Use the previous package versions
+if [ -n "${offset}" ] ; then
+	# Use the package version from the changelog
 	while IFS= read -r path ; do
-		package=$(dpkg-parsechangelog -l "${path}"/debian/changelog -o 1 -c 1 \
-									  -S source)
-		version=$(dpkg-parsechangelog -l "${path}"/debian/changelog -o 1 -c 1 \
-									  -S version)
+		package=$(dpkg-parsechangelog -l "${path}"/debian/changelog \
+									  -o "${offset}" -c 1 -S source)
+		version=$(dpkg-parsechangelog -l "${path}"/debian/changelog \
+									  -o "${offset}" -c 1 -S version)
 		case "${package}" in
 			linux-meta*)
 				bo_meta+=("-v${version}")
@@ -135,7 +142,7 @@ if [ "${pocket}" = "none" ] ; then
 		esac
 	done < <(cranky shell-helper source-packages-path)
 
-elif [ "${pocket}" != "none" ] ; then
+else
 	# Get the previous versions from the provided pocket
 	found=0
 	while IFS=' ' read -r package version rest ; do

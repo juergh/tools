@@ -62,7 +62,7 @@ function review_src()
 		return
 	fi
 
-	if [ -z "${POCKET}" ] && [ -z "${VERSION}" ] ; then
+	if [ -z "${POCKET}" ] && [ -z "${OFFSET}" ] ; then
 		# Review an existing debdiff
 		if ! [ -e ../"${debdiff}" ] ; then
 			echo "No .debdiff file found: ${debdiff}" >&2
@@ -100,11 +100,9 @@ function review_src()
 		fi
 
 		# Figure out the previous package version
-		if [ -n "${VERSION}" ] ; then
-			prev_version=${VERSION}
-		elif [ "${POCKET}" = "none" ] ; then
+		if [ -n "${OFFSET}" ] ; then
 			prev_version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
-											   -S Version -o 1 -c 1)
+											   -o "${OFFSET}" -c 1 -S Version)
 		else
 			prev_version=${PREV_VERSION[${src}]}
 		fi
@@ -139,18 +137,17 @@ function review_src()
 function usage()
 {
 	cat <<EOF
-Usage: cranky review-sources [-c] [-h] [POCKET|VERSION]
+Usage: cranky review-sources [-c] [-h] [POCKET|OFFSET]
 
 Review the differences between the current kernel source packages and
 previous source packages.
 
 Positional arguments:
-  POCKET         The name of the pocket that contains the previous kernel
-                 packages to compare against. If set to 'none', uses the
-                 version from the previous changelog entry.
-  VERSION        The version of the previous dsc file to compare against.
+  POCKET         Get the previous package versions from pocket POCKET.
+  OFFSET         Get the previous package versions from the changelogs using
+                 changelog entry offset OFFSET (1 == previous changelog entry).
 
-  If neither POCKET nor VERSION is provided, process the existing debdiff.
+  If neither POCKET nor OFFSET is provided, process the existing debdiff.
 
 Optional arguments:
   -c, --current  Only review the source package built from the current
@@ -161,7 +158,7 @@ EOF
 
 current=0
 POCKET=
-VERSION=
+OFFSET=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -172,19 +169,23 @@ while [ ${#} -gt 0 ] ; do
 			usage
 			exit
 			;;
-		*)
-			if [ -n "${POCKET}" ] || [ -n "${VERSION}" ] ; then
+		release|security|updates|proposed)
+			if [ -n "${POCKET}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
-			case "${1}" in
-				release|security|updates|proposed|none)
-					POCKET=${1}
-					;;
-				*)
-					VERSION=${1}
-					;;
-			esac
+			POCKET=${1}
+			;;
+		[1-9])
+			if [ -n "${OFFSET}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			OFFSET=${1}
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
 			;;
 	esac
 	shift
@@ -200,7 +201,7 @@ fi
 
 declare -A PREV_VERSION=()
 # Get the previous versions from the provided pocket
-if [ -n "${POCKET}" ] && [ "${POCKET}" != "none" ] ; then
+if [ -n "${POCKET}" ] ; then
 	while read -r src version rest ; do
 		PREV_VERSION[${src}]=${version}
 	done < <(cranky rmadison -s -p "${POCKET}")
