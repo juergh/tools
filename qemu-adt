@@ -1,0 +1,175 @@
+#!/bin/bash -eu
+#
+# Run QEMU similar to autopkgtest/ADT instances in ScalingStack
+#
+
+function qemu_opts_arm64_kvm()
+{
+	cat <<EOF
+-accel
+kvm
+-machine
+virt,usb=off,dump-guest-core=off,gic-version=3
+-cpu
+host
+EOF
+}
+
+function qemu_opts_arm64_tcg()
+{
+	cat <<EOF
+-accel
+tcg,thread=multi
+-machine
+virt,usb=off,dump-guest-core=off,gic-version=2
+-cpu
+cortex-a72
+EOF
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-a ARCH] [-c CMDLINE] [-h] [-i IMAGE] [-k KERNEL]
+       [-n INITRD]
+
+Run QEMU with options similar to autopkgtest/ADT instances in ScalingStack.
+
+Optional arguments:
+  -a, --arch ARCH        QEMU architecture. If not provided, defaults to the
+                         host architecture.
+  -c, --cmdline CMDLINE  Kernel command line.
+  -h, --help             Show this help text and exit.
+  -i, --image IMAGE      OS image file.
+  -k, --kernel KERNEL    Kernel file.
+  -n, --initrd INITRD    Initrd file.
+  -p, --cpus NUM         Number of CPUs. If not provided, defaults to 1.
+EOF
+}
+
+host_arch=$(dpkg-architecture -q DEB_HOST_ARCH)
+
+arch=${host_arch}
+cmdline=
+image=
+kernel=
+initrd=
+cpus=1
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-a|--arch)
+			shift
+			arch=${1}
+			;;
+		-c|--cmndline)
+			shift
+			cmdline=${1}
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-i|--image)
+			shift
+			image=${1}
+			;;
+		-k|--kernel)
+			shift
+			kernel=${1}
+			;;
+		-n|--initrd)
+			shift
+			initrd=${1}
+			;;
+		-p|--cpus)
+			shift
+			cpus=1
+			;;
+		*)
+			echo "Invalid argument; ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+for f in "${image}" "${kernel}" "${initrd}" ; do
+	if [ -n "${f}" ] && ! [ -e "${f}" ] ; then
+		echo "No such file: ${f}" >&2
+		exit 1
+	fi
+done
+
+case "${arch}" in
+	amd64) qemu="qemu-system-x86_64" ;;
+	arm64) qemu="qemu-system-aarch64" ;;
+	*)
+		echo "Unsupported architecture: ${arch}" >&2
+		exit 1
+		;;
+esac
+
+if [ "${arch}" = "${host_arch}" ] ; then
+	accel=kvm
+else
+	accel=tcg
+fi
+
+readarray -t qemu_opts < <(qemu_opts_"${arch}"_"${accel}")
+
+if [ -n "${image}" ] ; then
+	qemu_opts+=(
+		"-drive" "file=${image},format=qcow2,if=none,id=drive-virtio-disk0,cache=unsafe,discard=unmap"
+		"-device" "virtio-blk-pci,scsi=off,bus=pci.2,addr=0x0,drive=drive-virtio-disk0,id=virtio-disk0,bootindex=1"
+	)
+fi
+
+if [ -n "${kernel}" ] ; then
+	qemu_opts+=(
+		"-kernel" "${kernel}"
+	)
+fi
+
+if [ -n "${initrd}" ] ; then
+	qemu_opts+=(
+		"-initrd" "${initrd}"
+	)
+fi
+
+if [ -n "${cmdline}" ] ; then
+	qemu_opts+=(
+		"-append" "${cmdline}"
+	)
+fi
+
+name=qemu-adt-${arch}
+vars=/tmp/${name}_VARS.fd
+
+cp /usr/share/AAVMF/AAVMF_VARS.fd "${vars}"
+
+set -x
+"${qemu}" \
+    -name guest="${name}",debug-threads=on \
+    -drive file=/usr/share/AAVMF/AAVMF_CODE.fd,if=pflash,format=raw,unit=0,readonly=on \
+    -drive file="${vars}",if=pflash,format=raw,unit=1 \
+    -m 2048 \
+    -overcommit mem-lock=off \
+    -smp "${cpus}",sockets="${cpus}",cores=1,threads=1 \
+    -display none \
+    -no-user-config \
+    -nodefaults \
+    -chardev stdio,id=charserial0 \
+    -serial chardev:charserial0 \
+    -rtc base=utc,driftfix=slew \
+    -no-shutdown \
+    -boot strict=on \
+    -device pcie-root-port,port=0x8,chassis=1,id=pci.1,bus=pcie.0,multifunction=on,addr=0x1 \
+    -device pcie-root-port,port=0x9,chassis=2,id=pci.2,bus=pcie.0,addr=0x1.0x1 \
+    -device pcie-root-port,port=0xa,chassis=3,id=pci.3,bus=pcie.0,addr=0x1.0x2 \
+    -device pcie-root-port,port=0xb,chassis=4,id=pci.4,bus=pcie.0,addr=0x1.0x3 \
+    -device virtio-balloon-pci,id=balloon0,bus=pci.3,addr=0x0 \
+    -msg timestamp=on \
+    -device virtio-net-pci,host_mtu=1458,netdev=hostnet0,id=net0,mac=fa:16:3e:da:ae:05,bus=pci.1,addr=0x0 \
+    -netdev user,id=hostnet0,hostfwd=tcp::5022-:22 \
+	"${qemu_opts[@]}"
