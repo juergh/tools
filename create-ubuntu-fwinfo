@@ -1,0 +1,127 @@
+#!/bin/bash -eu
+#
+# Create a list of required firmwares
+#
+
+function list_buildinfo_urls()
+{
+	local series=${1} source=${2}
+
+	python3 -c "
+from launchpadlib.launchpad import Launchpad
+
+lp = Launchpad.login_with('tools', 'production', version='devel')
+
+lp_archive = lp.archives.getByReference(reference='ubuntu')
+lp_series = lp.distributions['ubuntu'].getSeries(name_or_version='${series}')
+
+lp_binaries = []
+for pocket in ('Updates', 'Release'):
+    lp_sources = lp_archive.getPublishedSources(source_name='${source}',
+                                                distro_series=lp_series,
+                                                pocket=pocket,
+                                                exact_match=True,
+                                                order_by_date=True,
+                                                status='Published')
+    if lp_sources:
+        lp_binaries = lp_sources[0].getPublishedBinaries()
+        break
+
+for lp_binary in lp_binaries:
+    if lp_binary.binary_package_name.startswith('linux-buildinfo-'):
+        print(lp_binary.binaryFileUrls()[0])
+"
+}
+
+function list_kernels()
+{
+	local series=${1}
+
+	# List all supported kernels for the provided series
+	python3 -c "
+import yaml
+
+with open('/srv/git/kteam-tools/info/kernel-series.yaml') as fh:
+    kernel_series = yaml.safe_load(fh)
+
+for series in kernel_series:
+    series_data = kernel_series[series]
+    if series_data.get('codename', '') != '${series}':
+        continue
+    development = series_data.get('development')
+    supported = series_data.get('supported')
+    for source in series_data['sources']:
+        if ((supported and series_data['sources'][source].get('supported')) or
+            development):
+            print(source)
+"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [SERIES]
+
+Create a list of required firmware files for the given series.
+
+Postional arguments:
+  SERIES      Ubuntu series name (bionic, focal, ...). If not provided, reads
+              the series from debian/changelog.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+series=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${series}" ] ; then
+				echo "Invalid argument: ${series}" >&2
+				exit 2
+			fi
+			series=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${series}" ] ; then
+	series=$(dpkg-parsechangelog -S Distribution)
+fi
+
+tmpd=/tmp/linux-firmware-${series}
+
+rm -rf "${tmpd}"
+mkdir -p "${tmpd}"
+
+# shellcheck disable=SC2064
+trap "rm -rf ${tmpd}" EXIT INT TERM HUP
+
+# Download all buildinfo packages for the provided series
+while IFS= read -r kernel ; do
+	echo "-- Download kernel buildinfo packages: ${kernel}"
+	while IFS= read -r url ; do
+		name=${url##*/}
+		echo "   ${name}"
+		wget -q -O "${tmpd}"/"${name}" "${url}"
+	done < <(list_buildinfo_urls "${series}" "${kernel}")
+done < <(list_kernels "${series}")
+
+# Unpack buildinfo packages
+for deb in "${tmpd}"/linux-buildinfo-*.deb ; do
+	dpkg-deb -x "$deb" "$deb".d
+done
+
+# List all references firmwares
+cat "${tmpd}"/*.d/usr/lib/linux/*/fwinfo* | \
+	awk '{ print $2 }' | \
+	sort -u > "${series}".fwlist
+
+echo "-- Created ${series}.fwlist"
