@@ -1,0 +1,10 @@
+#!/bin/bash -eu
+#
+# Create an initrd
+#
+
+initrdd=${1}
+cwd=${PWD}
+
+cd "${initrdd}"
+find . | cpio -H newc -o | gzip -c > "${cwd}"/initrd.img
