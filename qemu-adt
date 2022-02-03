@@ -42,6 +42,8 @@ Optional arguments:
   -h, --help             Show this help text and exit.
   -i, --image IMAGE      OS image file.
   -k, --kernel KERNEL    Kernel file.
+  -m, --memory MEMORY    Amount of memory in KB. If not provided, defaults to
+                         2048.
   -n, --initrd INITRD    Initrd file.
   -p, --cpus NUM         Number of CPUs. If not provided, defaults to 1.
 EOF
@@ -53,6 +55,7 @@ arch=${host_arch}
 cmdline=
 image=
 kernel=
+memory=2048
 initrd=
 cpus=1
 
@@ -77,6 +80,10 @@ while [ $# -gt 0 ] ; do
 		-k|--kernel)
 			shift
 			kernel=${1}
+			;;
+		-m|--memory)
+			shift
+			memory=${1}
 			;;
 		-n|--initrd)
 			shift
@@ -153,7 +160,7 @@ set -x
     -name guest="${name}",debug-threads=on \
     -drive file=/usr/share/AAVMF/AAVMF_CODE.fd,if=pflash,format=raw,unit=0,readonly=on \
     -drive file="${vars}",if=pflash,format=raw,unit=1 \
-    -m 2048 \
+    -m "${memory}" \
     -overcommit mem-lock=off \
     -smp "${cpus}",sockets="${cpus}",cores=1,threads=1 \
     -display none \
