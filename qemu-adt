@@ -53,6 +53,8 @@ Optional arguments:
                          2048.
   -n, --initrd INITRD    Initrd file.
   -p, --cpus NUM         Number of CPUs. If not provided, defaults to 1.
+  -u, --uefi DIR         UEFI firmware directory. If not provided, defaults to
+                         /usr/share/{AAVMF,OVMF}.
 EOF
 }
 
@@ -65,6 +67,7 @@ kernel=
 memory=2048
 initrd=
 cpus=1
+uefi=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -99,6 +102,10 @@ while [ $# -gt 0 ] ; do
 		-p|--cpus)
 			shift
 			cpus=1
+			;;
+		-u|--uefi)
+			shift
+			uefi=${1}
 			;;
 		*)
 			echo "Invalid argument; ${1}" >&2
@@ -148,13 +155,9 @@ if [ -n "${cmdline}" ] ; then
 	)
 fi
 
-name=qemu-adt-${arch}
-uefi_vars=/tmp/${name}_VARS.fd
-
 case "${arch}" in
 	aarch64)
-		cp /usr/share/AAVMF/AAVMF_VARS.fd "${uefi_vars}"
-		uefi_code=/usr/share/AAVMF/AAVMF_CODE.fd
+		vmf=AAVMF
 		;;
 	*)
 		echo "Unsupported architecture: ${1}" >&2
@@ -162,28 +165,38 @@ case "${arch}" in
 		;;
 esac
 
+if [ -z "${uefi}" ] ; then
+	uefi=/usr/share/${vmf}
+fi
+
+name=qemu-adt-${arch}
+uefi_vars=/tmp/${name}_VARS.fd
+
+uefi_code=${uefi}/${vmf}_CODE.fd
+cp "${uefi}"/"${vmf}"_VARS.fd "${uefi_vars}"
+
 set -x
 qemu-system-"${arch}" \
-    -name guest="${name}",debug-threads=on \
-    -drive file="${uefi_code}",if=pflash,format=raw,unit=0,readonly=on \
-    -drive file="${uefi_vars}",if=pflash,format=raw,unit=1 \
-    -m "${memory}" \
-    -realtime mlock=off \
-    -smp "${cpus}",sockets="${cpus}",cores=1,threads=1 \
-    -display none \
-    -no-user-config \
-    -nodefaults \
-    -chardev stdio,id=charserial0 \
-    -serial chardev:charserial0 \
-    -rtc base=utc,driftfix=slew \
-    -no-shutdown \
-    -boot strict=on \
-    -device pcie-root-port,port=0x8,chassis=1,id=pci.1,bus=pcie.0,multifunction=on,addr=0x1 \
-    -device pcie-root-port,port=0x9,chassis=2,id=pci.2,bus=pcie.0,addr=0x1.0x1 \
-    -device pcie-root-port,port=0xa,chassis=3,id=pci.3,bus=pcie.0,addr=0x1.0x2 \
-    -device pcie-root-port,port=0xb,chassis=4,id=pci.4,bus=pcie.0,addr=0x1.0x3 \
-    -device virtio-balloon-pci,id=balloon0,bus=pci.3,addr=0x0 \
-    -msg timestamp=on \
-    -device virtio-net-pci,host_mtu=1458,netdev=hostnet0,id=net0,mac=fa:16:3e:da:ae:05,bus=pci.1,addr=0x0 \
-    -netdev user,id=hostnet0,hostfwd=tcp::5022-:22 \
+	-name guest="${name}",debug-threads=on \
+	-drive file="${uefi_code}",if=pflash,format=raw,unit=0,readonly=on \
+	-drive file="${uefi_vars}",if=pflash,format=raw,unit=1 \
+	-m "${memory}" \
+	-overcommit mem-lock=off \
+	-smp "${cpus}",sockets="${cpus}",cores=1,threads=1 \
+	-display none \
+	-no-user-config \
+	-nodefaults \
+	-chardev stdio,id=charserial0 \
+	-serial chardev:charserial0 \
+	-rtc base=utc,driftfix=slew \
+	-no-shutdown \
+	-boot strict=on \
+	-device pcie-root-port,port=0x8,chassis=1,id=pci.1,bus=pcie.0,multifunction=on,addr=0x1 \
+	-device pcie-root-port,port=0x9,chassis=2,id=pci.2,bus=pcie.0,addr=0x1.0x1 \
+	-device pcie-root-port,port=0xa,chassis=3,id=pci.3,bus=pcie.0,addr=0x1.0x2 \
+	-device pcie-root-port,port=0xb,chassis=4,id=pci.4,bus=pcie.0,addr=0x1.0x3 \
+	-device virtio-balloon-pci,id=balloon0,bus=pci.3,addr=0x0 \
+	-msg timestamp=on \
+	-device virtio-net-pci,host_mtu=1458,netdev=hostnet0,id=net0,mac=fa:16:3e:da:ae:05,bus=pci.1,addr=0x0 \
+	-netdev user,id=hostnet0,hostfwd=tcp::5022-:22 \
 	"${qemu_opts[@]}"
