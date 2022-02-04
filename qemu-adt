@@ -3,7 +3,7 @@
 # Run QEMU similar to autopkgtest/ADT instances in ScalingStack
 #
 
-function qemu_opts_arm64_kvm()
+function qemu_opts_aarch64_kvm()
 {
 	cat <<EOF
 -accel
@@ -15,7 +15,7 @@ host
 EOF
 }
 
-function qemu_opts_arm64_tcg()
+function qemu_opts_aarch64_tcg()
 {
 	cat <<EOF
 -accel
@@ -25,6 +25,13 @@ virt,usb=off,dump-guest-core=off,gic-version=2
 -cpu
 cortex-a72
 EOF
+}
+
+function arch_map()
+{
+	case "${1}" in
+		arm64|aarch64) echo "aarch64" ;;
+	esac
 }
 
 function usage()
@@ -49,7 +56,7 @@ Optional arguments:
 EOF
 }
 
-host_arch=$(dpkg-architecture -q DEB_HOST_ARCH)
+host_arch=$(uname -i)
 
 arch=${host_arch}
 cmdline=
@@ -63,7 +70,7 @@ while [ $# -gt 0 ] ; do
 	case "${1}" in
 		-a|--arch)
 			shift
-			arch=${1}
+			arch=$(arch_map "${1}")
 			;;
 		-c|--cmndline)
 			shift
@@ -108,15 +115,6 @@ for f in "${image}" "${kernel}" "${initrd}" ; do
 	fi
 done
 
-case "${arch}" in
-	amd64) qemu="qemu-system-x86_64" ;;
-	arm64) qemu="qemu-system-aarch64" ;;
-	*)
-		echo "Unsupported architecture: ${arch}" >&2
-		exit 1
-		;;
-esac
-
 if [ "${arch}" = "${host_arch}" ] ; then
 	accel=kvm
 else
@@ -151,17 +149,26 @@ if [ -n "${cmdline}" ] ; then
 fi
 
 name=qemu-adt-${arch}
-vars=/tmp/${name}_VARS.fd
+uefi_vars=/tmp/${name}_VARS.fd
 
-cp /usr/share/AAVMF/AAVMF_VARS.fd "${vars}"
+case "${arch}" in
+	aarch64)
+		cp /usr/share/AAVMF/AAVMF_VARS.fd "${uefi_vars}"
+		uefi_code=/usr/share/AAVMF/AAVMF_CODE.fd
+		;;
+	*)
+		echo "Unsupported architecture: ${1}" >&2
+		exit 1
+		;;
+esac
 
 set -x
-"${qemu}" \
+qemu-system-"${arch}" \
     -name guest="${name}",debug-threads=on \
-    -drive file=/usr/share/AAVMF/AAVMF_CODE.fd,if=pflash,format=raw,unit=0,readonly=on \
-    -drive file="${vars}",if=pflash,format=raw,unit=1 \
+    -drive file="${uefi_code}",if=pflash,format=raw,unit=0,readonly=on \
+    -drive file="${uefi_vars}",if=pflash,format=raw,unit=1 \
     -m "${memory}" \
-    -overcommit mem-lock=off \
+    -realtime mlock=off \
     -smp "${cpus}",sockets="${cpus}",cores=1,threads=1 \
     -display none \
     -no-user-config \
