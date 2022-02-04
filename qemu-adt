@@ -58,7 +58,7 @@ Optional arguments:
 EOF
 }
 
-host_arch=$(uname -i)
+host_arch=$(uname -m)
 
 arch=${host_arch}
 cmdline=
