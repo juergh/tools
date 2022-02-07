@@ -3,30 +3,6 @@
 # Run QEMU similar to autopkgtest/ADT instances in ScalingStack
 #
 
-function qemu_opts_aarch64_kvm()
-{
-	cat <<EOF
--accel
-kvm
--machine
-virt,usb=off,dump-guest-core=off,gic-version=3
--cpu
-host
-EOF
-}
-
-function qemu_opts_aarch64_tcg()
-{
-	cat <<EOF
--accel
-tcg,thread=multi
--machine
-virt,usb=off,dump-guest-core=off,gic-version=2
--cpu
-cortex-a72
-EOF
-}
-
 function arch_map()
 {
 	case "${1}" in
@@ -52,6 +28,8 @@ Optional arguments:
   -m, --memory MEMORY    Amount of memory in KB. If not provided, defaults to
                          2048.
   -n, --initrd INITRD    Initrd file.
+  -o, --opt OPT          Additional QEMU option. Can be provided multiple
+                         times.
   -p, --cpus NUM         Number of CPUs. If not provided, defaults to 1.
   -u, --uefi DIR         UEFI firmware directory. If not provided, defaults to
                          /usr/share/{AAVMF,OVMF}.
@@ -66,6 +44,7 @@ image=
 kernel=
 memory=2048
 initrd=
+qemu_opts=()
 cpus=1
 uefi=
 
@@ -99,6 +78,10 @@ while [ $# -gt 0 ] ; do
 			shift
 			initrd=${1}
 			;;
+		-o|--opt)
+			shift
+			qemu_opts+=("${1}")
+			;;
 		-p|--cpus)
 			shift
 			cpus=1
@@ -128,7 +111,26 @@ else
 	accel=tcg
 fi
 
-readarray -t qemu_opts < <(qemu_opts_"${arch}"_"${accel}")
+case "${arch}___${accel}" in
+	aarch64___kvm)
+		qemu_opts+=(
+			"-accel" "kvm"
+			"-machine" "virt,usb=off,dump-guest-core=off,gic-version=3"
+			"-cpu" "host"
+		)
+		;;
+	aarch64___tcg)
+		qemu_opts+=(
+			"-accel" "tcg,thread=multi"
+			"-machine" "virt,usb=off,dump-guest-core=off,gic-version=2"
+			"-cpu" "cortex-a72"
+		)
+		;;
+	*)
+		echo "Unsupported architecture/acceleration: ${arch}/${accel}" >&2
+		exit 1
+		;;
+esac
 
 if [ -n "${image}" ] ; then
 	qemu_opts+=(
@@ -158,10 +160,6 @@ fi
 case "${arch}" in
 	aarch64)
 		vmf=AAVMF
-		;;
-	*)
-		echo "Unsupported architecture: ${1}" >&2
-		exit 1
 		;;
 esac
 
