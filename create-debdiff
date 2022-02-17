@@ -1,0 +1,37 @@
+#!/bin/bash -eu
+#
+# Create a debdiff file
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h]
+
+Create a debdiff file.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+name=$(dpkg-parsechangelog -S Source)
+version=$(dpkg-parsechangelog -S Version)
+debdiff=../${name}_${version}.debdiff
+
+debdiff > "${debdiff}" || true
+echo "Created ${debdiff}"
