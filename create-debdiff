@@ -6,7 +6,7 @@
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h]
+Usage: $(basename "${0}") [-h] [PREVIOUS_VERSION]
 
 Create a debdiff file.
 
@@ -15,6 +15,8 @@ Optional arguments:
 EOF
 }
 
+prev_version=
+
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
 		-h|--help)
@@ -22,16 +24,35 @@ while [ ${#} -gt 0 ] ; do
 			exit
 			;;
 		*)
-			echo "Invalid argument: ${1}" >&2
-			exit 2
+			if [ -n "${prev_version}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			prev_version=${1}
 			;;
 	esac
 	shift
 done
 
 name=$(dpkg-parsechangelog -S Source)
-version=$(dpkg-parsechangelog -S Version)
-debdiff=../${name}_${version}.debdiff
+curr_version=$(dpkg-parsechangelog -S Version)
+curr_base=../${name}_${curr_version}
 
-debdiff > "${debdiff}" || true
-echo "Created ${debdiff}"
+if [ -z "${prev_version}" ] ; then
+	prev_version=$(dpkg-parsechangelog -S Version -o 1 -c 1)
+fi
+prev_base=../${name}_${prev_version}
+
+if [ -e "${prev_base}".changes ] && [ -e "${curr_base}".changes ] ; then
+	prev=${prev_base}.changes
+	curr=${curr_base}.changes
+elif [ -e "${prev_base}".dsc ] && [ -e "${curr_base}".dsc ] ; then
+	prev=${prev_base}.dsc
+	curr=${curr_base}.dsc
+else
+	echo "Current and/or previous .dsc or .changes files not found" >&2
+	exit 1
+fi
+
+debdiff "${prev}" "${curr}" > "${curr_base}".debdiff || true
+echo "Created ${curr_base}".debdiff
