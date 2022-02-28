@@ -1,0 +1,90 @@
+#!/bin/bash -eu
+#
+# Check for missing firmware in linux-firmware
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [-v] KERNEL [RELEASE] [VERSION]
+
+List all firmware files that the specified kernel requires but are not included
+in the specified linux-firmware package.
+
+Positional arguments:
+  KERNEL   Kernel to check in the form of series/source/arch/flavor. Not all
+           components are required and components can be shell globs. See
+           examples below.
+  RELEASE  Release name of linux-firmware to check.
+  VERSION  Package version of linux-firmware to check.
+
+Optional arguments:
+  -h, --help     Show this help text and exit.
+  -v, --verbose  Increase verbosity.
+
+Examples:
+  $ check-ubuntu-firmware jammy/linux focal
+  $ check-ubuntu-firmware focal focal
+  $ check-ubuntu-firmware jammy/*/*/generic jammy
+EOF
+}
+
+verbose=0
+kernel=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-v|--verbose)
+			verbose=1
+			;;
+		*)
+			if [ -z "${kernel}" ] ; then
+				kernel=${1}
+			else
+				break
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${kernel}" ] ; then
+	usage
+	exit 2
+fi
+
+echo "Find required firmware files for kernel ${kernel} ..."
+# shellcheck disable=SC2086
+readarray -t fwinfo < <(find ~/git/ubuntu/juergh/linux-buildinfo/${kernel} \
+							 -name fwinfo -exec awk '{ print $2 }' {} \; | \
+							sort -u)
+if [ "${#fwinfo[@]}" -eq 0 ] ; then
+	echo "No required firmware files found" >&2
+	exit 1
+fi
+
+tmpd=$(mktemp -d)
+# shellcheck disable=SC2064
+trap "rm -rf ${tmpd}" EXIT INT TERM HUP
+
+# Download and extract the linux-firmware package
+echo "Download and extract linux-firmware ${*} ..."
+( cd "${tmpd}" && pull-lp-debs linux-firmware "${@}" )
+dpkg-deb -x "${tmpd}"/*.deb "${tmpd}"/fw
+
+# Process the kernel's firmware file lists
+for fw in "${fwinfo[@]}" ; do
+	for f in "${tmpd}"/fw/lib/firmware/${fw} ; do
+		if [ -e "${f}" ] ; then
+			if [ ${verbose} -eq 1 ] ; then
+				echo "F: ${f#*/lib/firmware/}"
+			fi
+		else
+			echo "M: ${f#*/lib/firmware/}"
+		fi
+	done
+done
