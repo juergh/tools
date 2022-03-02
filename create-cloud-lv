@@ -417,9 +417,15 @@ LV_DEVICE=/dev/mapper/${VG_NAME}-${LV_NAME}
 LV_HOME=/dev/mapper/${VG_NAME}-home
 LV_SWAP=/dev/mapper/${VG_NAME}-swap
 LV_BOOT=/dev/mapper/${VG_NAME}-boot
-CONFIG_DIR=config/create-cloud-lv/$(hostname)/${RELEASE}
+CONFIG_DIR=$(dirname "$(readlink -e "${0}")")/config/create-cloud-lv/$(hostname)/${RELEASE}
 
 trap out EXIT INT TERM HUP
+
+# Check if the config directory extsts
+if ! [ -d "${CONFIG_DIR}" ] ; then
+	pr_error "No such config directory: ${CONFIG_DIR}"
+	exit 1
+fi
 
 # Check if the vg exists
 if ! vgdisplay "${VG_NAME}" >/dev/null 2>&1 ; then
