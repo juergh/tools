@@ -1,0 +1,29 @@
+#!/bin/sh -u
+
+fetch()
+{
+	(
+		cd "${1}" || { echo "Failed to cd to ${1}" >&2 ; exit 1 ; }
+
+		date -R
+		echo "Fetching ${1}"
+
+		git fetch
+
+		git branch | cut -b 3- | grep -P '^rpi-[0-9]+\.[0-9]+\.y$' | while read -r branch ; do
+			f=.tag_${branch}
+			sha=$(git rev-parse "${branch}")
+			if [ "${sha}" != "$(cat "${f}")" ] ; then
+				tag=${branch}-$(date +'%Y-%m-%d')
+				echo "Creating tag ${tag}"
+				git tag "${tag}" "${branch}"
+				echo "${sha}" > "${f}"
+			fi
+		done
+
+		date -R > .fetched
+	)
+}
+
+cwd=$(dirname "${0}")
+fetch "${cwd}"/linux-rpi.git 2>&1 | tee "${cwd}"/git-fetch-rpi.log
