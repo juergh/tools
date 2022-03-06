@@ -7,7 +7,7 @@ function parse_ks()
 {
 	local ks=${1}
 
-    python3 -c "
+	python3 -c "
 import yaml
 
 with open('${ks}') as fh:
@@ -27,7 +27,7 @@ function fetch()
 {
 	local series source url branch branches
 
-    cd "${1}" || { echo "Failed to cd to ${1}" >&2 ; exit 1 ; }
+	cd "${1}" || { echo "$(date -R) Failed to cd to ${1}" >&2 ; exit 1 ; }
 
 	echo "$(date -R) -- Download kernel-series.yaml"
 	wget -O kernel-series.yaml \
@@ -60,8 +60,8 @@ function fetch()
 		done
 	done < <(parse_ks kernel-series.yaml)
 
-    echo "$(date -R) Push to Launchpad"
-    git push git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-ubuntu --all --force
+	echo "$(date -R) Push to Launchpad"
+	git push git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-ubuntu --all --force
 }
 
 cwd=$(dirname "${0}")
