@@ -1,28 +1,25 @@
-#!/bin/sh -u
+#!/bin/bash -u
 
 fetch()
 {
-	(
-		cd "${1}" || { echo "Failed to cd to ${1}" >&2 ; exit 1 ; }
+	cd "${1}" || { echo "$(date -R) Failed to cd to ${1}" >&2 ; exit 1 ; }
 
-		date -R
-		echo "Fetching ${1}"
+	echo "$(date -R ) Fetch ${1}"
+	git fetch
 
-		git fetch
+	while IFS= read -r branch ; do
+		f=.tag_${branch}
+		sha=$(git rev-parse "${branch}")
+		if [ "${sha}" != "$(cat "${f}")" ] ; then
+			tag=${branch}-$(date +'%Y-%m-%d')
+			echo "Create tag ${tag}"
+			git tag "${tag}" "${branch}"
+			echo "${sha}" > "${f}"
+		fi
+	done < <(git branch | cut -b 3- | grep -P '^rpi-[0-9]+\.[0-9]+\.y$')
 
-		git branch | cut -b 3- | grep -P '^rpi-[0-9]+\.[0-9]+\.y$' | while read -r branch ; do
-			f=.tag_${branch}
-			sha=$(git rev-parse "${branch}")
-			if [ "${sha}" != "$(cat "${f}")" ] ; then
-				tag=${branch}-$(date +'%Y-%m-%d')
-				echo "Creating tag ${tag}"
-				git tag "${tag}" "${branch}"
-				echo "${sha}" > "${f}"
-			fi
-		done
-
-		date -R > .fetched
-	)
+	echo "$(date -R) Push to Launchpad"
+	git push git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-rpi --all --force
 }
 
 cwd=$(dirname "${0}")
