@@ -4,8 +4,8 @@ fetch()
 {
 	cd "${1}" || { echo "$(date -R) Failed to cd to ${1}" >&2 ; exit 1 ; }
 
-	echo "$(date -R ) Fetch ${1}"
-	git fetch
+	echo "$(date -R ) Fetch https://github.com/raspberrypi/linux.git"
+	git fetch https://github.com/raspberrypi/linux.git
 
 	while IFS= read -r branch ; do
 		f=.tag_${branch}
@@ -19,7 +19,7 @@ fetch()
 	done < <(git branch | cut -b 3- | grep -P '^rpi-[0-9]+\.[0-9]+\.y$')
 
 	echo "$(date -R) Push to Launchpad"
-	git push git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-rpi --all --force
+	git push --all --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-rpi
 }
 
 cwd=$(dirname "${0}")
