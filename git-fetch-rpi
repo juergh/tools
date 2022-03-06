@@ -4,8 +4,8 @@ fetch()
 {
 	cd "${1}" || { echo "$(date -R) Failed to cd to ${1}" >&2 ; exit 1 ; }
 
-	echo "$(date -R ) Fetch https://github.com/raspberrypi/linux.git"
-	git fetch https://github.com/raspberrypi/linux.git
+	echo "$(date -R ) Fetch $(git remote -v | awk '$3 == "(fetch)" { print $2 }')"
+	git fetch
 
 	while IFS= read -r branch ; do
 		f=.tag_${branch}
