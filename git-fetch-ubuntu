@@ -59,6 +59,9 @@ function fetch()
 			fi
 		done
 	done < <(parse_ks kernel-series.yaml)
+
+    echo "$(date -R) Push to Launchpad"
+    git push git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-ubuntu --all --force
 }
 
 cwd=$(dirname "${0}")
