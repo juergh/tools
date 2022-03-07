@@ -1,0 +1,70 @@
+#!/bin/bash -eu
+#
+# Mirror all supported Ubuntu kernels to Launchpad juergh/linux-ubuntu
+#
+
+function parse_ks()
+{
+	local ks=${1}
+
+	python3 -c "
+import yaml
+
+with open('${ks}') as fh:
+    kernel_series = yaml.safe_load(fh)
+
+for version in kernel_series:
+    series = kernel_series[version]
+    if series.get('supported') or series.get('development'):
+        for source in series['sources']:
+            if series['sources'][source].get('supported') or series.get('development'):
+                repo = series['sources'][source]['packages'][source]['repo']
+                print('{} {} {}'.format(series['codename'], source, ' '.join(repo)))
+"
+}
+
+if ! cd "${1}" ; then
+	echo "-- Failed to cd to ${1}" >&2
+	exit 1
+fi
+
+date -R
+echo "-- Download kernel-series.yaml"
+
+wget -O kernel-series.yaml \
+	 https://git.launchpad.net/~canonical-kernel/+git/kteam-tools/plain/info/kernel-series.yaml
+
+while IFS=" " read -r series source url branch ; do
+	echo "-- Update ${series}/${source}"
+
+	if [ "${url/canonical-kernel-esm/}" != "${url}" ] ; then
+		# Always fetch from the public repo
+		url=${url%.launchpad.net/*}.launchpad.net/~ubuntu-kernel/ubuntu/+source/${source}/+git/${series}
+	fi
+
+	if [ -z "${url}" ] ; then
+		echo "-- Failed to determine repo url"  >&2
+		continue
+	fi
+
+	if [ -n "${branch}" ] ; then
+		branches=("${branch}")
+	else
+		branches=("master-next" "master")
+	fi
+
+	for branch in "${branches[@]}" ; do
+		echo "-- Fetch ${url} ${branch}"
+		if git fetch --force "${url}" "${branch}":"${series}"/"${source}" ; then
+			git fetch --tags --force "${url}" || true
+			break
+		fi
+	done
+done < <(parse_ks kernel-series.yaml)
+
+echo "-- Push to Launchpad"
+git push --all --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-ubuntu
+git push --tags --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-ubuntu
+
+echo "-- Done"
+date -R
