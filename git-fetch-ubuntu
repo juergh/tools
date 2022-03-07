@@ -27,14 +27,15 @@ function fetch()
 {
 	local series source url branch branches
 
-	cd "${1}" || { echo "$(date -R) Failed to cd to ${1}" >&2 ; exit 1 ; }
+	date -R
+	cd "${1}" || { echo "-- Failed to cd to ${1}" >&2 ; exit 1 ; }
 
-	echo "$(date -R) -- Download kernel-series.yaml"
+	echo "-- Download kernel-series.yaml"
 	wget -O kernel-series.yaml \
 		 https://git.launchpad.net/~canonical-kernel/+git/kteam-tools/plain/info/kernel-series.yaml
 
 	while IFS=" " read -r series source url branch ; do
-		echo "$(date -R) -- Update ${series}/${source}"
+		echo "-- Update ${series}/${source}"
 
 		if [ "${url/canonical-kernel-esm/}" != "${url}" ] ; then
 			# Always fetch from the public repo
@@ -42,7 +43,7 @@ function fetch()
 		fi
 
 		if [ -z "${url}" ] ; then
-			echo "$(date -R) -- Failed to determine repo url"  >&2
+			echo "-- Failed to determine repo url"  >&2
 			continue
 		fi
 
@@ -53,15 +54,16 @@ function fetch()
 		fi
 
 		for branch in "${branches[@]}" ; do
-			echo "$(date -R) -- Fetch ${url} ${branch}"
+			echo "-- Fetch ${url} ${branch}"
 			if git fetch --tags --force "${url}" "${branch}":"${series}"/"${source}" ; then
 				break
 			fi
 		done
 	done < <(parse_ks kernel-series.yaml)
 
-	echo "$(date -R) Push to Launchpad"
+	echo "-- Push to Launchpad"
 	git push git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-ubuntu --all --force
+	date -R
 }
 
 cwd=$(dirname "${0}")

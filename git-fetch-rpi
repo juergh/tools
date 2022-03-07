@@ -3,7 +3,7 @@
 fetch()
 {
 	date -R
-	cd "${1}" || { echo "Failed to cd to ${1}" >&2 ; exit 1 ; }
+	cd "${1}" || { echo "-- Failed to cd to ${1}" >&2 ; exit 1 ; }
 
 	echo "-- Fetch https://github.com/raspberrypi/linux.git"
 	git fetch https://github.com/raspberrypi/linux.git +refs/heads/*:refs/heads/*
