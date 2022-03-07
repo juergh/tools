@@ -62,7 +62,8 @@ function fetch()
 	done < <(parse_ks kernel-series.yaml)
 
 	echo "-- Push to Launchpad"
-	git push git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-ubuntu --all --force
+	git push --all --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-ubuntu
+	git push --tags --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-ubuntu
 	date -R
 }
 

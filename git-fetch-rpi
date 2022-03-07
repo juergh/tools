@@ -6,7 +6,7 @@ fetch()
 	cd "${1}" || { echo "-- Failed to cd to ${1}" >&2 ; exit 1 ; }
 
 	echo "-- Fetch https://github.com/raspberrypi/linux.git"
-	git fetch https://github.com/raspberrypi/linux.git +refs/heads/*:refs/heads/*
+	git fetch --tags --force https://github.com/raspberrypi/linux.git refs/heads/*:refs/heads/*
 
 	# shellcheck disable=SC2010
 	while IFS= read -r ref ; do
@@ -20,6 +20,7 @@ fetch()
 
 	echo "-- Push to Launchpad"
 	git push --all --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-rpi
+	git push --tags --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-rpi
 	date -R
 }
 
