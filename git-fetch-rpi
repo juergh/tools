@@ -2,24 +2,25 @@
 
 fetch()
 {
-	cd "${1}" || { echo "$(date -R) Failed to cd to ${1}" >&2 ; exit 1 ; }
+	date -R
+	cd "${1}" || { echo "Failed to cd to ${1}" >&2 ; exit 1 ; }
 
-	echo "$(date -R ) Fetch $(git remote -v | awk '$3 == "(fetch)" { print $2 }')"
-	git fetch
+	echo "-- Fetch https://github.com/raspberrypi/linux.git"
+	git fetch https://github.com/raspberrypi/linux.git +refs/heads/*:refs/heads/*
 
-	while IFS= read -r branch ; do
-		f=.tag_${branch}
-		sha=$(git rev-parse "${branch}")
-		if [ "${sha}" != "$(cat "${f}")" ] ; then
-			tag=${branch}-$(date +'%Y-%m-%d')
-			echo "Create tag ${tag}"
-			git tag "${tag}" "${branch}"
-			echo "${sha}" > "${f}"
+	# shellcheck disable=SC2010
+	while IFS= read -r ref ; do
+		commit=$(cat "${ref}")
+		if ! grep -q "${commit}" refs/tags/* ; then
+			tag=${ref##*/}-$(date +'%Y-%m-%d')
+			echo "-- Create tag ${tag}"
+			git tag "${tag}" "${commit}"
 		fi
-	done < <(git branch | cut -b 3- | grep -P '^rpi-[0-9]+\.[0-9]+\.y$')
+	done < <(ls -1 refs/heads/rpi-* | grep -E '/rpi-[0-9]+\.[0-9]+\.y$')
 
-	echo "$(date -R) Push to Launchpad"
+	echo "-- Push to Launchpad"
 	git push --all --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-rpi
+	date -R
 }
 
 cwd=$(dirname "${0}")
