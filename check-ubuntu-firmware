@@ -8,7 +8,7 @@ function usage()
 	cat <<EOF
 Usage: $(basename "${0}") [-h] [-v] KERNEL [RELEASE] [VERSION]
 
-List all firmware files that the specified kernel requires but are not included
+List all firmware files that the specified kernel needs but are not included
 in the specified linux-firmware package.
 
 Positional arguments:
@@ -57,13 +57,13 @@ if [ -z "${kernel}" ] ; then
 	exit 2
 fi
 
-echo "Find required firmware files for kernel ${kernel} ..."
+echo "Find firmware files needed by kernel ${kernel} ..."
 # shellcheck disable=SC2086
 readarray -t fwinfo < <(find ~/git/ubuntu/juergh/linux-buildinfo/${kernel} \
 							 -name fwinfo -exec awk '{ print $2 }' {} \; | \
-							sort -u)
+							sort -V -u)
 if [ "${#fwinfo[@]}" -eq 0 ] ; then
-	echo "No required firmware files found" >&2
+	echo "No needed firmware files found" >&2
 	exit 1
 fi
 
@@ -76,15 +76,36 @@ echo "Download and extract linux-firmware ${*} ..."
 ( cd "${tmpd}" && pull-lp-debs linux-firmware "${@}" )
 dpkg-deb -x "${tmpd}"/*.deb "${tmpd}"/fw
 
-# Process the kernel's firmware file lists
+declare -A fws
+
+# Process the kernel's needed firmware file list
 for fw in "${fwinfo[@]}" ; do
 	for f in "${tmpd}"/fw/lib/firmware/${fw} ; do
 		if [ -e "${f}" ] ; then
 			if [ ${verbose} -eq 1 ] ; then
-				echo "F: ${f#*/lib/firmware/}"
+				fws["${f}"]="F"  # found
 			fi
 		else
-			echo "M: ${f#*/lib/firmware/}"
+			fws["${f}"]="M"  # missing
 		fi
 	done
 done
+
+# Process the linux-firmware package content
+if [ ${verbose} -eq 1 ] ; then
+	while IFS= read -r f ; do
+		if [ -z "${fws[${f}]:-}" ] ; then
+			fws["${f}"]="N"  # not needed
+		fi
+	done < <(find "${tmpd}"/fw/lib/firmware -type f)
+fi
+
+
+if [ ${verbose} -eq 1 ] ; then
+	echo "Result (M: missing, F: found, N: not needed)"
+else
+	echo "Result (M: missing)"
+fi
+while IFS= read -r f ; do
+	echo "${fws[${f}]}: ${f#*/lib/firmware/}"
+done < <(for k in "${!fws[@]}" ; do echo "${k}" ; done | sort -V)
