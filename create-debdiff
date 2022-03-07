@@ -43,9 +43,9 @@ if [ -z "${prev_version}" ] ; then
 fi
 prev_base=../${name}_${prev_version}
 
-if [ -e "${prev_base}".changes ] && [ -e "${curr_base}".changes ] ; then
-	prev=${prev_base}.changes
-	curr=${curr_base}.changes
+if [ -e "${prev_base}"_source.changes ] && [ -e "${curr_base}"_source.changes ] ; then
+	prev=${prev_base}_source.changes
+	curr=${curr_base}_source.changes
 elif [ -e "${prev_base}".dsc ] && [ -e "${curr_base}".dsc ] ; then
 	prev=${prev_base}.dsc
 	curr=${curr_base}.dsc
@@ -54,5 +54,13 @@ else
 	exit 1
 fi
 
-debdiff "${prev}" "${curr}" > "${curr_base}".debdiff || true
+{
+	# Add a 'header' that identifies the previous and current dsc
+	echo "# Previous: ${prev##*/}"
+	echo "# Current:  ${curr##*/}"
+
+	# Generate the debdiff
+	debdiff "${prev}" "${curr}"
+} > "${curr_base}".debdiff || true
+
 echo "Created ${curr_base}".debdiff
