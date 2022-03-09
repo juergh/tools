@@ -204,45 +204,48 @@ function debian_create_chroot()
 
 function fedora_create_chroot()
 {
-	local url pattern rpms rpm pkg_manager package
+	local pkg_manager
 
-	mkdir -p "${BASEDIR}"
+	cat <<EOF >/tmp/repo.config
+[centos-7]
+name=centos-7
+baseurl=http://mirror.centos.org/centos/7/os/${ARCH}
+gpgcheck=0
 
-	case "${VENDOR}" in
-		fedora)
-			url="https://dl.fedoraproject.org/pub/fedora/linux/releases/${RELEASE}/Everything/${ARCH}/os/Packages/f"
-			pattern=">fedora-release-server-${RELEASE}-.*\.rpm<|>fedora-repos-${RELEASE}-.*\.rpm<"
-			;;
-		centos)
-			if [ "${RELEASE}" -lt 8 ] ; then
-				url="http://mirror.centos.org/${DIST}/${RELEASE}/os/${ARCH}/Packages"
-			else
-				url="http://mirror.centos.org/${DIST}/${RELEASE}/BaseOS/${ARCH}/os/Packages"
-			fi
-			pattern=">centos-release-.*\\.${ARCH}.rpm<"
-			;;
-		opensuse)
-			url="http://download.opensuse.org/distribution/leap/${RELEASE}/repo/oss/suse/${ARCH}"
-			pattern=">openSUSE-release-[0-9].*\.rpm<"
+[centos-8]
+name=centos-8
+baseurl=http://mirror.centos.org/centos/8-stream/BaseOS/${ARCH}/os
+gpgcheck=0
+
+[centos-9]
+name=centos-9
+baseurl=http://mirror.centos.org/centos/9-stream/BaseOS/${ARCH}/os
+gpgcheck=0
+
+[fedora-${RELEASE}]
+name=fedora-${RELEASE}
+baseurl=https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/${RELEASE}/Everything/${ARCH}/os
+gpgcheck=0
+
+[opensuse-${RELEASE}]
+name=opensuse-${RELEASE}
+baseurl=http://download.opensuse.org/distribution/leap/${RELEASE}/repo/oss
+gpgcheck=0
+EOF
+
+	pkg_manager=dnf
+	case "${DIST}" in
+		centos-7)
+			pkg_manager=yum
 			;;
 	esac
 
-	# The exact names of the release and repos RPMs
-	readarray -t rpms < <(curl -s "${url}/" | grep -oP "${pattern}" | \
-							  tr -d '><')
-
-	# Download and install the release and repos RPMs
-	for rpm in "${rpms[@]}" ; do
-		( cd /tmp && rm -f "${rpm}" && wget "${url}/${rpm}" )
-		rpm -ivh --force-debian --nodeps --root "${BASEDIR}" "/tmp/${rpm}"
-	done
-
-	# Which package manager to use
-	pkg_manager=dnf
-
 	# Install the base system
-	dnf --installroot="${BASEDIR}" --releasever="${RELEASE}" --assumeyes \
-		--nogpgcheck install "${pkg_manager}"
+	mkdir -p "${BASEDIR}"
+	dnf --config=/tmp/repo.config --assumeyes --nogpgcheck \
+		--releasever="${RELEASE}" \
+		--disablerepo=* --enablerepo="${DIST}" \
+		--installroot="${BASEDIR}" install "${pkg_manager}"
 
 	# We need to reinstall the base system because the original installation
 	# put the RPM database in ~/.rpmdb
@@ -260,8 +263,6 @@ function fedora_create_chroot()
 		for package in "${RPM_PACKAGES[@]}" ; do
 			${SCHROOT} "${pkg_manager}" --assumeyes install "${package}" || true
 		done
-		# Install kernel build dependencies
-		${SCHROOT} "${pkg_manager}" builddep --assumeyes kernel || true
 	fi
 
 	# Clean the cache
