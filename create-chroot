@@ -241,7 +241,7 @@ function fedora_create_chroot()
 	pkg_manager=dnf
 
 	# Install the base system
-	yum --installroot="${BASEDIR}" --releasever="${RELEASE}" --assumeyes \
+	dnf --installroot="${BASEDIR}" --releasever="${RELEASE}" --assumeyes \
 		--nogpgcheck install "${pkg_manager}"
 
 	# We need to reinstall the base system because the original installation
