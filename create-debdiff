@@ -56,8 +56,8 @@ fi
 
 {
 	# Add a 'header' that identifies the previous and current dsc
-	echo "# Previous: ${prev##*/}"
-	echo "# Current:  ${curr##*/}"
+	echo "# HEADER Current:  ${curr##*/}"
+	echo "# HEADER Previous: ${prev##*/}"
 
 	# Generate the debdiff
 	debdiff "${prev}" "${curr}"
