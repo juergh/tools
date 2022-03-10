@@ -124,8 +124,8 @@ function review_src()
 
 		# Add a 'header' that identifies the previous and current dsc
 		{
-			echo "# Previous: ${prev_dsc}"
 			echo "# Current:  ${dsc}"
+			echo "# Previous: ${prev_dsc}"
 			cat ../"${debdiff}"
 		} > ../"${debdiff}".tmp
 		mv  ../"${debdiff}".tmp ../"${debdiff}"
