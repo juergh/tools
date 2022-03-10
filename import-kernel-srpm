@@ -82,6 +82,12 @@ version=$(rpm -qp --qf '%{VERSION}\n' "${srpm}")
 release=$(rpm -qp --qf '%{RELEASE}\n' "${srpm}")
 tag=${version}-${release}
 
+# Check if the kernel is already imported
+if git log --format="%s" | grep -qFx "Import kernel ${tag}" ; then
+	echo "Kernel ${tag} already imported"
+	exit
+fi
+
 # Which schroot to use
 if [ -z "${chroot}" ] ; then
 	num=${release##*el}
@@ -127,9 +133,9 @@ fi
 # Copy the source
 cd "${gitd}"
 cp "${rpmbuildd}/SPECS/${name}.spec" .
-rsync -a "${rpmbuildd}/BUILD/${buildd}/" .
+rsync -a --delete --cvs-exclude "${rpmbuildd}/BUILD/${buildd}/" .
 
 # Commit
 git add .
-git add -f *.spec
-git commit -s -m "Import kernel version ${tag}"
+git add -f ./*.spec
+git commit -s -m "Import kernel ${tag}"
