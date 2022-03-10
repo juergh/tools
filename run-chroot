@@ -142,7 +142,7 @@ chroot=${session#*-}
 # Destroy an existing session if -d, --destroy is provided
 if [ "${destroy}" -eq 1 ] ; then
 	if ! session_exists "${session}" ; then
-		pr_error "Not such session: ${session}"
+		pr_error "No such session: ${session}"
 		exit 1
 	fi
 	pr_info "Destroy existing session ${session}"
@@ -171,24 +171,13 @@ EOF
 	pr_info "Create new session ${session}"
 	schroot -b -n "${session}" -c "${chroot}"
 
-	# Generate /etc/hosts
-	schroot -u root -r -c "${session}" -- bash -c "cat << EOF > /etc/hosts
-127.0.0.1  localhost
-127.0.1.1  $(hostname)
-EOF
-"
 	# Upgrade packages
-	schroot -u root -r -c "${session}" -- apt-get update
-	schroot -u root -r -c "${session}" -- apt-get -y dist-upgrade
-
-	# Install additional packages
-	schroot -u root -r -c "${session}" -- apt-get -y install \
-			bc bison debhelper flex gawk git kernel-wedge less libssl-dev \
-			openssl sudo
-
-	# Copy sudoer files
-	sudo tar -cf - /etc/sudoers.d/ | \
-		schroot -u root -r -c "${session}" -- sh -c "cd / && tar -xf -"
+	cat << EOF | schroot -u root -r -c "${session}" -- bash -
+if sh -c 'command -v apt-get' &> /dev/null ; then
+    apt-get update
+    apt-get -y dist-upgrade
+fi
+EOF
 fi
 
 # Assemble the PS1 prefix

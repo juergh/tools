@@ -87,6 +87,37 @@ RPM_PACKAGES=(
 	fedora-packager
 	rpmdevtools
 	wget
+	# Packages for kernel builds
+	asciidoc
+	audit-libs-devel
+	bc
+	binutils-devel
+	bison
+	elfutils-devel
+	flex
+	gcc
+	git
+	hostname
+	java-devel
+	kabi-dw
+	m4
+	make
+	ncurses-devel
+	net-tools
+	newt-devel
+	nss-tools
+	numactl-devel
+	openssl-devel
+	pciutils-devel
+	perl-ExtUtils-Embed
+	perl-devel
+	perl-generators
+	pesign
+	python3-devel
+	python3-docutils
+	xmlto
+	xz-devel
+	zlib-devel
 )
 
 
@@ -461,3 +492,11 @@ cat <<EOF >"${sudoer}"
 ${SUDO_USER} ALL = NOPASSWD: ALL
 EOF
 chmod 440 "${sudoer}"
+
+# -----------------------------------------------------------------------------
+# Create /etc/hosts
+
+cat <<EOF >"${BASEDIR}"/etc/hosts
+127.0.0.1  localhost
+127.0.1.1  $(hostname)
+EOF
