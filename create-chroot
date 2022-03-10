@@ -77,6 +77,7 @@ DEB_PACKAGES=(
 
 # The base RPM packages
 RPM_INCLUDE=(
+	dnf-plugins-core
 	fakeroot
 	less
 	sudo
@@ -85,7 +86,6 @@ RPM_INCLUDE=(
 
 # Additional RPM packages
 RPM_PACKAGES=(
-	dnf-plugins-core
 	fedora-packager
 	rpmdevtools
 	wget
@@ -258,7 +258,7 @@ gpgcheck=0
 
 [centos-9]
 name=centos-9
-baseurl=http://mirror.centos.org/centos/9-stream/BaseOS/${ARCH}/os
+baseurl=http://mirror.stream.centos.org/9-stream/BaseOS/${ARCH}/os
 gpgcheck=0
 
 [fedora-${RELEASE}]
@@ -305,7 +305,7 @@ EOF
 	# Install the additional packages
 	if [ "${BASE}" -eq 0 ] ; then
 		if [ ${powertools} -eq 1 ] ; then
-			${SCHROOT} dnf config-manager --setenabled powertools
+			${SCHROOT} dnf config-manager --set-enabled powertools
 		fi
 		for package in "${RPM_PACKAGES[@]}" ; do
 			${SCHROOT} "${pkg_manager}" --assumeyes install "${package}" || true
