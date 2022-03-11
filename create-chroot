@@ -95,6 +95,7 @@ RPM_PACKAGES=(
 	bc
 	binutils-devel
 	bison
+	bpftool
 	dwarves
 	elfutils-devel
 	flex
