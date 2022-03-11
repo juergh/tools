@@ -132,8 +132,8 @@ fi
 
 # Copy the source
 cd "${gitd}"
-cp "${rpmbuildd}/SPECS/${name}.spec" .
 rsync -a --delete --cvs-exclude "${rpmbuildd}/BUILD/${buildd}/" .
+cp "${rpmbuildd}/SPECS/${name}.spec" .
 
 # Commit
 git add .
