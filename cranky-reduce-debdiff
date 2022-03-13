@@ -63,20 +63,29 @@ function calc_patch_id()
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h]
+Usage: $(basename "${0}") [-h] [-p PREV_VERSION]
 
 Reduce a derivative debdiff by filtering out master changes.
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -h, --help                       Show this help text and exit.
+  -p, --prev_version PREV_VERSION  Use the previous version PREV_VERSION. If
+                                   not provided, determines it from the
+                                   debdiff.
 EOF
 }
+
+prev_version=
 
 while [ ${#} -ne 0 ] ; do
 	case "${1}" in
 		-h|--help)
 			usage
 			exit
+			;;
+		-p|--prev_version)
+			shift
+			previous_version=${1}
 			;;
 		*)
 			echo "Invalid argument: ${1}" >&2
@@ -113,10 +122,18 @@ fi
 
 echo "Reducing debdiff ${debdiff}"
 
-# Pull the previous version from the debdiff
-prev_version=$(head -1 "${debdiff}")
-prev_version=${prev_version%.*}
-prev_version=${prev_version#*_}
+if [ -z "${prev_version}" ] ; then
+	# Pull the previous version from the debdiff
+	prev_version=$(grep -m1 '^# HEADER Previous: ' "${debdiff}")
+	prev_version=${prev_version%.dsc}
+	prev_version=${prev_version%_source.changes}
+	prev_version=${prev_version#*_}
+
+	if [ -z "${previous_version}" ] ; then
+		echo "Failed to determine previous version from debdiff" >&2
+		exit 1
+	fi
+fi
 
 # Find the master commits
 master=$(find_master_commit "${DEBIAN}"/changelog "${version}")
