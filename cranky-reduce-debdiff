@@ -85,7 +85,7 @@ while [ ${#} -ne 0 ] ; do
 			;;
 		-p|--prev_version)
 			shift
-			previous_version=${1}
+			prev_version=${1}
 			;;
 		*)
 			echo "Invalid argument: ${1}" >&2
@@ -129,7 +129,7 @@ if [ -z "${prev_version}" ] ; then
 	prev_version=${prev_version%_source.changes}
 	prev_version=${prev_version#*_}
 
-	if [ -z "${previous_version}" ] ; then
+	if [ -z "${prev_version}" ] ; then
 		echo "Failed to determine previous version from debdiff" >&2
 		exit 1
 	fi
