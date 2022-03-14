@@ -43,12 +43,12 @@ if [ -z "${prev_version}" ] ; then
 fi
 prev_base=../${name}_${prev_version}
 
-if [ -e "${prev_base}"_source.changes ] && [ -e "${curr_base}"_source.changes ] ; then
-	prev=${prev_base}_source.changes
-	curr=${curr_base}_source.changes
-elif [ -e "${prev_base}".dsc ] && [ -e "${curr_base}".dsc ] ; then
+if [ -e "${prev_base}".dsc ] && [ -e "${curr_base}".dsc ] ; then
 	prev=${prev_base}.dsc
 	curr=${curr_base}.dsc
+elif [ -e "${prev_base}"_source.changes ] && [ -e "${curr_base}"_source.changes ] ; then
+	prev=${prev_base}_source.changes
+	curr=${curr_base}_source.changes
 else
 	echo "Current and/or previous .dsc or .changes files not found" >&2
 	exit 1
