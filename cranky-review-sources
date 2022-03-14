@@ -100,7 +100,9 @@ function review_src()
 		fi
 
 		# Figure out the previous package version
-		if [ -n "${OFFSET}" ] ; then
+		if [ -n "${VERSION}" ] ; then
+			prev_version=${VERSION}
+		elif [ -n "${OFFSET}" ] ; then
 			prev_version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
 											   -o "${OFFSET}" -c 1 -S Version)
 		else
@@ -137,7 +139,7 @@ function review_src()
 function usage()
 {
 	cat <<EOF
-Usage: cranky review-sources [-c] [-h] [POCKET|OFFSET]
+Usage: cranky review-sources [-c] [-h] [POCKET|OFFSET|VERSION]
 
 Review the differences between the current kernel source packages and
 previous source packages.
@@ -146,6 +148,7 @@ Positional arguments:
   POCKET         Get the previous package versions from pocket POCKET.
   OFFSET         Get the previous package versions from the changelogs using
                  changelog entry offset OFFSET (1 == previous changelog entry).
+  VERSION        Use VERSION as the previous package version.
 
   If neither POCKET nor OFFSET is provided, process the existing debdiff.
 
@@ -157,8 +160,10 @@ EOF
 }
 
 current=0
+pos_arg=0
 POCKET=
 OFFSET=
+VERSION=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -170,20 +175,30 @@ while [ ${#} -gt 0 ] ; do
 			exit
 			;;
 		release|security|updates|proposed)
-			if [ -n "${POCKET}" ] ; then
+			if [ ${pos_arg} -eq 1 ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
+			pos_arg=1
 			POCKET=${1}
 			;;
 		[1-9])
-			if [ -n "${OFFSET}" ] ; then
+			if [ ${pos_arg} -eq 1 ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
+			pos_arg=1
 			OFFSET=${1}
 			;;
-		*)
+		[1-9]*.[0-9]*.0-[0-9]*.[0-9]*)
+			if [ ${pos_arg} -eq 1 ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			pos_arg=1
+			VERSION=${1}
+			;;
+		  *)
 			echo "Invalid argument: ${1}" >&2
 			exit 2
 			;;
