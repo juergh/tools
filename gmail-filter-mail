@@ -61,6 +61,9 @@ function canonical_filter_mail()
 	move_mail "Mailing List/Ubuntu/kernel-team" \
 			  "Mailing List/Ubuntu/kernel-team/linux-firmware" \
 			  "contain_subject('linux-firmware')"
+	move_mail "Launchpad-Message-For/canonical-kernel-team" \
+			  "Launchpad-Message-For/juergh" \
+			  "contain_body('Launchpad-Subscription: linux-firmware')"
 
 	# Move noise mail
 	move_noise_mail "Mailing List/Ubuntu/kernel-team" \
