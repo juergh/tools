@@ -40,6 +40,29 @@ function adb_start_app()
 	adb -s "${SERIAL}" shell monkey -p "${app}" 1
 }
 
+function adb_pull_storage()
+{
+	local rmt_dir=${1} dst_dir=${2}
+	local remotes rmt_base_dir rmt_full_dir tmp_dir
+
+	remotes=("/storage/self/primary/${rmt_dir}")
+	while IFS= read -r rmt_base_dir ; do
+		rmt_full_dir="${rmt_base_dir}/${rmt_dir}"
+		if adb shell test -d "${rmt_full_dir}" ; then
+			remotes+=("${rmt_full_dir}")
+		fi
+	done < <(adb shell ls -d /storage/*)
+
+	tmp_dir=/tmp/.adb
+	rm -rf "${tmp_dir}" "${dst_dir}"
+	mkdir -p "${tmp_dir}" "${dst_dir}"
+
+	echo "-- Pull downloaded files from (${SERIAL}) to ${dst_dir}"
+	adb -s "${SERIAL}" pull "${remotes[@]}" "${tmp_dir}"
+	find "${tmp_dir}" -type f -print0 | xargs -0 -I{} mv '{}' "${dst_dir}"
+	rm -rf "${tmp_dir}"
+}
+
 # -----------------------------------------------------------------------------
 # Plumbing commands
 
@@ -91,21 +114,14 @@ function do_serials()
 # -----------------------------------------------------------------------------
 # Porcelain Commands
 
+function do_pull_camera()
+{
+	adb_pull_storage DCIM "${HOME}"/Downloads/adb/"${SERIAL}"/Camera
+}
+
 function do_pull_download()
 {
-	local remotes dl_dir
-
-	mkdir -p ~/Downloads/adb
-
-	remotes=("/storage/self/primary/Download")
-	while IFS= read -r dl_dir ; do
-		if adb shell test -d "${dl_dir}"/Download ; then
-			remotes+=("${dl_dir}"/Download)
-		fi
-	done < <(adb shell ls -d /storage/*)
-
-	echo "-- Pull downloaded files from (${SERIAL}) to ~/Downloads/adb"
-	adb -s "${SERIAL}" pull "${remotes[@]}" ~/Downloads/adb
+	adb_pull_storage Download "${HOME}"/Downloads/adb/"${SERIAL}"/Download
 }
 
 function do_scrcpy()
@@ -173,6 +189,7 @@ App commands:
   start APP            Start an app.
 
 Porcelain commands:
+  pull-camera          Pull all camera files.
   pull-download        Pull all downloaded files.
   scrcpy               Run scrcpy.
   unlock               Unlock device.
@@ -202,7 +219,7 @@ while [ ${#} -gt 0 ] ; do
 		-s|--serial)
 			SERIAL=${1}
 			;;
-		pull-download|scrcpy|unlock)
+		pull-camera|pull-download|scrcpy|unlock)
 			command=${1}
 			;;
 		display-off|display-on|display-state|serials)
