@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+
+import argparse
+import re
+import sys
+
+def print_line(keys, show, prefix, line):
+    for k in keys:
+        if k in show:
+            print(prefix + line)
+            return
+
+def check_kconfig(kconfig, show):
+    retval = 0
+
+    is_choice = False
+    is_help = False
+    help_indent = ''
+
+    ifs = []
+    menus = []
+
+    with open(kconfig) as fh:
+        for line in fh:
+            line = line.rstrip()
+
+            # Empty line or comment
+            if line == '' or re.search(r'^\t*#( |$)', line):
+                print_line(['a'], show, '    ', line)
+                continue
+
+            # Line indentation
+            m = re.search(r'^([\t ]+)', line)
+            indent = m.group(1) if m else ''
+
+            # -----------------------------------------------------------------
+            # 0.level keywords
+
+            # if <EXPR>
+            m = re.search(r'^if (.+)$', line)
+            if m:
+                ifs.append(m.group(1))
+                is_help = False
+                print_line(['a'], show, '    ', line)
+                continue
+
+            # endif # <EXPR>
+            m = re.search(r'^endif # (.+)$', line)
+            if m:
+                is_help = False
+                if m.group(1) == ifs.pop():
+                    print_line(['a'], show, '    ', line)
+                else:
+                    retval = 1
+                    print_line(['a', 'i'], show, 'II  ', line)
+                continue
+
+            # if|endif
+            if re.search(r'^(if|endif)', line):
+                is_help = False
+                retval = 1
+                print_line(['a', 'i'], show, 'II  ', line)
+                continue
+
+            # menu "<TEXT>"
+            m = re.search(r'^menu (".+")$', line)
+            if m:
+                menus.append(m.group(1))
+                is_help = False
+                print_line(['a'], show, '    ', line)
+                continue
+
+            # endmenu # "<TEXT>"
+            m = re.search(r'^endmenu # (.+)$', line)
+            if m:
+                is_help = False
+                if m.group(1) == menus.pop():
+                    print_line(['a'], show, '    ', line)
+                else:
+                    retval = 1
+                    print_line(['a', 'm'], show, 'MM  ', line)
+                continue
+
+            # menu|endmenu
+            if re.search(r'^(menu|endmenu)', line):
+                is_help = False
+                retval = 1
+                print_line(['a', 'm'], show, 'MM  ', line)
+                continue
+
+            # choice
+            if line == 'choice':
+                is_help = False
+                is_choice = True
+                print_line(['a'], show, '    ', line)
+                continue
+
+            # endchoice
+            if line == 'endchoice':
+                is_help = False
+                is_choice = False
+                print_line(['a'], show, '    ', line)
+                continue
+
+            # choice|endchoice
+            if re.search(r'^(choice|endchoice)', line):
+                is_help = False
+                is_choice = False
+                retval = 1
+                print_line(['a', 'c'], show, 'CC  ', line)
+                continue
+
+            # Remaining 0. level keywords
+            if re.search(r'^(' +
+                         r'config |menuconfig |depends on |' +
+                         r'source "|comment "|mainmenu "' +
+                         r')', line):
+                is_help = False
+                print_line(['a'], show, '    ', line)
+                continue
+
+            # -----------------------------------------------------------------
+            # 1. level keywords
+
+            # help
+            if line == '\thelp':
+                is_help = True
+                help_indent = ''
+                print_line(['a'], show, '    ', line)
+                continue
+
+            # config
+            if is_choice and line.startswith('\tconfig '):
+                is_help = False
+                print_line(['a'], show, '    ', line)
+                continue
+
+            # Remaining 1. level keywords
+            if re.search(r'^\t(' +
+                         r'(bool|int|hex)($| ")|' +
+                         r'default($| )|' +
+                         r'prompt "|tristate "|string "|' +
+                         r'depends on |select |def_bool |range |imply ' +
+                         r')', line):
+                is_help = False
+                print_line(['a'], show, '    ', line)
+                continue
+
+            # -----------------------------------------------------------------
+            # 2. level keywords
+
+            if is_choice and re.search(r'^\t\t(' +
+                                       r'bool($| ")|' +
+                                       r'depends on ' +
+                                       r')', line):
+                is_help = False
+                print_line(['a'], show, '    ', line)
+                continue
+
+            # -----------------------------------------------------------------
+            # Help text
+
+            if is_help:
+                if not help_indent:
+                    help_indent = indent
+                if help_indent != '\t  ':
+                    retval = 1
+                    print_line(['a', 'h'], show, 'HH  ', line)
+                elif indent != '\t  ':
+                    retval = 1
+                    print_line(['a', 'h'], show, 'hh  ', line)
+                else:
+                    print_line(['a'], show, '    ', line)
+                continue
+
+            # -----------------------------------------------------------------
+            # Last resort
+
+            retval = 1
+            print_line(['a', 'x'], show, 'XX  ', line)
+
+    return retval
+
+parser = argparse.ArgumentParser()
+parser.add_argument('kconfig', nargs='+')
+parser.add_argument('-s', '--show', default='chimx')
+args = parser.parse_args()
+
+retval = 0
+for kconfig in args.kconfig:
+    retval |= check_kconfig(kconfig, args.show)
+
+sys.exit(retval)
