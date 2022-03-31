@@ -101,7 +101,7 @@ def check_kconfig(kconfig, show):
                 continue
 
             # menu|endmenu
-            if re.search(r'^(menu|endmenu)', line):
+            if re.search(r'^(menu(?!config)|endmenu)', line):
                 is_help = False
                 retval = 1
                 print_line(['a', 'm'], show, 'MM  ', line)
