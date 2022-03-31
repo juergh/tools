@@ -159,7 +159,7 @@ def check_kconfig(kconfig, show):
             # Remaining 1. level keywords
             if re.search(r'^\t(' +
                          r'(bool|int|hex)($| ")|' +
-                         r'prompt "|tristate "|string "|' +
+                         r'prompt "|tristate "|string($| ")|' +
                          r'default |depends on |select |def_bool |range |imply ' +
                          r')', line):
                 cont_indent = '\t\t'
