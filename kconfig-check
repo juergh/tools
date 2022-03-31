@@ -17,12 +17,22 @@ def check_kconfig(kconfig, show):
     is_help = False
     help_indent = ''
 
+    prev_cont = False
+    cont = False
+    cont_indent = ''
+
     ifs = []
     menus = []
 
     with open(kconfig) as fh:
         for line in fh:
             line = line.rstrip()
+
+            # Line continuation
+            prev_cont = cont
+            cont = line.endswith('\\')
+            if not prev_cont:
+                cont_indent = ''
 
             # Empty line or comment
             if line == '' or re.search(r'^\t*#( |$)', line):
@@ -34,7 +44,15 @@ def check_kconfig(kconfig, show):
             indent = m.group(1) if m else ''
 
             # -----------------------------------------------------------------
-            # 0.level keywords
+            # Continued lines
+
+            if ((cont_indent and
+                 re.search(r'^{}[^\t]'.format(cont_indent), line))):
+                print_line(['a'], show, '    ', line)
+                continue
+
+            # -----------------------------------------------------------------
+            # 0. level keywords
 
             # if <EXPR>
             m = re.search(r'^if (.+)$', line)
@@ -131,6 +149,7 @@ def check_kconfig(kconfig, show):
 
             # config
             if is_choice and line.startswith('\tconfig '):
+                cont_indent = '\t\t'
                 is_help = False
                 print_line(['a'], show, '    ', line)
                 continue
@@ -138,10 +157,10 @@ def check_kconfig(kconfig, show):
             # Remaining 1. level keywords
             if re.search(r'^\t(' +
                          r'(bool|int|hex)($| ")|' +
-                         r'default($| )|' +
                          r'prompt "|tristate "|string "|' +
-                         r'depends on |select |def_bool |range |imply ' +
+                         r'default |depends on |select |def_bool |range |imply ' +
                          r')', line):
+                cont_indent = '\t\t'
                 is_help = False
                 print_line(['a'], show, '    ', line)
                 continue
