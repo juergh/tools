@@ -200,9 +200,28 @@ def check_kconfig(kconfig, show):
 
     return retval
 
-parser = argparse.ArgumentParser()
-parser.add_argument('kconfig', nargs='+')
-parser.add_argument('-s', '--show', default='chimx')
+parser = argparse.ArgumentParser(description='''
+Check kernel Kconfig files for potental formatting issues. Lines with issues
+are prefixed with two capital letters that identify the detected issue:
+
+  CC: choice/endchoice formatting
+  HH: Help text indentation
+  II: if/endif formatting
+  MM: menu/endmenu formatting
+  XX: Unspecified indentation/formatting issue
+''', formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument('kconfig', nargs='+', help='kernel Kconfig file')
+parser.add_argument('-s', '--show', default='chimx',
+                    help='''
+show only lines with specific issues:
+  c: choice/endchoice
+  h: help text
+  i: if/endif
+  m: menu/endmenu
+  x: unspecified
+  a: show all lines
+default is 'chimx'
+''')
 args = parser.parse_args()
 
 first = True
