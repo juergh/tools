@@ -193,6 +193,15 @@ def check_kconfig(kconfig, show):
                 continue
 
             # -----------------------------------------------------------------
+            # Wrong quotes
+
+            if re.search(r'^\t(hex|bool) \'', line):
+                is_help = False
+                retval = 1
+                print_line(['a', 'q'], show, 'QQ  ', line)
+                continue
+
+            # -----------------------------------------------------------------
             # Last resort
 
             retval = 1
@@ -208,19 +217,21 @@ are prefixed with two capital letters that identify the detected issue:
   HH: Help text indentation
   II: if/endif formatting
   MM: menu/endmenu formatting
+  QQ: Wrong quotes
   XX: Unspecified indentation/formatting issue
 ''', formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('kconfig', nargs='+', help='kernel Kconfig file')
-parser.add_argument('-s', '--show', default='chimx',
+parser.add_argument('-s', '--show', default='chimqx',
                     help='''
 show only lines with specific issues:
   c: choice/endchoice
   h: help text
   i: if/endif
   m: menu/endmenu
+  q: quotes
   x: unspecified
   a: show all lines
-default is 'chimx'
+default is 'chimqx'
 ''')
 args = parser.parse_args()
 
