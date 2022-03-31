@@ -15,7 +15,8 @@ def check_kconfig(kconfig, show):
 
     is_choice = False
     is_help = False
-    help_indent = ''
+    help_is_indent = ''
+    help_must_indent = ''
 
     prev_cont = False
     cont = False
@@ -143,7 +144,8 @@ def check_kconfig(kconfig, show):
             # help
             if line == '\thelp':
                 is_help = True
-                help_indent = ''
+                help_is_indent = ''
+                help_must_indent = '\t  '
                 print_line(['a'], show, '    ', line)
                 continue
 
@@ -168,24 +170,35 @@ def check_kconfig(kconfig, show):
             # -----------------------------------------------------------------
             # 2. level keywords
 
-            if is_choice and re.search(r'^\t\t(' +
-                                       r'bool($| ")|' +
-                                       r'depends on ' +
-                                       r')', line):
-                is_help = False
-                print_line(['a'], show, '    ', line)
-                continue
+            if is_choice:
+
+                # help
+                if line == '\t\thelp':
+                    is_help = True
+                    help_is_indent = ''
+                    help_must_indent = '\t\t  '
+                    print_line(['a'], show, '    ', line)
+                    continue
+
+                if re.search(r'^\t\t(' +
+                             r'bool($| ")|' +
+                             r'depends on |select ' +
+                             r')', line):
+                    cont_indent = '\t\t\t'
+                    is_help = False
+                    print_line(['a'], show, '    ', line)
+                    continue
 
             # -----------------------------------------------------------------
             # Help text
 
             if is_help:
-                if not help_indent:
-                    help_indent = indent
-                if help_indent != '\t  ':
+                if not help_is_indent:
+                    help_is_indent = indent
+                if help_is_indent != help_must_indent:
                     retval = 1
                     print_line(['a', 'h'], show, 'HH  ', line)
-                elif indent != '\t  ':
+                elif indent != help_must_indent:
                     retval = 1
                     print_line(['a', 'h'], show, 'hh  ', line)
                 else:
