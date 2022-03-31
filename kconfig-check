@@ -215,6 +215,14 @@ def check_kconfig(kconfig, show):
                 continue
 
             # -----------------------------------------------------------------
+            # Leading whitespaces
+
+            if line.startswith(' '):
+                retval = 1
+                print_line(['a', 'w'], show, 'WW  ', line)
+                continue
+
+            # -----------------------------------------------------------------
             # Last resort
 
             retval = 1
@@ -231,10 +239,11 @@ are prefixed with two capital letters that identify the detected issue:
   II: if/endif formatting
   MM: menu/endmenu formatting
   QQ: Wrong quotes
+  WW: Leading whitespace(s)
   XX: Unspecified indentation/formatting issue
 ''', formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('kconfig', nargs='+', help='kernel Kconfig file')
-parser.add_argument('-s', '--show', default='chimqx',
+parser.add_argument('-s', '--show', default='chimqwx',
                     help='''
 show only lines with specific issues:
   c: choice/endchoice
@@ -242,9 +251,11 @@ show only lines with specific issues:
   i: if/endif
   m: menu/endmenu
   q: quotes
+  w: whitespace(s)
   x: unspecified
+
   a: show all lines
-default is 'chimqx'
+default is 'chimqwx'
 ''')
 args = parser.parse_args()
 
