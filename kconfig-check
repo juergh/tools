@@ -35,7 +35,7 @@ def check_kconfig(kconfig, show):
                 cont_indent = ''
 
             # Empty line or comment
-            if line == '' or re.search(r'^\t*#( |$)', line):
+            if line == '' or re.search(r'^\t*#(\s|$)', line):
                 print_line(['a'], show, '    ', line)
                 continue
 
