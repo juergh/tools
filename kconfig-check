@@ -205,8 +205,15 @@ parser.add_argument('kconfig', nargs='+')
 parser.add_argument('-s', '--show', default='chimx')
 args = parser.parse_args()
 
+first = True
 retval = 0
 for kconfig in args.kconfig:
+    if len(args.kconfig) > 1:
+        if first:
+            first = False
+        else:
+            print()
+        print('-- ' + kconfig + ' --')
     retval |= check_kconfig(kconfig, args.show)
 
 sys.exit(retval)
