@@ -1,0 +1,49 @@
+#!/bin/bash -eu
+
+function usage()
+{
+	cat <<EOF
+Usage: cranky-update-dependents [-h]
+
+Update all dependent kernel packages.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+while [ "${#}" -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+while IFS= read -r path ; do
+	cd "${path}"
+
+	if [ "$(cranky shell-helper tree-type)" = "main" ] ; then
+		continue
+	fi
+
+	echo
+	echo "${path}"
+
+	git fetch
+	git checkout cranky/master
+	git reset --hard origin/master
+
+	git clean -dxf
+	cranky update-dependent
+	cranky tag
+
+	git log -2
+
+done < <(cranky shell-helper source-packages-path)
