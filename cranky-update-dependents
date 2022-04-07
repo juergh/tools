@@ -44,6 +44,6 @@ while IFS= read -r path ; do
 	cranky update-dependent
 	cranky tag
 
-	git log origin/master~1..
+	git --no-pager log origin/master~1..
 
 done < <(cranky shell-helper source-packages-path)
