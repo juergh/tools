@@ -1,19 +1,38 @@
 #!/bin/bash -eu
 
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	if [ ${rc} -ne 0 ] ; then
+		echo "Error: Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
 function usage()
 {
 	cat <<EOF
-Usage: cranky-update-dependents [-h]
+Usage: cranky-update-dependents [-f] [-h]
 
 Update all dependent kernel packages.
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -f, --force  Update existing tags.
+  -h, --help   Show this help text and exit.
 EOF
 }
 
+tag_opts=()
+
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
+		-f|--force)
+			tag_opts=("-f")
+			;;
 		-h|--help)
 			usage
 			exit
@@ -33,17 +52,21 @@ while IFS= read -r path ; do
 		continue
 	fi
 
-	echo
-	echo "${path}"
+	branch=$(git branch | grep " cranky/" | sed -e 's,.* cranky/,,')
 
+	echo "${path}"
 	git fetch
-	git checkout cranky/master
-	git reset --hard origin/master
+	git checkout cranky/"${branch}"
+	git reset --hard origin/"${branch}"
 
 	git clean -dxf
 	cranky update-dependent
-	cranky tag
+	cranky tag "${tag_opts[@]}"
 
-	git --no-pager log origin/master~1..
+	echo
+	git --no-pager log origin/"${branch}"~1..
+	echo
 
 done < <(cranky shell-helper source-packages-path)
+
+echo "Success: Updated all dependents"
