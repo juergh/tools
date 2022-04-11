@@ -1,0 +1,17 @@
+#!/bin/bash
+#
+# Destroy all cranky chroot sessions (and base chroots) and rebuild them
+#
+
+arch=$(dpkg --print-architecture)
+
+while IFS= read -r session ; do
+	schroot -e -c "${session}"
+done < <(schroot -l --all-sessions | grep "^session:cranky-.*-${arch}-sources")
+
+for series in trusty xenial bionic focal impish jammy ; do
+	if ! [ -e /etc/schroot/chroot.d/sbuild-"${series}"-"${arch}" ] ; then
+		cranky chroot create-base "${series}":linux
+	fi
+	cranky chroot create-session sources "${series}":linux
+done
