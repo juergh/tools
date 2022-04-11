@@ -852,8 +852,8 @@ def do_results(args):
          'provided package. If not provided, retry all packages showing a ' +
          '\'MISS\' test status.')
 @add_arg('-f', '--format', default='r', help=table_format_help('r'))
-@add_arg('-t', '--trigger', action='append', help='Add an additional ' +
-         'trigger. Can be provided multiple times.')
+@add_arg('-t', '--trigger', default=[], action='append',
+         help='Add an additional trigger. Can be provided multiple times.')
 def do_retry(args):
     package = None
     arch = None
@@ -879,7 +879,7 @@ def do_retry(args):
     # Add the additional triggers
     if args.trigger:
         for result in results_list:
-            result['retry_url'] += '&trigger=' + \
+            result[0]['retry_url'] += '&trigger=' + \
                 '&trigger='.join([t.replace('/', '%2F') for t in args.trigger])
 
     print_header(results.adt_url_html, results.series, results.source)
