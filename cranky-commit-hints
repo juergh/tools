@@ -1,0 +1,68 @@
+#!/bin/bash -eu
+#
+# Commit an ADT hints file
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] HINTS
+
+Commit an ADT hints file.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+hints=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${hints}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			hints=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${hints}" ] ; then
+	usage
+	exit 2
+fi
+
+readarray -t vals < <(git diff "${hints}" | grep "^+result" | tail -1 | \
+						  tr ' ' '\n')
+series=${vals[1]}
+name=${vals[2]/-meta/}
+name=${name#linux-}
+version=${vals[3]}
+pkg=${vals[4]}
+
+m=$(git diff "${hints}" | grep -c "^-result")
+p=$(git diff "${hints}" | grep -c "^+result")
+
+case "${m}-${p}" in
+	0-1)
+		subject="${series}/${name}: Hint ${pkg} for ${version}"
+		;;
+	0-*)
+		subject="${series}/${name}: Hints for ${version}"
+		;;
+	1-1)
+		subject="${series}/${name}: Fix ${pkg} hint for ${version}"
+		;;
+	*-*)
+		subject="${series}/${name}: Fix hints for ${version}"
+		;;
+esac
+
+git commit -s -m "${subject}" -- "${hints}"
