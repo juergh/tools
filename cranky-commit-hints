@@ -47,8 +47,8 @@ name=${name#linux-}
 version=${vals[3]}
 pkg=${vals[4]}
 
-m=$(git diff "${hints}" | grep -c "^-result")
-p=$(git diff "${hints}" | grep -c "^+result")
+m=$(git diff "${hints}" | grep -c "^-result" || true)
+p=$(git diff "${hints}" | grep -c "^+result" || true)
 
 case "${m}-${p}" in
 	0-1)
