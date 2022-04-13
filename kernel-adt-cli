@@ -882,6 +882,13 @@ def do_retry(args):
             result[0]['retry_url'] += '&trigger=' + \
                 '&trigger='.join([t.replace('/', '%2F') for t in args.trigger])
 
+    # Always add qemu-efi-noacpi/0 trigger to raspi arm64 retries
+    if '-raspi' in args.source:
+        for result in results_list:
+            if ((result[0]['arch'] == 'arm64' and
+                 'qemu-efi-noacpi' not in result[0]['retry_url'])):
+                result[0]['retry_url'] += '&trigger=qemu-efi-noacpi%2F0'
+
     print_header(results.adt_url_html, results.series, results.source)
     print_table(results_list, fmt=args.format)
 
