@@ -59,7 +59,7 @@ def do_mp3_bpm_show(args):
     """
     Show mp3 file BPM information
     """
-    import librosa
+    import librosa   # pylint: disable=C0415
 
     # Supress 'UserWarning: PySoundFile failed. Trying audioread instead.'
     warnings.filterwarnings("ignore")
@@ -138,6 +138,11 @@ def do_mp3_tag_set(args):
             'TITLE': [title],
             'TRACKNUMBER': [tracknumber],
         }
+
+        # Preserve DATE if it exists
+        t = taglib.File(f)   # pylint: disable=I1101
+        if 'DATE' in t.tags:
+            tags['DATE'] = t.tags['DATE']
 
         for key, val in tags.items():
             print('  {:<12}: {}'.format(key, ' '.join(val)))
