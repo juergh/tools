@@ -44,16 +44,12 @@ while [ $# -gt 0 ] ; do
 	shift
 done
 
-# Add cbd remote if necessary
-if ! git remote | grep -q '^cbd$' ; then
-	# shellcheck disable=SC1091
-	. debian/debian.env
-	series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
-	git remote add cbd cbd:"${series}".git
-fi
+# shellcheck disable=SC1091
+. debian/debian.env
+series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
 
 # Build
-git push cbd -o vars "${@}" 2>&1 | tee cbd-build.log
+git push cbd:"${series}".git -o vars "${@}" 2>&1 | tee cbd-build.log
 
 # Source the CBD variables
 eval "$(sed -n 's/^remote: CBD/CBD/p' cbd-build.log)"
