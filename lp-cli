@@ -136,17 +136,18 @@ def do_show_source(args):
 
 @add_help('Show latest binary packages information')
 @add_arg('handle', help='Source package handle (series/source)')
-@add_arg('-a', '--arch', nargs='*', help='Show binaries for the provided ' +
-         'architecure. Can be specified multiple times.')
+@add_arg('-a', '--arch', help='Show binaries for the provided ' +
+         'architecure. Can be a list of comma-separated architectures')
 @add_arg('-l', '--all', action='store_true', help='Query all pockets, ' +
          'including proposed')
 @add_arg('-p', '--pocket', help='Query only the specified pocket')
 def do_show_binaries(args):
+    arches = args.arch.split(',') if args.arch else None
     pockets = pocket_list(args.pocket, args.all)
     binaries = lp_get_binaries(args.lp, args.handle, pockets)
     for binary in binaries:
         arch = binary.distro_arch_series_link.split('/')[-1]
-        if args.arch and arch not in args.arch:
+        if arches and arch not in arches:
             continue
         print('{} {} {} {} {}'.format(binary.binary_package_name,
                                       binary.binary_package_version,
