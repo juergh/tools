@@ -3,10 +3,17 @@
 # Build an Ubuntu kernel from a git repo
 #
 
+function out()
+{
+	if [ -f "${DEBIAN}"/config/annotations.orig ] ; then
+		mv -f "${DEBIAN}"/config/annotations{.orig,}
+	fi
+}
+
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-a ARCH] [-h] TARGET [TARGET...]
+Usage: $(basename "${0}") [-a ARCH] [-h] [-i] TARGET [TARGET...]
 
 Build an Ubuntu kernel from a git repo.
 
@@ -16,11 +23,14 @@ Positional arguments:
 Optional arguments:
   -a, --arch ARCH  Architecture of the kernel to build.
   -h, --help       Show this help text and exit.
+  -i, --ignore-annotations
+                   Ignore config annotations.
 EOF
 }
 
 targets=()
 arch=$(dpkg-architecture -q DEB_BUILD_ARCH)
+ignore_annotations=0
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -31,6 +41,9 @@ while [ ${#} -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-i|--ignore-annotations)
+			ignore_annotations=1
 			;;
 		*)
 			targets=("${@}")
@@ -49,10 +62,18 @@ fi
 . debian/debian.env
 series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
 
+trap out EXIT INT TERM HUP
+
 run-chroot "${series}" -- <<EOF
 export \$(dpkg-architecture -a "${arch}")
 if [ "\${DEB_BUILD_ARCH}" != "\${DEB_HOST_ARCH}" ] ; then
   export CROSS_COMPILE=\${DEB_HOST_GNU_TYPE}-
 fi
+
+if [ ${ignore_annotations} -eq 1 ] ; then
+  mv "${DEBIAN}"/config/annotations{,.orig}
+  touch "${DEBIAN}"/config/annotations
+fi
+
 fakeroot debian/rules "${targets[@]}"
 EOF
