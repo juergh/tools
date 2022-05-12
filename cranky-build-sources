@@ -42,7 +42,7 @@ build_opts=()
 
 bo_meta=()
 bo_signed=()
-bo_restricted_modules=()
+bo_lrm=()
 bo_main=()
 
 while [ "${#}" -gt 0 ] ; do
@@ -131,7 +131,7 @@ if [ -n "${offset}" ] ; then
 				bo_signed+=("-v${version}")
 				;;
 			linux-restricted-modules*)
-				bo_restricted_modules+=("-v${version}")
+				bo_lrm+=("-v${version}")
 				;;
 			linux*)
 				bo_main+=("-v${version}")
@@ -155,7 +155,7 @@ else
 				bo_signed+=("-v${version}")
 				;;
 			linux-restricted-modules*)
-				bo_restricted_modules+=("-v${version}")
+				bo_lrm+=("-v${version}")
 				;;
 			linux*)
 				bo_main+=("-v${version}")
@@ -177,8 +177,8 @@ fi
 if [ ${#bo_signed[@]} -ne 0 ] ; then
 	build_opts+=("--build-opts" "signed:${bo_signed[*]}")
 fi
-if [ ${#bo_restricted_modules[@]} -ne 0 ] ; then
-	build_opts+=("--build-opts" "restricted-modules:${bo_restricted_modules[*]}")
+if [ ${#bo_lrm[@]} -ne 0 ] ; then
+	build_opts+=("--build-opts" "lrm:${bo_lrm[*]}")
 fi
 if [ ${#bo_main[@]} -ne 0 ] ; then
 	build_opts+=("--build-opts" "main:${bo_main[*]}")
