@@ -34,22 +34,27 @@ function do_colordiff()
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] [DEBDIFF]
+Usage: $(basename "${0}") [-h] [-r] [DEBDIFF]
 
 Review a debdiff file.
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -h, --help     Show this help text and exit.
+  -r, --reduced  Review a reduced debdiff (.reduced.debdiff).
 EOF
 }
 
 debdiff=
+reduced=0
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
 		-h|--help)
 			usage
 			exit
+			;;
+		-r|--reduced)
+			reduced=1
 			;;
 		*)
 			if [ -n "${debdiff}" ] ; then
@@ -65,7 +70,11 @@ done
 if [ -z "${debdiff}" ] ; then
 	name=$(dpkg-parsechangelog -S Source)
 	version=$(dpkg-parsechangelog -S Version)
-	debdiff=../${name}_${version}.debdiff
+	if [ ${reduced} -eq 1 ] ; then
+		debdiff=../${name}_${version}.reduced.debdiff
+	else
+		debdiff=../${name}_${version}.debdiff
+	fi
 fi
 
 if ! [ -e "${debdiff}" ] ; then
