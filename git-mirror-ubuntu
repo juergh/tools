@@ -63,7 +63,12 @@ while IFS=" " read -r series source url branch ; do
 done < <(parse_ks kernel-series.yaml)
 
 echo "-- Clean up"
-git gc
+if [ -e gc.log ] ; then
+	rm -f gc.log
+	git prune
+else
+	git gc
+fi
 
 echo "-- Push to Launchpad"
 git push --all --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-ubuntu

@@ -24,6 +24,14 @@ while IFS= read -r ref ; do
 	fi
 done < <(ls -1 refs/heads/rpi-* | grep -E '/rpi-[0-9]+\.[0-9]+\.y$')
 
+echo "-- Clean up"
+if [ -e gc.log ] ; then
+	rm -f gc.log
+	git prune
+else
+	git gc
+fi
+
 echo "-- Push to Launchpad"
 git push --all --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-rpi
 git push --tags --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-rpi
