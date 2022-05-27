@@ -421,7 +421,7 @@ case "${DIST}" in
 		BASE_DIST=debian
 		VENDOR=${DIST%%-*}
 		;;
-	wheezy|jessie|stretch|buster|sid)
+	stretch|buster|bullseye|bookworm|sid)
 		BASE_NAME=${DIST}
 		BASE_DIST=debian
 		VENDOR=debian
