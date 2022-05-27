@@ -1,0 +1,15 @@
+#!/bin/bash -eu
+
+if [ ${#} -ne 1 ] ; then
+	echo "Usage: $(basename "${0}") POCKET"
+	exit 2
+fi
+
+pocket=${1}
+
+cranky-build-sources -f "${pocket}"
+cranky-review-sources "${pocket}"
+cranky-reduce-debdiff
+
+cranky-review-sources | less
+review-debdiff -r | less

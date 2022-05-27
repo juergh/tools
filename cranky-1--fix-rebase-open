@@ -1,0 +1,6 @@
+#!/bin/bash -eu
+
+cranky fix
+cranky rebase
+cranky fix
+cranky open

@@ -1,0 +1,10 @@
+#!/bin/bash -eu
+
+cranky link-tb
+./update-dkms-versions
+cranky close
+cranky tag
+
+cranky-update-dependents
+
+cranky-verify-release-ready
