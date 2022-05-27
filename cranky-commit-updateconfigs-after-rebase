@@ -6,24 +6,24 @@
 function usage()
 {
 	cat <<EOF
-Usage: cranky-commit-updateconfigs-after-rebase [-f] [-h]
+Usage: cranky-commit-updateconfigs-after-rebase [-d] [-h]
 
 Optional arguments:
-  -f, --force  Commit the changes.
-  -h, --help   Show this help text and exit.
+  -d, --dry-run  Dry run.
+  -h, --help     Show this help text and exit.
 EOF
 }
 
-force=0
+dry_run=0
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-d|--dry-run)
+			dry_run=1
+			;;
 		-h|--help)
 			usage
 			exit
-			;;
-		-f|--force)
-			force=1
 			;;
 		*)
 			echo "Error: Invalid argument: ${1}"
@@ -64,8 +64,8 @@ if [ "$(git diff --cached | wc -l)" -eq 0 ] ; then
 	exit 1
 fi
 
-if [ ${force} -eq 0 ] ; then
-	echo "You need to provide -f, --force to comit the changes"
+if [ ${dry_run} -eq 1 ] ; then
+	echo "Dry run, exiting..."
 	exit
 fi
 
