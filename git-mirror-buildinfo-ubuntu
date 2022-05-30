@@ -22,8 +22,7 @@ echo "-- Push branch"
 git push --force origin
 
 echo "-- Push to Launchpad"
-git push --all --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-buildinfo-ubuntu
-git push --tags --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-buildinfo-ubuntu
+git push --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-buildinfo-ubuntu refs/*:refs/*
 
 echo "-- Done"
 date -R

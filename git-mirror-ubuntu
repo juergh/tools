@@ -71,8 +71,7 @@ else
 fi
 
 echo "-- Push to Launchpad"
-git push --all --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-ubuntu
-git push --tags --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-ubuntu
+git push --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-ubuntu refs/*:refs/*
 
 echo "-- Done"
 date -R
