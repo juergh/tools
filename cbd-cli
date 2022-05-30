@@ -1,0 +1,156 @@
+#!/bin/bash -eu
+#
+# CLI for the CBD build system
+#
+
+function out()
+{
+	local rc=${?}
+
+	if [ -n "${TMP_DIR}" ] ; then
+		rm -rf "${TMP_DIR}"
+	fi
+
+	exit "${rc}"
+}
+
+function cbd_build()
+{
+	local logfile
+
+	if [ -z "${SERIES}" ] ; then
+		echo "-- Not an Ubuntu kernel repository" >&2
+		exit 1
+	fi
+
+	if ! [ -d "${HOME}"/.cache/cbd ] ; then
+		mkdir "${HOME}"/.cache/cbd
+	fi
+
+	echo "-- Push to cbd:${SERIES}.git (options: ${*})"
+ 
+	# Kick off the build
+	logfile=${HOME}/.cache/cbd/${SERIES}--${SOURCE}.log
+	git push cbd:"${SERIES}".git -o vars "${@}" 2>&1 | tee "${logfile}"
+
+	# Source the CBD variables
+	eval "$(sed -n 's/^remote: CBD/CBD/p' "${logfile}")"
+	if [ -z "${CBD_JOB:-}" ] ; then
+		echo "-- Failed to source CBD variables" >&2
+		exit 1
+	fi
+
+	# Download the build artifacts
+	cbd_download "${CBD_JOB}"
+}
+
+function cbd_download()
+{
+	if [ ${#} -ne 1 ] ; then
+		usage
+		exit 2
+	fi
+
+	local cbd_job=${1}
+	local cbd_hash log arch
+
+	if [ -z "${OUT_DIR}" ] ; then
+		cbd_hash=${cbd_job%-*}
+		cbd_hash=${cbd_hash##*-}
+
+		OUT_DIR=../cbdd/${cbd_hash}
+		rm -rf "${OUT_DIR}"
+	fi
+	mkdir -p "${OUT_DIR}"
+
+	echo "-- Download build artifacts to ${OUT_DIR}"
+
+	TMP_DIR=$(mktemp -d)
+	# shellcheck disable=SC2029
+	ssh cbd tarball "${cbd_job}" | ( cd "${TMP_DIR}" && tar -xzvf - )
+
+	# Move the debs to the provided output directory
+	find "${TMP_DIR}" -name '*.deb' -print0 | xargs -0 -I{} mv '{}' "${OUT_DIR}"
+
+	# Copy the build logs
+	if [ -e "${TMP_DIR}"/build.log ] ; then
+        cp "${TMP_DIR}"/build.log "${OUT_DIR}"
+	fi
+	for log in "${TMP_DIR}"/*/build.log ; do
+        if [ -e "${log}" ] ; then
+            arch=${log%/build.log}
+            arch=${arch##*/}
+            cp "${log}" "${OUT_DIR}"/build_"${arch}".log
+        fi
+	done
+
+	# Save the job ID
+	echo "${cbd_job}" > "${OUT_DIR}"/cbd_job.id
+}
+
+function cbd_help()
+{
+	if [ -z "${SERIES}" ] ; then
+		echo "-- Not an Ubuntu kernel repository" >&2
+		exit 1
+	fi
+
+	git push cbd:"${SERIES}".git -o help
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: cbd-cli [-h] [-d DIR] build [CBD_OPTS]
+       cbd-cli [-h] [-d DIR] download CBD_JOB
+       cbd-cli [-h] help
+
+Commandline interface for the CBD kernel builder.
+
+Optional arguments:
+  -h, --help           Show this help text and exit.
+  -d, --directory DIR  Directory to download the Debian packages to. If not
+                       provided, defaults to '../cbdd/<git_hash>'.
+EOF
+}
+
+OUT_DIR=
+cmd=
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-d|--directory)
+			shift
+			OUT_DIR=${1}
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		build|download|help)
+			cmd=${1}
+			shift
+			break
+			;;
+	esac
+	shift
+done
+
+if [ -z "${cmd}" ] ; then
+	usage
+	exit 2
+fi
+
+TMP_DIR=
+trap out EXIT INT TERM HUP
+
+SERIES=
+SOURCE=
+if [ -e debian/debian.env ] ; then
+	# shellcheck disable=SC1091
+	. debian/debian.env
+	SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
+	SOURCE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+fi
+
+cbd_"${cmd}" "${@}"
