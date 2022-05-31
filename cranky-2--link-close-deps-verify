@@ -1,6 +1,33 @@
 #!/bin/bash -eu
 
-cranky link-tb
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [-s SRU_CYCLE]
+EOF
+}
+
+link_tb=()
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-s|--sru-cylce)
+			shift
+			link_tb+=("-s" "${1}")
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+cranky link-tb "${link_tb[@]}"
 ./update-dkms-versions
 cranky close
 cranky tag
