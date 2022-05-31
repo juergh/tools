@@ -65,11 +65,6 @@ function canonical_filter_mail()
 			  "Launchpad-Message-For/juergh" \
 			  "contain_body('Launchpad-Subscription: linux-firmware')"
 
-	# Move raspi mail
-	move_mail "Mailing List/Ubuntu/kernel-team" \
-			  "Mailing List/Ubuntu/kernel-team/raspi" \
-			  "contain_subject('raspi')"
-
 	# Move noise mail
 	move_noise_mail "Mailing List/Ubuntu/kernel-team" \
 					"contain_subject(' uploaded (ABI bump)')"
