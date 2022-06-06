@@ -57,7 +57,7 @@ function adb_pull_storage()
 	rm -rf "${tmp_dir}" "${dst_dir}"
 	mkdir -p "${tmp_dir}" "${dst_dir}"
 
-	echo "-- Pull downloaded files from (${SERIAL}) to ${dst_dir}"
+	echo "-- Pull files from ${SERIAL} to ${dst_dir}"
 	adb -s "${SERIAL}" pull "${remotes[@]}" "${tmp_dir}"
 	find "${tmp_dir}" -type f -print0 | xargs -0 -I{} mv '{}' "${dst_dir}"
 	rm -rf "${tmp_dir}"
