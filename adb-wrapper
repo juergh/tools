@@ -116,12 +116,12 @@ function do_serials()
 
 function do_pull_camera()
 {
-	adb_pull_storage DCIM "${HOME}"/Downloads/adb/"${SERIAL}"/Camera
+	adb_pull_storage DCIM "${HOME}"/Pictures/"${SERIAL}"
 }
 
 function do_pull_download()
 {
-	adb_pull_storage Download "${HOME}"/Downloads/adb/"${SERIAL}"/Download
+	adb_pull_storage Download "${HOME}"/Downloads/"${SERIAL}"
 }
 
 function do_scrcpy()
