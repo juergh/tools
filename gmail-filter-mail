@@ -83,7 +83,7 @@ function canonical_filter_mail()
 
 	# Move noise mail
 	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
-					"contain_subject(' uploaded (ABI bump)')"
+					"contain_from('kernel-team-bot@canonical.com')"
 	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
 					"contain_subject(' -proposed tracker')"
 	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
