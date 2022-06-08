@@ -91,11 +91,13 @@ function canonical_filter_mail()
 	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
 					"contain_from('Launchpad Buildd System')"
 
-	# Mark 'APPLIED' and 'NACK' threads as seen
+	# Mark processed patch threads as seen
 	mark_thread_seen "Mailing List/Ubuntu/kernel-team" \
 					 "contain_subject('APPLIED')"
 	mark_thread_seen "Mailing List/Ubuntu/kernel-team" \
 					 "contain_subject('NACK')"
+	mark_thread_seen "Mailing List/Ubuntu/kernel-team" \
+					 "contain_subject('NAK')"
 }
 
 function usage()
