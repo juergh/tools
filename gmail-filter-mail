@@ -30,11 +30,27 @@ move_messages(messages, account['${dst}'])
 __EOF__
 }
 
-function move_noise_mail()
+function move_mail_noise()
 {
 	local src=${1} op=${2}
 
 	move_mail "${src}" "${src%%/*}"/00-noise "${op}"
+}
+
+function mark_thread_seen()
+{
+	local src=${1} op=${2}
+
+	cat <<__EOF__
+
+print('')
+print('-- Mark thread: ${op//\'/\\\'}')
+messages = account['${src}']:is_unseen() * account['${src}']:${op}
+for _, message in ipairs(messages) do
+   thread = thread_messages(message)
+   thread:mark_seen()
+end
+__EOF__
 }
 
 function canonical_filter_mail()
@@ -66,27 +82,20 @@ function canonical_filter_mail()
 			  "contain_body('Launchpad-Subscription: linux-firmware')"
 
 	# Move noise mail
-	move_noise_mail "Mailing List/Ubuntu/kernel-team" \
+	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
 					"contain_subject(' uploaded (ABI bump)')"
-	move_noise_mail "Launchpad-Message-For/canonical-kernel-team" \
+	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
 					"contain_subject(' -proposed tracker')"
-	move_noise_mail "Launchpad-Message-For/canonical-kernel-team" \
+	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
 					"contain_from('Ubuntu Kernel Bot')"
-	move_noise_mail "Launchpad-Message-For/canonical-kernel-team" \
+	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
 					"contain_from('Launchpad Buildd System')"
 
-	cat <<__EOF__
--- Mark APPLIED threads as read
--- mail_dirs = {
---    'Mailing List/Canonical/canonical-kernel-team',
---    'Mailing List/Ubuntu/kernel-team',
--- }
--- for _, mail_dir in ipairs(mail_dirs) do
---    results = account[mail_dir]:is_unseen():contain_subject('APPLIED')
---    results = find_related(results)
---    results:mark_seen()
--- end
-__EOF__
+	# Mark 'APPLIED' and 'NACK' threads as seen
+	mark_thread_seen "Mailing List/Ubuntu/kernel-team" \
+					 "contain_subject('APPLIED')"
+	mark_thread_seen "Mailing List/Ubuntu/kernel-team" \
+					 "contain_subject('NACK')"
 }
 
 function usage()
@@ -171,7 +180,7 @@ options.info = false
 account = IMAP {
    server = 'imap.gmail.com',
    username = '${username}',
-   password = show_pass('google.com/${username}'),
+   password = get_pass('google.com/${username}'),
    ssl = 'tls1.2',
 }
 

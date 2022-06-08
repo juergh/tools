@@ -5,7 +5,7 @@
 
 -------------------------------------------------------------------------------
 -- Check if a table contains a given value.
---
+
 local function has_value(tab, val)
    for _, _val in ipairs(tab) do
       if _val == val then
@@ -17,17 +17,17 @@ end
 
 -------------------------------------------------------------------------------
 -- Return a password from the password store.
---
-local function show_pass(pass_name)
-   local _, _output
 
-   _, _output = pipe_from('pass show ' .. pass_name)  -- luacheck: ignore pipe_from
+local function get_pass(pass_name)
+   local _output
+
+   _, _output = pipe_from('pass show ' .. pass_name)  -- luacheck: ignore
    return _output
 end
 
 -------------------------------------------------------------------------------
 -- Move 'messages' to 'mailbox'. Create 'mailbox' first if necessary.
---
+
 local function move_messages(messages, mailbox)
    local _, _messages
 
@@ -51,7 +51,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Return the list of mailboxes in and underneath 'folder'
---
+
 local function list_all_recursive(account, folder, blacklist, mailboxes)
    local _mailboxes, _subfolders
 
@@ -85,7 +85,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Archive all messages older than 'age' days
---
+
 local function archive_messages(account, age)
    local _blacklist, _messages
 
@@ -101,57 +101,60 @@ local function archive_messages(account, age)
 end
 
 -------------------------------------------------------------------------------
--- Return a list of messages that are related to the provided message.
--- Related in this context means that they're part of the same thread. The
--- returned list is an associative array rather than an imapfilter Set() of
+-- Return a list of messages that are members of the same thread. The returned
+-- list is an associative array (Lua table) rather than an imapfilter Set() of
 -- messages so that the check if a message has already been processed is a
--- simple lookup rather than a search through a list.
---
-function _find_related(message, list)
-   local mbox, uid, key, message_id
+-- simple table lookup rather than a search through a set of messages.
 
-   -- Initialize the list of already processed messages if it's undefined
-   list = list or {}
+local function _thread_messages(message, thread_list)
+   local _mbox, _uid, _key, _message_id
+
+   -- Initialize the list of already processed messages if it's the first call
+   -- of this function
+   if not thread_list then
+      thread_list = {}
+   end
 
    -- Unpack the message
-   mbox, uid = table.unpack(message)
+   _mbox, _uid = table.unpack(message)
 
-   -- Check if the message has already been processed
-   key = mbox._string .. ':' .. tostring(uid)
-   if list[key] then
-      return list
+   -- Check if the current message has already been processed
+   _key = _mbox._string .. ':' .. tostring(_uid)
+   if thread_list[_key] then
+      return thread_list
    end
-   list[key] = message
+   thread_list[_key] = message
 
-   -- Process the replies to the current message
-   message_id = mbox[uid]:fetch_field("Message-Id"):match("<.+>")
-   for _, msg in ipairs(mbox:contain_field('In-Reply-To', message_id)) do
-      list = _find_related(msg, list)
+   -- Debug output
+   print('++ ' .. _mbox[_uid]:fetch_field('Subject'))
+
+   -- Process the replies to the current message (children)
+   _message_id = _mbox[_uid]:fetch_field('Message-Id'):match('<.+>')
+   for _, _msg in ipairs(_mbox:contain_field('In-Reply-To', _message_id)) do
+      thread_list = _thread_messages(_msg, thread_list)
    end
 
-   -- Process the parent(s) of the current message
-   for in_reply_to in mbox[uid]:fetch_field("In-Reply-To"):gmatch("<[^>]+>") do
-      for _, msg in ipairs(mbox:contain_field('Message-Id', in_reply_to)) do
-	 list = _find_related(msg, list)
+   -- Process the messages this message was replied to (parents)
+   for _reply_id in _mbox[_uid]:fetch_field('In-Reply-To'):gmatch('<[^>]+>') do
+      for _, _msg in ipairs(_mbox:contain_field('Message-Id', _reply_id)) do
+         thread_list = _thread_messages(_msg, thread_list)
       end
    end
 
-   return list
+   return thread_list
 end
 
 -------------------------------------------------------------------------------
--- Return all messages related to a provided set of messages.
---
-function find_related(messages)
-   local results
+-- Return all messages in a thread.
 
-   results = {}
-   for _, msg in ipairs(messages) do
-      for _, related in pairs(_find_related(msg)) do
-	 table.insert(results, related)
-      end
+local function thread_messages(message)
+   local _messages
+
+   _messages = {}
+   for _, _msg in pairs(_thread_messages(message)) do
+      table.insert(_messages, _msg)
    end
 
    -- Convert the list of messages to an imapfilter Set()
-   return Set(results)
+   return Set(_messages)
 end
