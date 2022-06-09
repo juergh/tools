@@ -390,7 +390,7 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		--*)
 			if declare -F "config_${1#--}" >/dev/null ; then
-				OPT_CONFIG+=(${1#--})
+				OPT_CONFIG+=("${1#--}")
 			else
 				die "Invalid option: ${1}"
 			fi
@@ -582,7 +582,7 @@ if [ ${#opts_not_found[@]} -gt 0 ] ; then
 	# Check the list of not-found options against the supported list
 	for opt in "${!opts_not_found[@]}" ; do
 		if [ ${opts_supported[${opt}]:-0} -eq 0 ] ; then
-			opts_not_supported+=(${opt})
+			opts_not_supported+=("${opt}")
 			unset opts_not_found["${opt}"]
 		fi
 	done
