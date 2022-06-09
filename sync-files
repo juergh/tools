@@ -1,8 +1,8 @@
 #!/bin/bash
 
 user_files=(
+	"${HOME}"/.aliases/
 	"${HOME}"/.bash_aliases
-	"${HOME}"/.bottle-pi.aliases
 	"${HOME}"/.bashrc
 	"${HOME}"/.caffrc
 	"${HOME}"/.canonistack/
@@ -15,19 +15,19 @@ user_files=(
 	"${HOME}"/.emacs.el/
 	"${HOME}"/.gnupg/
 	"${HOME}"/.gitconfig
-	"${HOME}"/.imapfilter/
 	"${HOME}"/.password-store/
 	"${HOME}"/.sesame/
 	"${HOME}"/.ssh/
 	"${HOME}"/Mail/
 )
 
+user_hostname_fixups=(
+	"${HOME}"/.config/hexchat/servlist.conf
+)
+
 root_files=(
 	/etc/NetworkManager/conf.d/localdns.conf
 	/etc/NetworkManager/dnsmasq.d/libvirt.conf
-	/etc/auto.jabba
-	/etc/auto.fritz
-	# /etc/auto.master
 	/etc/security/limits.d/custom.conf
 	/etc/sudoers.d/"${USER}"
 )
@@ -35,7 +35,9 @@ root_files=(
 function usage()
 {
 	cat <<EOF
-Usage: sync-from-gollum [-h] [-r] [-u]
+Usage: $(bashname "${0}") [-h] [-r] [-u]
+
+Sync various files from gollum.
 
 Optional arguments:
   -h, --help  Show this help text.
@@ -78,17 +80,18 @@ if [ ${user} -eq 0 ] && [ ${root} -eq 0 ] ; then
 fi
 
 if [ ${user} -eq 1 ] ; then
-	echo "Syncing user files..."
+	echo "Sync user files..."
 	# shellcheck disable=SC2029
 	ssh gollum "tar cpf - ${user_files[*]}" | ( cd / && tar xpvf - )
 
 	# Fix host specific files
-	sed -i -e "s,@gollum/,@$(hostname -s)/," \
-		"${HOME}"/.config/hexchat/servlist.conf
+	for f in "${user_hostname_fixups[@]}" ; do
+		sed -i -e "s,@gollum/,@$(hostname -s)/," "${f}"
+	done
 fi
 
 if [ ${root} -eq 1 ] ; then
-	echo "Syncing root files..."
+	echo "Sync root files..."
 	# shellcheck disable=SC2029
 	ssh gollum "sudo tar cpf - ${root_files[*]}" | ( cd / && sudo tar xpvf - )
 fi
