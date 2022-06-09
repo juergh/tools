@@ -513,12 +513,15 @@ done | sort -k3
 echo
 
 # -----------------------------------------------------------------------------
-# Regnerate the config file to clean up any dependencies
+# Regenerate the config file to clean up any dependencies
 
-# We want to use 'olddefconfig' but that target is only available in newer
-# kernels. Instead use 'oldnoconfig' which is the same (despite the misleading
-# name).
-make oldnoconfig
+# Use 'olddefconfig' if it's available, otherwise 'oldnoconfig' which is the
+# same (despite its misleading name).
+if grep -q olddefconfig scripts/kconfig/Makefile ; then
+	make olddefconfig
+else
+	make oldnoconfig
+fi
 
 # -----------------------------------------------------------------------------
 # Check that all the requested options are as expected
