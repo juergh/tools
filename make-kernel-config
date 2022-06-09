@@ -257,6 +257,26 @@ function config_virtio()
 }
 
 # -----------------------------------------------------------------------------
+# 'squashfs' configs
+
+# shellcheck disable=SC2034
+help_squashfs="Enable SquashFS support"
+
+function config_squashfs()
+{
+    CONFIG+=(
+		SQUASHFS:y
+		  SQUASHFS_FILE_DIRECT:y
+		  SQUASHFS_XATTR:y
+		  SQUASHFS_ZLIB:y
+		  SQUASHFS_LZ4:y
+		  SQUASHFS_LZO:y
+		  SQUASHFS_XZ:y
+		  SQUASHFS_ZSTD:y
+	)
+}
+
+# -----------------------------------------------------------------------------
 # Function declarations
 
 function out()
