@@ -37,9 +37,9 @@ function move_mail_noise()
 	move_mail "${src}" "${src%%/*}"/00-noise "${op}"
 }
 
-function mark_thread_seen()
+function mark_thread()
 {
-	local src=${1} op=${2}
+	local src=${1} op=${2} mark=${3}
 
 	cat <<__EOF__
 
@@ -48,7 +48,23 @@ print('-- Mark thread: ${op//\'/\\\'}')
 messages = account['${src}']:is_unseen() * account['${src}']:${op}
 for _, message in ipairs(messages) do
    thread = thread_messages(message)
-   thread:mark_seen()
+   thread:mark_${3}()
+end
+__EOF__
+}
+
+function move_thread()
+{
+	local src=${1} dst=${2} op=${3}
+
+	cat <<__EOF__
+
+print('')
+print('-- Move thread: ${op//\'/\\\'}')
+messages = account['${src}']:${op}
+for _, message in ipairs(messages) do
+   thread = thread_messages(message)
+   move_messages(thread, account['${dst}'])
 end
 __EOF__
 }
@@ -68,7 +84,7 @@ function canonical_filter_mail()
 			  "Canonical/Bugs" \
 			  "contain_subject('The Daily Bug report for ')"
 
-	# Mofe SalesForce mail
+	# Move SalesForce mail
 	move_mail "Mailing List/Canonical/canonical-kernel-team" \
 			  "Canonical/SalesForce" \
 			  "contain_subject('SFDC')"
@@ -91,13 +107,16 @@ function canonical_filter_mail()
 	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
 					"contain_from('Launchpad Buildd System')"
 
-	# Mark processed patch threads as seen
-	mark_thread_seen "Mailing List/Ubuntu/kernel-team" \
-					 "contain_subject('APPLIED')"
-	mark_thread_seen "Mailing List/Ubuntu/kernel-team" \
-					 "contain_subject('NACK')"
-	mark_thread_seen "Mailing List/Ubuntu/kernel-team" \
-					 "contain_subject('NAK')"
+	# Move processed patch threads
+	move_thread "Mailing List/Ubuntu/kernel-team" \
+				"Mailing List/Ubuntu/kernel-team/done" \
+				"contain_subject('APPLIED')"
+	move_thread "Mailing List/Ubuntu/kernel-team" \
+				"Mailing List/Ubuntu/kernel-team/done" \
+				"contain_subject('NACK')"
+	move_thread "Mailing List/Ubuntu/kernel-team" \
+				"Mailing List/Ubuntu/kernel-team/done" \
+				"contain_subject('NAK')"
 }
 
 function usage()
