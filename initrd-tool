@@ -1,0 +1,87 @@
+#!/bin/bash -eu
+#
+# Create or extract an initrd
+#
+
+function usage()
+{
+	cat <<EOF
+Usage $(basename "${0}") [-h] INFILE|INDIR [OUTDIR|OUTFILE]
+
+Create or extract an initrd.
+
+Positional parameters:
+  INFILE
+  INDIR
+
+Optional arguments:
+  -h, --help  Show this help text and exit
+EOF
+}
+
+in=
+out=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -z "${in}" ] ; then
+				in=$(realpath -m "${1}")
+			elif [ -z "${out}" ] ; then
+				out=$(realpath -m "${1}")
+			else
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${in}" ] ; then
+	usage
+	exit 2
+fi
+
+if ! [ -e "${in}" ] ; then
+	echo "No such input file/directory: ${in}" >&2
+	exit 1
+fi
+
+if [ -z "${out}" ] ; then
+	if [ -d "${in}" ] ; then
+		out=$(realpath -m initrd.img)
+	else
+		out=$(realpath -m initrd.d)
+	fi
+fi
+
+if [ -e "${out}" ] ; then
+	echo "Output file/directory exists already: ${out}" >&2
+	exit 1
+fi
+
+if [ -d "${in}" ] ; then
+	# Create an initrd
+	( cd "${in}" && find . | cpio -H newc -o | gzip -c > "${out}" )
+    echo "Created initrd: ${out}"
+
+else
+	# Extract an initrd
+	case "$(file "${in}")" in
+		*"Zstandard compressed"*) cmd=zstdcat ;;
+		*"LZ4 compressed"*)       cmd=lz4cat ;;
+		*)
+			echo "Unsupported initrd compression" >&2
+			exit 1
+			;;
+	esac
+
+	mkdir -p "${out}"
+	( cd "${out}" && "${cmd}" "${in}" | cpio --extract )
+	echo "Extracted initrd: ${out}"
+fi
