@@ -32,7 +32,7 @@ while [ ${#} -gt 0 ] ; do
 	case "${1}" in
 		-c|--compress)
 			shift
-			compress=${1}
+			compress=${1,,}
 			;;
 		-f|--force)
 			force=1
@@ -83,11 +83,14 @@ if [ -e "${out}" ] ; then
 fi
 
 if [ -d "${in}" ] ; then
-	# Compression method
-	case "${compress,,}" in
-		""|gzip)   cmd="gzip" ;;
-		lz4)       cmd="lz4" ;;
-		zstandard) cmd="zstd" ;;
+	# Compression method (command arguments shamelessly stolen from
+	# /usr/sbin/mkinitramfs)
+	case "${compress}" in
+		""|gzip)         cmd=("gzip") ;;
+		lz4)             cmd=("lz4" "-9" "-l") ;;
+		zstd)            cmd=("zstd" "-q" "-19" "-T0");;
+		xz)              cmd=("xz" "--check=crc32") ;;
+		bzip2|lzma|lzop) cmd=("compress") ;;
 		*)
 			echo "Unsupported compression method: ${compress}" >&2
 			exit 1
@@ -95,7 +98,7 @@ if [ -d "${in}" ] ; then
 	esac
 
 	# Create initrd
-	( cd "${in}" && find . | cpio -H newc -o | "${cmd}" -c > "${out}" )
+	( cd "${in}" && find . | cpio -H newc -o | "${cmd[@]}" -c > "${out}" )
     echo "Created initrd: ${out}"
 
 else
@@ -104,9 +107,9 @@ else
 	compress=${compress%% compressed data*}
 	compress=${compress##*: }
 	case "${compress,,}" in
-		gzip)      cmd="zcat" ;;
-		lz4)       cmd="lz4cat" ;;
-		zstandard) cmd="zstdcat" ;;
+		gzip)      cmd=("zcat") ;;
+		lz4)       cmd=("lz4cat") ;;
+		zstandard) cmd=("zstdcat") ;;
 		*)
 			echo "Unsupported compression method: ${compress}" >&2
 			exit 1
@@ -115,6 +118,6 @@ else
 
 	# Extract initrd
 	mkdir -p "${out}"
-	( cd "${out}" && "${cmd}" "${in}" | cpio --extract )
+	( cd "${out}" && "${cmd[@]}" "${in}" | cpio --extract )
 	echo "Extracted initrd: ${out}"
 fi
