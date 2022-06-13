@@ -6,7 +6,7 @@
 function usage()
 {
 	cat <<EOF
-Usage $(basename "${0}") [-h] INFILE|INDIR [OUTDIR|OUTFILE]
+Usage $(basename "${0}") [-f] [-h] INFILE|INDIR [OUTDIR|OUTFILE]
 
 Create or extract an initrd.
 
@@ -15,15 +15,20 @@ Positional parameters:
   INDIR
 
 Optional arguments:
-  -h, --help  Show this help text and exit
+  -f, --force  Overwrite an existing output file/directory.
+  -h, --help   Show this help text and exit
 EOF
 }
 
+force=0
 in=
 out=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-f|--force)
+			force=1
+			;;
 		-h|--help)
 			usage
 			exit
@@ -58,6 +63,10 @@ if [ -z "${out}" ] ; then
 	else
 		out=$(realpath -m initrd.d)
 	fi
+fi
+
+if [ ${force} -eq 1 ] ; then
+	rm -rf "${out}"
 fi
 
 if [ -e "${out}" ] ; then
