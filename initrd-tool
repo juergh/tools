@@ -6,26 +6,34 @@
 function usage()
 {
 	cat <<EOF
-Usage $(basename "${0}") [-f] [-h] INFILE|INDIR [OUTDIR|OUTFILE]
+Usage $(basename "${0}") [-c] [-f] [-h] INFILE|INDIR [OUTDIR|OUTFILE]
 
 Create or extract an initrd.
 
 Positional parameters:
-  INFILE
-  INDIR
+  INFILE|INDIR    Input initrd file or directory.
+  OUTDIR|OUTFILE  Output initrd directory or file. If not provided, defaults
+                  to <INFILE>.d or <INDIR>.img, respectively.
 
 Optional arguments:
-  -f, --force  Overwrite an existing output file/directory.
-  -h, --help   Show this help text and exit
+  -c, --compress METHOD  Compression method. If not provided, defaults to
+                         'gzip'.
+  -f, --force            Overwrite an existing output file/directory.
+  -h, --help             Show this help text and exit
 EOF
 }
 
+compress=
 force=0
 in=
 out=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-c|--compress)
+			shift
+			compress=${1}
+			;;
 		-f|--force)
 			force=1
 			;;
@@ -59,9 +67,9 @@ fi
 
 if [ -z "${out}" ] ; then
 	if [ -d "${in}" ] ; then
-		out=$(realpath -m initrd.img)
+		out=${in}.img
 	else
-		out=$(realpath -m initrd.d)
+		out=${in}.d
 	fi
 fi
 
@@ -75,21 +83,37 @@ if [ -e "${out}" ] ; then
 fi
 
 if [ -d "${in}" ] ; then
-	# Create an initrd
-	( cd "${in}" && find . | cpio -H newc -o | gzip -c > "${out}" )
-    echo "Created initrd: ${out}"
-
-else
-	# Extract an initrd
-	case "$(file "${in}")" in
-		*"Zstandard compressed"*) cmd=zstdcat ;;
-		*"LZ4 compressed"*)       cmd=lz4cat ;;
+	# Compression method
+	case "${compress,,}" in
+		""|gzip)   cmd="gzip" ;;
+		lz4)       cmd="lz4" ;;
+		zstandard) cmd="zstd" ;;
 		*)
-			echo "Unsupported initrd compression" >&2
+			echo "Unsupported compression method: ${compress}" >&2
 			exit 1
 			;;
 	esac
 
+	# Create initrd
+	( cd "${in}" && find . | cpio -H newc -o | "${cmd}" -c > "${out}" )
+    echo "Created initrd: ${out}"
+
+else
+	# Compression method
+	compress=$(file "${in}")
+	compress=${compress%% compressed data*}
+	compress=${compress##*: }
+	case "${compress,,}" in
+		gzip)      cmd="zcat" ;;
+		lz4)       cmd="lz4cat" ;;
+		zstandard) cmd="zstdcat" ;;
+		*)
+			echo "Unsupported compression method: ${compress}" >&2
+			exit 1
+			;;
+	esac
+
+	# Extract initrd
 	mkdir -p "${out}"
 	( cd "${out}" && "${cmd}" "${in}" | cpio --extract )
 	echo "Extracted initrd: ${out}"
