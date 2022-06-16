@@ -54,7 +54,7 @@ function adb_pull_storage()
 	done < <(adb shell ls -d /storage/*)
 
 	tmp_dir=/tmp/.adb
-	rm -rf "${tmp_dir}" "${dst_dir}"
+	rm -rf "${tmp_dir}"
 	mkdir -p "${tmp_dir}" "${dst_dir}"
 
 	echo "-- Pull files from ${SERIAL} to ${dst_dir}"
