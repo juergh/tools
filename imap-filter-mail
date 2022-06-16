@@ -48,7 +48,7 @@ print('-- Mark thread: ${op//\'/\\\'}')
 messages = account['${src}']:is_unseen() * account['${src}']:${op}
 for _, message in ipairs(messages) do
    thread = thread_messages(message)
-   thread:mark_${3}()
+   thread:mark_${mark}()
 end
 __EOF__
 }
@@ -69,8 +69,19 @@ end
 __EOF__
 }
 
-function canonical_filter_mail()
+function filter_canonical()
 {
+	local username=${1}
+
+	cat <<__EOF__
+account = IMAP {
+   server = 'imap.gmail.com',
+   username = '${username}',
+   password = get_pass('google.com/${username}'),
+   ssl = 'tls1.2',
+}
+__EOF__
+
 	# Move ACTIVITY mail
 	move_mail "Mailing List/Canonical/canonical-kernel-team" \
 			  "Canonical/Activity" \
@@ -122,12 +133,12 @@ function canonical_filter_mail()
 function usage()
 {
 	cat <<EOF
-Usage: gmail-filter-mail [-a] [-d] [-h] [-q] USERNAME
+Usage: imap-filter-mail [-a] [-d] [-h] [-q] USERNAME
 
-Filter Gmail mail using imapfilter.
+Filter IMAP mail using imapfilter.
 
 Positional arguments:
-  USERNAME       Gmail username.
+  USERNAME       Email username.
 
 Optional arguments:
   -d, --dry-run  Dump the imapfilter config file but do not run it.
@@ -174,7 +185,7 @@ fi
 
 case "${username}" in
 	*@canonical.com)
-		filter=canonical_filter_mail
+		filter=filter_canonical
 		;;
 	*)
 		echo "Invalid username: ${username}" >&2
@@ -192,20 +203,16 @@ CONFIG=$(mktemp)
 cat <<EOF >"${CONFIG}"
 $(cat "${cwd}/config/imapfilter/lib.lua")
 
+-------------------------------------------------------------------------------
+-- Main entry point
+
 options.timeout = 120
 options.subscribe = true
 options.create = true
 -- options.namespace = false
 options.info = false
 
-account = IMAP {
-   server = 'imap.gmail.com',
-   username = '${username}',
-   password = get_pass('google.com/${username}'),
-   ssl = 'tls1.2',
-}
-
-$("${filter}")
+$("${filter}" "${username}")
 
 print('')
 EOF
