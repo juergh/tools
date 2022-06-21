@@ -45,10 +45,10 @@ function mark_thread()
 
 print('')
 print('-- Mark thread: ${op//\'/\\\'}')
-messages = account['${src}']:is_unseen() * account['${src}']:${op}
+messages = account['${src}']:${op} * account['${src}']:is_unseen()
 for _, message in ipairs(messages) do
    thread = thread_messages(message)
-   thread:mark_${mark}()
+   thread:${mark}
 end
 __EOF__
 }
@@ -82,6 +82,16 @@ account = IMAP {
 }
 __EOF__
 
+	# Move noise mail
+	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
+					"contain_from('kernel-team-bot@canonical.com')"
+	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
+					"contain_subject(' -proposed tracker')"
+	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
+					"contain_from('Ubuntu Kernel Bot')"
+	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
+					"contain_from('Launchpad Buildd System')"
+
 	# Move ACTIVITY mail
 	move_mail "Mailing List/Canonical/canonical-kernel-team" \
 			  "Canonical/Activity" \
@@ -108,26 +118,48 @@ __EOF__
 			  "Launchpad-Message-For/juergh" \
 			  "contain_body('Launchpad-Subscription: linux-firmware')"
 
-	# Move noise mail
-	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
-					"contain_from('kernel-team-bot@canonical.com')"
-	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
-					"contain_subject(' -proposed tracker')"
-	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
-					"contain_from('Ubuntu Kernel Bot')"
-	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
-					"contain_from('Launchpad Buildd System')"
+	# Move patch mail
+	move_mail "Mailing List/Ubuntu/kernel-team" \
+			  "Mailing List/Ubuntu/kernel-team/patch" \
+			  "contain_subject('PATCH')"
+	move_mail "Mailing List/Ubuntu/kernel-team" \
+			  "Mailing List/Ubuntu/kernel-team/patch" \
+			  "contain_subject('PULL')"
 
 	# Move processed patch threads
-	move_thread "Mailing List/Ubuntu/kernel-team" \
+	move_thread "Mailing List/Ubuntu/kernel-team/patch" \
 				"Mailing List/Ubuntu/kernel-team/done" \
 				"contain_subject('APPLIED')"
-	move_thread "Mailing List/Ubuntu/kernel-team" \
+	move_thread "Mailing List/Ubuntu/kernel-team/patch" \
 				"Mailing List/Ubuntu/kernel-team/done" \
 				"contain_subject('NACK')"
-	move_thread "Mailing List/Ubuntu/kernel-team" \
+	move_thread "Mailing List/Ubuntu/kernel-team/patch" \
 				"Mailing List/Ubuntu/kernel-team/done" \
 				"contain_subject('NAK')"
+	move_thread "Mailing List/Canonical/canonical-kernel-esm" \
+				"Mailing List/Canonical/canonical-kernel-esm/done" \
+				"contain_subject('APPLIED')"
+	move_thread "Mailing List/Canonical/canonical-kernel-esm" \
+				"Mailing List/Canonical/canonical-kernel-esm/done" \
+				"contain_subject('NACK')"
+	move_thread "Mailing List/Canonical/canonical-kernel-esm" \
+				"Mailing List/Canonical/canonical-kernel-esm/done" \
+				"contain_subject('NAK')"
+}
+
+function filter_proton()
+{
+	local username=${1}
+
+	cat <<__EOF__
+account = IMAP {
+   server = '127.0.0.1',
+   port = 1143,
+   username = '${username}',
+   password = get_pass('proton.me/${username%@proton*}@$(hostname)'),
+   ssl = 'auto',
+}
+__EOF__
 }
 
 function usage()
@@ -186,6 +218,9 @@ fi
 case "${username}" in
 	*@canonical.com)
 		filter=filter_canonical
+		;;
+	*@proton*)
+		filter=filter_proton
 		;;
 	*)
 		echo "Invalid username: ${username}" >&2
