@@ -8,30 +8,40 @@ import yaml
 
 parser = argparse.ArgumentParser()
 parser.add_argument('series', nargs='?')
+parser.add_argument('-o', '--owner', action='store_true',
+                    help='show kernel owners')
 args = parser.parse_args()
 
 with open('/srv/git/kteam-tools/info/kernel-series.yaml') as fh:
     kernel_series = yaml.safe_load(fh)
 
-first = True
-for series in kernel_series:
-    series_data = kernel_series[series]
-    if not series_data.get('supported'):
+for series, series_data in kernel_series.items():
+    sources = series_data.get('sources')
+    if not sources:
         continue
+
+    supported = series_data.get('supported', False)
+    development = series_data.get('development', False)
+    if not supported and not development:
+        continue
+
     codename = series_data['codename']
 
-    if not args.series:
+    first = True
+    for source, source_data in sources.items():
+        source_supported = source_data.get('supported', True)
+        if supported and not source_supported:
+            continue
+
+        owner = source_data.get('owner', '') if args.owner else ''
+
+        if args.series:
+            if args.series == codename:
+                print(source)
+            continue
+
         if first:
             first = False
-        else:
             print()
-        print(series + ' - ' + codename)
-
-    for source in series_data['sources']:
-        source_data = series_data['sources'][source]
-        if not source_data.get('supported'):
-            continue
-        if not args.series:
-            print('  ' + source)
-        elif args.series == codename:
-            print(source)
+            print(series + ' - ' + codename)
+        print('  ' + source)
