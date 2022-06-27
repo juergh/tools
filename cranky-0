@@ -103,12 +103,14 @@ function do_review()
 
 function args_cbd()
 {
+	# CBD consumes all remaining arguments
+	CBD_ARGS=("${ARGS[@]}")
 	ARGS=()
 }
 
 function do_cbd()
 {
-	run cbd-cli build "${ARGS[@]}"
+	run cbd-cli build "${CBD_ARGS[@]}"
 }
 
 function do_push()
@@ -159,12 +161,15 @@ EOF
 # ----------------------------------------------------------------------------
 # Main entry point
 
+# Positional subcommand arguments
+CBD_ARGS=()
 POCKET=
 PPA=
 
+# Optional subcommand arguments
 LINK_ARGS=()
-ARGS=()
 
+ARGS=()
 while [ ${#} -gt 0 ] ; do
     case "${1}" in
         -h|--help)
