@@ -18,11 +18,13 @@ function is_clean()
 		exit 1
 	fi
 }
+
 function shift_ARGS()
 {
 	if [ ${#ARGS[@]} -eq 0 ] ; then
-		usage
-		exit 1
+		HELP=1
+		ARG=
+		return
 	fi
 
 	ARG=${ARGS[0]}
@@ -47,6 +49,11 @@ function do_open()
 function do_configs()
 {
 	run cranky updateconfigs
+}
+
+function args_link()
+{
+	HELP_OPT_ARGS+=("[-s SRU_CYCLE]")
 }
 
 function do_link()
@@ -76,6 +83,7 @@ function args_build()
 	if [ -z "${POCKET}" ] ; then
 		shift_ARGS
 		POCKET=${ARG}
+		HELP_POS_ARGS=("POCKET")
 	fi
 }
 
@@ -89,6 +97,7 @@ function args_review()
 	if [ -z "${POCKET}" ] ; then
 		shift_ARGS
 		POCKET=${ARG}
+		HELP_POS_ARGS=("POCKET")
 	fi
 }
 
@@ -103,9 +112,10 @@ function do_review()
 
 function args_cbd()
 {
-	# CBD consumes all remaining arguments
+	# cbd-cli consumes all remaining arguments
 	CBD_ARGS=("${ARGS[@]}")
 	ARGS=()
+	HELP_POS_ARGS=("[CBD_ARGS]")
 }
 
 function do_cbd()
@@ -132,6 +142,7 @@ function args_dput()
 	if [ -z "${PPA}" ] ; then
 		shift_ARGS
 		PPA=${ARG}
+		HELP_POS_ARGS=("PPA")
 	fi
 }
 
@@ -142,8 +153,16 @@ function do_dput()
 
 function usage()
 {
+	echo -n "Usage: $(basename "${0}") [-h]"
+	if [ ${#HELP_OPT_ARGS[@]} -gt 0 ] ; then
+		printf " %s" "${HELP_OPT_ARGS[@]}"
+	fi
+	if [ ${#HELP_POS_ARGS[@]} -gt 0 ] ; then
+		printf " %s" "${HELP_POS_ARGS[@]}"
+	fi
+	echo
+
 	cat <<EOF
-Usage: $(basename "${0}") [-h] [-s SRU_CYCLE] [CBD_ARGS|POCKET|PPA]
 
 Ubuntu kernel source package preparation, build, review and upload helper.
 
@@ -169,12 +188,15 @@ PPA=
 # Optional subcommand arguments
 LINK_ARGS=()
 
+HELP=0
+HELP_POS_ARGS=()
+HELP_OPT_ARGS=()
 ARGS=()
+
 while [ ${#} -gt 0 ] ; do
     case "${1}" in
         -h|--help)
-            usage
-            exit
+            HELP=1
             ;;
 		-s|--sru-cycle)
             shift
@@ -196,7 +218,8 @@ for cmd in "${CMDS[@]}" ; do
 		args_"${cmd}"
 	fi
 done
-if [ ${#ARGS[@]} -ne 0 ] ; then
+
+if [ ${#ARGS[@]} -ne 0 ] || [ ${HELP} -eq 1 ] ; then
 	usage
 	exit 2
 fi
