@@ -18,6 +18,16 @@ function is_clean()
 		exit 1
 	fi
 }
+function shift_ARGS()
+{
+	if [ ${#ARGS[@]} -eq 0 ] ; then
+		usage
+		exit 1
+	fi
+
+	ARG=${ARGS[0]}
+	ARGS=("${ARGS[@]:1}")
+}
 
 function do_fix()
 {
@@ -61,24 +71,39 @@ function do_verify()
 	run cranky-verify-release-ready
 }
 
-# shellcheck disable=SC2034
-nargs_build=1
+function args_build()
+{
+	if [ -z "${POCKET}" ] ; then
+		shift_ARGS
+		POCKET=${ARG}
+	fi
+}
 
 function do_build()
 {
-	run cranky-build-sources -f "${ARGS[0]}"
+	run cranky-build-sources -f "${POCKET}"
 }
 
-# shellcheck disable=SC2034
-nargs_review=1
+function args_review()
+{
+	if [ -z "${POCKET}" ] ; then
+		shift_ARGS
+		POCKET=${ARG}
+	fi
+}
 
 function do_review()
 {
-	run cranky-review-sources "${ARGS[0]}"
+	run cranky-review-sources "${POCKET}"
 	run cranky-reduce-debdiff
 
 	run cranky-review-sources | less
 	run review-debdiff | less
+}
+
+function args_cbd()
+{
+	ARGS=()
 }
 
 function do_cbd()
@@ -100,12 +125,17 @@ function do_push()
 	run cranky-push-all
 }
 
-# shellcheck disable=SC2034
-nargs_dput=1
+function args_dput()
+{
+	if [ -z "${PPA}" ] ; then
+		shift_ARGS
+		PPA=${ARG}
+	fi
+}
 
 function do_dput()
 {
-	run cranky dput-sources "${ARGS[0]}"
+	run cranky dput-sources "${PPA}"
 }
 
 function usage()
@@ -129,6 +159,9 @@ EOF
 # ----------------------------------------------------------------------------
 # Main entry point
 
+POCKET=
+PPA=
+
 LINK_ARGS=()
 ARGS=()
 
@@ -150,8 +183,21 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
-branch=$(git rev-parse --abbrev-ref HEAD)
+readarray -t CMDS < <(echo "${0##*--}" | tr "-" "\n")
 
+# Parse the provided commandline arguments
+for cmd in "${CMDS[@]}" ; do
+	if [ "$(type -t args_"${cmd}")" = "function" ]; then
+		args_"${cmd}"
+	fi
+done
+if [ ${#ARGS[@]} -ne 0 ] ; then
+	usage
+	exit 2
+fi
+
+# Check the current branch
+branch=$(git rev-parse --abbrev-ref HEAD)
 case "${branch}" in
 	master-next|cranky/master-next) ;;
 	*)
@@ -159,17 +205,6 @@ case "${branch}" in
 		exit 1
 		;;
 esac
-
-readarray -t CMDS < <(echo "${0##*--}" | tr "-" "\n")
-
-# Check number of mandatory arguments
-for cmd in "${CMDS[@]}" ; do
-	nargs=nargs_${cmd}
-	if [ -n "${!nargs:-}" ] && [ "${#ARGS[@]}" != "${!nargs}" ] ; then
-		usage
-		exit 2
-	fi
-done
 
 # Run the command(s)
 COLS=$(tput cols)
