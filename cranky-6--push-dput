@@ -1,18 +1,1 @@
-#!/bin/bash -eu
-
-if [ ${#} -ne 1 ] ; then
-	echo "Usage: $(basename "${0}") BUILD_PPA"
-	exit 2
-fi
-
-ppa=${1}
-
-cranky-push-all --dry-run
-echo -n "Push (y|n)? "
-read -r tmp
-if [ "${tmp}" != "y" ] ; then
-	exit
-fi
-
-cranky-push-all
-cranky dput-sources "${ppa}"
+cranky-0

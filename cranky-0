@@ -1,0 +1,178 @@
+#!/bin/bash -eu
+
+function run()
+{
+	local txt
+
+	txt="  ${*}$(printf "%${COLS}s")"
+	echo
+	echo -e "\033[48;5;160m${txt::${COLS}}\033[0m"
+
+	"${@}"
+}
+
+function is_clean()
+{
+	if [ -n "$(git status --porcelain)" ] ; then
+		echo "Repo is not clean" >&2
+		exit 1
+	fi
+}
+
+function do_fix()
+{
+	run cranky fix
+}
+
+function do_rebase()
+{
+	run cranky rebase
+}
+
+function do_open()
+{
+	run cranky open
+}
+
+function do_configs()
+{
+	run cranky updateconfigs
+}
+
+function do_link()
+{
+	run cranky link-tb "${LINK_ARGS[@]}"
+}
+
+function do_close()
+{
+	./update-dkms-versions
+	run cranky close
+	run cranky tag
+}
+
+function do_dependents()
+{
+	run cranky-update-dependents
+}
+
+function do_verify()
+{
+	run cranky-verify-release-ready
+}
+
+# shellcheck disable=SC2034
+nargs_build=1
+
+function do_build()
+{
+	run cranky-build-sources -f "${ARGS[0]}"
+}
+
+# shellcheck disable=SC2034
+nargs_review=1
+
+function do_review()
+{
+	run cranky-review-sources "${ARGS[0]}"
+	run cranky-reduce-debdiff
+
+	run cranky-review-sources | less
+	run review-debdiff | less
+}
+
+function do_cbd()
+{
+	run cbd-cli build "${ARGS[@]}"
+}
+
+function do_push()
+{
+	local tmp
+
+	run cranky-push-all --dry-run
+	echo -n "Push (y|n)? "
+	read -r tmp
+	if [ "${tmp}" != "y" ] ; then
+        exit
+	fi
+
+	run cranky-push-all
+}
+
+# shellcheck disable=SC2034
+nargs_dput=1
+
+function do_dput()
+{
+	run cranky dput-sources "${ARGS[0]}"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [-s SRU_CYCLE] [CBD_ARGS|POCKET|PPA]
+
+Ubuntu kernel source package preparation, build, review and upload helper.
+
+Positional arguments:
+  CBD_ARGS                  CBD arguments, e.g., -o amd64 -o generic.
+  POCKET                    Pocket containing the previous source package.
+  PPA                       Build PPA.
+
+Optional arguments:
+  -h, --help                Show this help text and exit.
+  -s, --sru-cycle SR_CYCLE  SRU cycle name, e.g., 2022.05.30-1.
+EOF
+}
+
+# ----------------------------------------------------------------------------
+# Main entry point
+
+LINK_ARGS=()
+ARGS=()
+
+while [ ${#} -gt 0 ] ; do
+    case "${1}" in
+        -h|--help)
+            usage
+            exit
+            ;;
+		-s|--sru-cycle)
+            shift
+            LINK_ARGS=("-s" "${1}")
+            ;;
+		*)
+			ARGS=("${@}")
+			break
+            ;;
+	esac
+	shift
+done
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+
+case "${branch}" in
+	master-next|cranky/master-next) ;;
+	*)
+		echo "Invalid branch: ${branch}" >&2
+		exit 1
+		;;
+esac
+
+readarray -t CMDS < <(echo "${0##*--}" | tr "-" "\n")
+
+# Check number of mandatory arguments
+for cmd in "${CMDS[@]}" ; do
+	nargs=nargs_${cmd}
+	if [ -n "${!nargs:-}" ] && [ "${#ARGS[@]}" != "${!nargs}" ] ; then
+		usage
+		exit 2
+	fi
+done
+
+# Run the command(s)
+COLS=$(tput cols)
+for cmd in "${CMDS[@]}" ; do
+	do_"${cmd}"
+done
