@@ -1,0 +1,43 @@
+#!/bin/bash -eu
+
+function pr_banner()
+{
+	local txt
+
+	if [ -z "${__COLS:-}" ] ; then
+		__COLS=$(tput cols)
+	fi
+	txt=${*}$(printf "%${__COLS}s")
+	echo -e "\033[48;5;160m${txt::${__COLS}}\033[0m"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [GIT_LOG_OPTIONS]
+
+Show kernel source git repo logs.
+
+Optional arguments:
+  -h, --help  Show this help message and exit.
+EOF
+}
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
+
+while IFS= read -r path ; do
+	echo
+	pr_banner "${path}"
+	git -C "${path}" --no-pager log "${@}"
+done < <(cranky shell-helper source-packages-path) | less
