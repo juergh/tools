@@ -1,13 +1,20 @@
 #!/bin/bash -eu
 
-function run()
+function pr_banner()
 {
 	local txt
 
-	txt="  ${*}$(printf "%${COLS}s")"
-	echo
-	echo -e "\033[48;5;160m${txt::${COLS}}\033[0m"
+	if [ -z "${__COLS:-}" ] ; then
+		__COLS=$(tput cols)
+	fi
+	txt=${*}$(printf "%${__COLS}s")
+	echo -e "\033[48;5;160m${txt::${__COLS}}\033[0m"
+}
 
+function run()
+{
+	echo
+	pr_banner "${*}"
 	"${@}"
 }
 
@@ -235,7 +242,6 @@ case "${branch}" in
 esac
 
 # Run the command(s)
-COLS=$(tput cols)
 for cmd in "${CMDS[@]}" ; do
 	do_"${cmd}"
 done
