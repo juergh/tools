@@ -114,7 +114,7 @@ function do_review()
 	run cranky-reduce-debdiff
 
 	run cranky-review-sources | less
-	run review-debdiff | less
+	run review-debdiff -r | less
 }
 
 function args_cbd()
