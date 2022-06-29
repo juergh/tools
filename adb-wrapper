@@ -127,7 +127,7 @@ function do_pull_download()
 function do_scrcpy()
 {
 	# Unlock the device
-	do_unlock
+#	do_unlock
 
 	# Run scrcpy
 	echo "-- Run scrcpy"
