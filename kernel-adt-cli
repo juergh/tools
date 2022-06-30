@@ -253,8 +253,7 @@ class ADTResults():
         self.ppa = ppa
 
         ppa_path = 'canonical-kernel-team--{}/'.format(ppa) if ppa else ''
-        self.adt_url = 'https://people.canonical.com/~kernel/status/' + \
-            'adt-matrix/' + ppa_path
+        self.adt_url = 'https://kernel.ubuntu.com/adt-matrix/' + ppa_path
         self.adt_url_html = self.adt_url + \
             '{}-{}.html'.format(series, source)
         self.adt_url_json = self.adt_url + \
