@@ -15,7 +15,6 @@ user_files=(
 	"${HOME}"/.emacs.el/
 	"${HOME}"/.gnupg/
 	"${HOME}"/.gitconfig
-	"${HOME}"/.password-store/
 	"${HOME}"/.sesame/
 	"${HOME}"/.ssh/
 	"${HOME}"/Mail/
