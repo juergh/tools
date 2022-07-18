@@ -82,16 +82,6 @@ account = IMAP {
 }
 __EOF__
 
-	# Move noise mail
-	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
-					"contain_from('kernel-team-bot@canonical.com')"
-	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
-					"contain_subject(' -proposed tracker')"
-	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
-					"contain_from('Ubuntu Kernel Bot')"
-	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
-					"contain_from('Launchpad Buildd System')"
-
 	# Move ACTIVITY mail
 	move_mail "Mailing List/Canonical/canonical-kernel-team" \
 			  "Canonical/Activity" \
@@ -145,6 +135,16 @@ __EOF__
 	move_thread "Mailing List/Canonical/canonical-kernel-esm" \
 				"Mailing List/Canonical/canonical-kernel-esm/done" \
 				"contain_subject('NAK')"
+
+	# Move noise mail (needs to come last)
+	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
+					"contain_from('kernel-team-bot@canonical.com')"
+	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
+					"contain_subject(' -proposed tracker')"
+	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
+					"contain_from('Ubuntu Kernel Bot')"
+	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
+					"contain_from('Launchpad Buildd System')"
 }
 
 function filter_proton()
