@@ -149,8 +149,12 @@ SOURCE=
 if [ -e debian/debian.env ] ; then
 	# shellcheck disable=SC1091
 	. debian/debian.env
-	SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
 	SOURCE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+	SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
+	if [ "${SERIES}" = "UNRELEASED" ] ; then
+		SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution \
+									 -o 1 -c 1)
+	fi
 fi
 
 cbd_"${cmd}" "${@}"
