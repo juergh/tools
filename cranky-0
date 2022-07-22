@@ -234,7 +234,7 @@ fi
 # Check the current branch
 branch=$(git rev-parse --abbrev-ref HEAD)
 case "${branch}" in
-	master-next|cranky/master-next) ;;
+	cranky/*-next) ;;
 	*)
 		echo "Invalid branch: ${branch}" >&2
 		exit 1
