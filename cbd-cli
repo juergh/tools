@@ -91,11 +91,10 @@ function cbd_download()
 function cbd_help()
 {
 	if [ -z "${SERIES}" ] ; then
-		echo "-- Not an Ubuntu kernel repository" >&2
-		exit 1
+		ssh cbd help
+	else
+		git push cbd:"${SERIES}".git -o help
 	fi
-
-	git push cbd:"${SERIES}".git -o help
 }
 
 function usage()
