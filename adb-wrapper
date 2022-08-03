@@ -43,24 +43,24 @@ function adb_start_app()
 function adb_pull_storage()
 {
 	local rmt_dir=${1} dst_dir=${2}
-	local remotes rmt_base_dir rmt_full_dir tmp_dir
+	local rmt_dirs rmt_base_dir rmt_full_dir rmt_file
 
-	remotes=("/storage/self/primary/${rmt_dir}")
+	echo "-- Pull files from ${SERIAL} to ${dst_dir}"
+
+	rmt_dirs=("/storage/self/primary/${rmt_dir}")
 	while IFS= read -r rmt_base_dir ; do
 		rmt_full_dir="${rmt_base_dir}/${rmt_dir}"
 		if adb shell test -d "${rmt_full_dir}" ; then
-			remotes+=("${rmt_full_dir}")
+			rmt_dirs+=("${rmt_full_dir}")
 		fi
 	done < <(adb shell ls -d /storage/*)
 
-	tmp_dir=/tmp/.adb
-	rm -rf "${tmp_dir}"
-	mkdir -p "${tmp_dir}" "${dst_dir}"
-
-	echo "-- Pull files from ${SERIAL} to ${dst_dir}"
-	adb -s "${SERIAL}" pull "${remotes[@]}" "${tmp_dir}"
-	find "${tmp_dir}" -type f -print0 | xargs -0 -I{} mv '{}' "${dst_dir}"
-	rm -rf "${tmp_dir}"
+	mkdir -p "${dst_dir}"
+	while IFS= read -r rmt_file ; do
+		if ! [ -e "${dst_dir}/${rmt_file##*/}" ] ; then
+			adb -s "${SERIAL}" pull "${rmt_file}" "${dst_dir}"
+		fi
+	done < <(adb shell find "${rmt_dirs[@]}" -type f)
 }
 
 # -----------------------------------------------------------------------------
