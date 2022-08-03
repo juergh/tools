@@ -114,6 +114,11 @@ function do_serials()
 # -----------------------------------------------------------------------------
 # Porcelain Commands
 
+function do_backup()
+{
+	adb_pull_storage Backup "${HOME}"/Backup/"${SERIAL}"
+}
+
 function do_pull_camera()
 {
 	adb_pull_storage DCIM "${HOME}"/Pictures/"${SERIAL}"
@@ -189,6 +194,7 @@ App commands:
   start APP            Start an app.
 
 Porcelain commands:
+  backup               Pull all backup files.
   pull-camera          Pull all camera files.
   pull-download        Pull all downloaded files.
   scrcpy               Run scrcpy.
@@ -219,7 +225,7 @@ while [ ${#} -gt 0 ] ; do
 		-s|--serial)
 			SERIAL=${1}
 			;;
-		pull-camera|pull-download|scrcpy|unlock)
+		backup|pull-camera|pull-download|scrcpy|unlock)
 			command=${1}
 			;;
 		display-off|display-on|display-state|serials)
