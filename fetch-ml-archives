@@ -1,0 +1,44 @@
+#!/bin/bash -eu
+
+url=${1:-}
+
+if [ -z "${url}" ] ; then
+	url=$(cat archive)
+fi
+
+declare -A month=(
+	[january]=01
+	[february]=02
+	[march]=03
+	[april]=04
+	[may]=05
+	[june]=06
+	[july]=07
+	[august]=08
+	[september]=09
+	[october]=10
+	[november]=11
+	[december]=12
+)
+
+# Remove the newest archive (could be incomplete/partial)
+ls 20*.txt 2>/dev/null | tail -1 | xargs rm -f
+
+# Fetch and unpack archives
+while IFS= read -r gz ; do
+	f=${gz%.gz}
+	y=${f%%-*}
+	m=${f%.txt}
+	m=${m##*-}
+	n=${y}-${month[${m,,}]}.txt
+
+	if [ -e "${n}" ] ; then
+		continue
+	fi
+
+	rm -f "${gz}"
+	wget "${url}"/"${gz}"
+	gunzip "${gz}"
+
+	mv "${f}" "${n}"
+done < <(curl -s "${url}" | grep -oP '20.*?\.txt\.gz')
