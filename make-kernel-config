@@ -335,6 +335,7 @@ Generic options:
   -c, --config <FILE>      Use config file <FILE> as the base config instead of
                            the <ARCH> specific defconfig.
   -h, --help               Show this help text.
+  -l, --localmodconfig     Only enable modules listed by 'lsmod'.
   -m, --modules [yes|no]   yes: Convert modules to core (m -> y).
                            no:  Disable modules (m -> n).
   -s, --show               Show the requested config options without generating
@@ -358,6 +359,7 @@ EOF
 
 OPT_CONFIG=()
 OPT_CONFIG_FILE=
+OPT_LOCALMODCONFIG=0
 OPT_LOCALVERSION=
 OPT_MODULES=
 OPT_SHOW=0
@@ -378,6 +380,9 @@ while [ ${#} -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit 0
+			;;
+		-l|--localmodconfig)
+			OPT_LOCALMODCONFIG=1
 			;;
 		-m|--modules)
 			shift
@@ -521,6 +526,13 @@ if grep -q olddefconfig scripts/kconfig/Makefile ; then
 	make olddefconfig
 else
 	make oldnoconfig
+fi
+
+# -----------------------------------------------------------------------------
+# Disable unused modules
+
+if [ ${OPT_LOCALMODCONFIG} -eq 1 ] ; then
+	yes '' | make localmodconfig
 fi
 
 # -----------------------------------------------------------------------------
