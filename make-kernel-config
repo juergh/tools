@@ -416,6 +416,11 @@ fi
 
 trap out EXIT INT TERM HUP
 
+# Create the build directory
+buildd=buildd/config
+rm -rf "${buildd}"
+mkdir -p "${buildd}"
+
 # -----------------------------------------------------------------------------
 # Create the list of requested config options (this sets the CONFIG array)
 
@@ -471,13 +476,9 @@ fi
 # Create a base config file
 
 if [ -n "${OPT_CONFIG_FILE}" ] ; then
-	if [ "${OPT_CONFIG_FILE}" -ef .config ] ; then
-		cp .config .config.orig
-	else
-		cp "${OPT_CONFIG_FILE}" .config
-	fi
+	cp "${OPT_CONFIG_FILE}" "${buildd}"/.config
 else
-	make defconfig
+	make O="${buildd}" defconfig
 fi
 
 # -----------------------------------------------------------------------------
@@ -511,7 +512,7 @@ for opt in "${!opts_requested[@]}" ; do
 #			;;
 	esac
 	printf "%s %-9s %s %s\n" "./scripts/config" "${cmd}" "${opt}" "${arg}"
-	./scripts/config "${cmd}" "${opt}" "${arg}"
+	./scripts/config --file "${buildd}"/.config "${cmd}" "${opt}" "${arg}"
 done | sort -k3
 echo
 
@@ -521,16 +522,16 @@ echo
 # Use 'olddefconfig' if it's available, otherwise 'oldnoconfig' which is the
 # same (despite its misleading name).
 if grep -q olddefconfig scripts/kconfig/Makefile ; then
-	make olddefconfig
+	make O="${buildd}" olddefconfig
 else
-	make oldnoconfig
+	make O="${buildd}" oldnoconfig
 fi
 
 # -----------------------------------------------------------------------------
 # Disable unused modules
 
 if [ ${OPT_LOCALMODCONFIG} -eq 1 ] ; then
-	yes '' | make localmodconfig
+	yes '' | make O="${buildd}" localmodconfig
 fi
 
 # -----------------------------------------------------------------------------
@@ -546,28 +547,32 @@ for opt in $(echo "${!opts_requested[*]}" | tr ' ' '\n' | sort) ; do
 	case ${val} in
 		y)
 			pattern="^CONFIG_${opt}=y"
-			grep "${pattern}" .config || opts_not_found[${opt}]=${pattern}
+			grep "${pattern}" "${buildd}"/.config || \
+				opts_not_found[${opt}]=${pattern}
 			;;
 		n)
 			pattern="^# CONFIG_${opt} is not set"
-			grep "${pattern}" .config || \
-				! grep -q "^CONFIG_${opt}=" .config || \
+			grep "${pattern}" "${buildd}"/.config || \
+				! grep -q "^CONFIG_${opt}=" "${buildd}"/.config || \
 				opts_not_found[${opt}]=${pattern}
 
 			;;
 		m)
 			pattern="^CONFIG_${opt}=m"
-			grep "${pattern}" .config || opts_not_found[${opt}]=${pattern}
+			grep "${pattern}" "${buildd}"/.config || \
+				opts_not_found[${opt}]=${pattern}
 			;;
 		[0-9]*)
 			arg=${val}
 			pattern="^CONFIG_${opt}=${arg}"
-			grep "${pattern}" .config || opts_not_found[${opt}]=${pattern}
+			grep "${pattern}" "${buildd}"/.config || \
+				opts_not_found[${opt}]=${pattern}
 			;;
 		\"*)
 			arg=${val}
 			pattern="^CONFIG_${opt}=${arg}"
-			grep "${pattern}" .config || opts_not_found[${opt}]=${pattern}
+			grep "${pattern}" "${buildd}"/.config || \
+				opts_not_found[${opt}]=${pattern}
 			;;
 	esac
 done
@@ -626,6 +631,6 @@ CONFIGFILE=config-${KERNELVERSION}${OPT_LOCALVERSION}
 if [ -e "${CONFIGFILE}" ] ; then
 	cp "${CONFIGFILE}" "${CONFIGFILE}.orig"
 fi
-cp .config "${CONFIGFILE}"
+cp "${buildd}"/.config "${CONFIGFILE}"
 
 echo "+++ Created config file: ${CONFIGFILE}"
