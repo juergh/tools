@@ -492,27 +492,25 @@ echo
 echo "+++ Setting config options"
 for opt in "${!opts_requested[@]}" ; do
 	val=${opts_requested[${opt}]}
-	arg=
 	case "${val}" in
 		y)
-			cmd="--enable"
+			cmd=("--enable" "${opt}")
 			;;
 		n)
-			cmd="--disable"
+			cmd=("--disable" "${opt}")
 			;;
 		m)
-			cmd="--module"
+			cmd=("--module" "${opt}")
 			;;
 		s=*)
-			cmd="--set-str"
-			arg=${val#*=}
+			cmd=("--set-str" "${opt}" "${val#*=}")
 			;;
 		*)
 			die "Invalid option: ${opt} (value ${val})"
 			;;
 	esac
-	printf "%s %-9s %s %s\n" "./scripts/config" "${cmd}" "${opt}" "${arg}"
-	./scripts/config --file "${buildd}"/.config "${cmd}" "${opt}" "${arg}"
+	printf "./scripts/config %-9s %s %s\n" "${cmd[@]}"
+	./scripts/config --file "${buildd}"/.config "${cmd[@]}"
 done | sort -k3
 echo
 
@@ -543,7 +541,6 @@ echo
 echo "+++ Checking config options"
 for opt in $(echo "${!opts_requested[*]}" | tr ' ' '\n' | sort) ; do
 	val=${opts_requested[${opt}]}
-	arg=
 	case ${val} in
 		y)
 			pattern="^CONFIG_${opt}=y"
@@ -562,8 +559,7 @@ for opt in $(echo "${!opts_requested[*]}" | tr ' ' '\n' | sort) ; do
 				opts_not_found[${opt}]=${pattern}
 			;;
 		s=*)
-			arg=${val#*=}
-			pattern="^CONFIG_${opt}=\"${arg}\""
+			pattern="^CONFIG_${opt}=\"${val#*=}\""
 			grep "${pattern}" "${buildd}"/.config || \
 				opts_not_found[${opt}]=${pattern}
 			;;
