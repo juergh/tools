@@ -6,7 +6,7 @@
 # -----------------------------------------------------------------------------
 # Default configs
 
-function config_yes()
+function defconfig_yes()
 {
 	CONFIG+=(
 		ACPI:y            # Required for power off
@@ -34,7 +34,7 @@ function config_yes()
 	)
 }
 
-function config_no()
+function defconfig_no()
 {
 	CONFIG+=(
 		DRM:n
@@ -347,10 +347,8 @@ EOF
 	declare -F | awk '{ print $3 }' | grep '^config_' | sort | \
 		while read -r config ; do
 			config=${config#config_}
-			if [ "${config}" != "yes" ] && [ "${config}" != "no" ] ; then
-				help="help_${config}"
-				printf "  --%-12s%s\n" "${config}" "${!help}"
-			fi
+			help="help_${config}"
+			printf "  --%-12s%s\n" "${config}" "${!help}"
 		done
 }
 
@@ -423,9 +421,9 @@ trap out EXIT INT TERM HUP
 
 declare -a CONFIG=()
 
-config_yes
+defconfig_yes
 if [ -z "${OPT_CONFIG_FILE}" ] ; then
-	config_no
+	deconfig_no
 fi
 
 for opt_config in "${OPT_CONFIG[@]}" ; do
