@@ -6,9 +6,10 @@
 # -----------------------------------------------------------------------------
 # Default configs
 
-function defconfig_yes()
+function defconfig()
 {
 	CONFIG+=(
+		# Always enabled
 		ACPI:y            # Required for power off
 		ATA:y
 		ATA_PIIX:y        # Basic ATA
@@ -31,6 +32,10 @@ function defconfig_yes()
 		PROC_FS:y
 		RELOCATABLE:y     # Required for a crash kernel
 		SYSFS:y
+
+		# Always disabled
+		DEBUG_INFO:n
+		SYSTEM_REVOCATION_LIST:n
 	)
 }
 
@@ -426,7 +431,8 @@ mkdir -p "${buildd}"
 
 declare -a CONFIG=()
 
-defconfig_yes
+CONFIG=("LOCALVERSION:s=${OPT_LOCALVERSION}")
+defconfig
 if [ -z "${OPT_CONFIG_FILE}" ] ; then
 	deconfig_no
 fi
@@ -442,7 +448,8 @@ done
 declare -A opts_requested=()
 
 for config in "${CONFIG[@]}" ; do
-	IFS=: read -r opt val <<< "${config}"
+	opt=${config%%:*}
+	val=${config#*:}
 
 	# Disable modules or turn them into core
 	if [ "${val}" = "m" ] ; then
@@ -456,9 +463,6 @@ for config in "${CONFIG[@]}" ; do
 	# Add the option to the array
 	opts_requested[${opt}]=${val}
 done
-
-# Add the localversion to the config list
-opts_requested[LOCALVERSION]=${OPT_LOCALVERSION}
 
 # -----------------------------------------------------------------------------
 # Show the config options
@@ -499,17 +503,13 @@ for opt in "${!opts_requested[@]}" ; do
 		m)
 			cmd="--module"
 			;;
-		[0-9]*)
-			cmd="--set-val"
-			arg=${val}
+		s=*)
+			cmd="--set-str"
+			arg=${val#*=}
 			;;
 		*)
-			cmd="--set-str"
-			arg=${val}
+			die "Invalid option: ${opt} (value ${val})"
 			;;
-#		*)
-#			die "Invalid option: ${opt} (value ${val})"
-#			;;
 	esac
 	printf "%s %-9s %s %s\n" "./scripts/config" "${cmd}" "${opt}" "${arg}"
 	./scripts/config --file "${buildd}"/.config "${cmd}" "${opt}" "${arg}"
@@ -555,22 +555,15 @@ for opt in $(echo "${!opts_requested[*]}" | tr ' ' '\n' | sort) ; do
 			grep "${pattern}" "${buildd}"/.config || \
 				! grep -q "^CONFIG_${opt}=" "${buildd}"/.config || \
 				opts_not_found[${opt}]=${pattern}
-
 			;;
 		m)
 			pattern="^CONFIG_${opt}=m"
 			grep "${pattern}" "${buildd}"/.config || \
 				opts_not_found[${opt}]=${pattern}
 			;;
-		[0-9]*)
-			arg=${val}
-			pattern="^CONFIG_${opt}=${arg}"
-			grep "${pattern}" "${buildd}"/.config || \
-				opts_not_found[${opt}]=${pattern}
-			;;
-		\"*)
-			arg=${val}
-			pattern="^CONFIG_${opt}=${arg}"
+		s=*)
+			arg=${val#*=}
+			pattern="^CONFIG_${opt}=\"${arg}\""
 			grep "${pattern}" "${buildd}"/.config || \
 				opts_not_found[${opt}]=${pattern}
 			;;
