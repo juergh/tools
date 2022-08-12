@@ -38,25 +38,26 @@ function hostarch()
 function usage()
 {
 	cat <<EOF
-Usage: run-chroot [-d] [-h] [-l] [-p] [-r] [-u USER] [CHROOT[-ARCH]] [--]
+Usage: run-chroot [-c] [-d] [-h] [-p] [-r] [-s] [-u USER] [CHROOT[-ARCH]] [--]
        [COMMAND [ARGS]]
 
 Run a chroot session. Create it first, if it doesn't exist.
 
 Positional arguments:
-  CHROOT                 Name of an existing session or base chroot. If not
+  CHROOT                 Name of an existing session or chroot. If not
                          provided, defaults to the name of the running release
                          ($(lsb_release -c -s)).
   ARCH                   Chroot architecture. If not provided, defaults to the
                          running host architecture ($(dpkg-architecture -q DEB_HOST_ARCH)/$(dpkg-architecture -q DEB_HOST_GNU_CPU)).
 
 Optional 
+  -c, --list-chroots     List existing chroots.
   -d, --destroy          Destroy a session.
   -h, --help             Show this help text and exit.
-  -l, --list             List existing sessions.
   -p, --no-preserve-env  Don't preserve the user's environment inside the
                          chroot.
   -r, --recreate         Recreate an already existing session.
+  -s, --list-sessions    List existing sessions.
   -u, --user USER        Run the session as the user USER.
 EOF
 }
@@ -69,6 +70,10 @@ chroot=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
+		-c|--list-chroots)
+			schroot -l --all | grep "^source:" | sed 's/^source://' | sort
+			exit
+			;;
 		-d|--destroy)
 			destroy=1
 			;;
@@ -76,15 +81,15 @@ while [ $# -gt 0 ] ; do
 			usage
 			exit
 			;;
-		-l|--list)
-			schroot -l --all | grep "^session:" | sed 's/^session://'
-			exit
-			;;
 		-p|--no-preserve-env)
 			preserve_env=0
 			;;
 		-r|--recreate)
 			recreate=1
+			;;
+		-s|--list-sessions)
+			schroot -l --all | grep "^session:" | sed 's/^session://' | sort
+			exit
 			;;
 		-u|--user)
 			shift
@@ -138,7 +143,7 @@ case "${#dashes}" in
 		;;
 esac
 
-# Generate the base chroot name from the session name
+# Generate the (base) chroot name from the session name
 chroot=${session#*-}
 
 # Destroy an existing session if -d, --destroy is provided
