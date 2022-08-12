@@ -25,6 +25,7 @@ user_hostname_fixups=(
 )
 
 root_files=(
+	/etc/default/grub.d/99-juergh.cfg
 	/etc/NetworkManager/conf.d/localdns.conf
 	/etc/NetworkManager/dnsmasq.d/libvirt.conf
 	/etc/security/limits.d/custom.conf
