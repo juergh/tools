@@ -38,15 +38,17 @@ function hostarch()
 function usage()
 {
 	cat <<EOF
-Usage: run-chroot [-d] [-h] [-l] [-p] [-r] [-u USER] [CHROOT] [--]
+Usage: run-chroot [-d] [-h] [-l] [-p] [-r] [-u USER] [CHROOT[-ARCH]] [--]
        [COMMAND [ARGS]]
 
 Run a chroot session. Create it first, if it doesn't exist.
 
 Positional arguments:
   CHROOT                 Name of an existing session or base chroot. If not
-                         provided, defaults to the current release (for
-                         example 'groovy').
+                         provided, defaults to the name of the running release
+                         ($(lsb_release -c -s)).
+  ARCH                   Chroot architecture. If not provided, defaults to the
+                         running host architecture ($(dpkg-architecture -q DEB_HOST_ARCH)/$(dpkg-architecture -q DEB_HOST_GNU_CPU)).
 
 Optional 
   -d, --destroy          Destroy a session.
