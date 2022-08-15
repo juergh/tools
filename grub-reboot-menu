@@ -1,0 +1,61 @@
+#!/bin/bash -eu
+
+if [ "$(id -u)" != "0" ] ; then
+	echo "This script needs to be run as root" >&2
+	exit 1
+fi
+
+#menu=()
+#menu_text=()
+
+level=0
+menu_index=()
+menu_entry=()
+
+while IFS= read -r line ; do
+	noblank=${line//[[:blank:]]/}
+	case "${noblank}" in
+		menuentry\'*|submenu\'*)
+			index=${menu_index[${level}]:--1}
+			menu_index[${level}]=$((index + 1))
+
+			entry_index=$(printf "%d>" "${menu_index[@]:0:$((level + 1))}")
+			entry_index=${entry_index%>}
+
+			entry_title=${line#*\'}
+			entry_title=${entry_title%%\'*}
+
+			menu_entry+=("${entry_index} ${entry_title}")
+			level=$((level + 1))
+			;;
+		"}")
+			if [ ${level} -gt 0 ] ; then
+				level=$((level - 1))
+			fi
+			;;
+	esac
+done < /boot/grub/grub.cfg
+
+num_entries=${#menu_entry[@]}
+
+echo "Idx   Entry   Title"
+echo "---------------------------------------------------------------------"
+for i in $(seq 1 "${num_entries}") ; do
+	entry=${menu_entry[$((i - 1))]}
+	printf "%3d   %-5s   %s\n" "${i}" "${entry%% *}" "${entry#* }"
+done
+
+echo
+while true ; do
+	echo -n "Choice: "
+	read -r c
+	if [ "${c}" -gt 0 ] 2>/dev/null && [ "${c}" -le "${num_entries}" ] ; then
+		break
+	fi
+done
+
+entry=${menu_entry[$((c - 1))]}
+grub-reboot "${entry%% *}"
+
+echo
+cat /boot/grub/grubenv
