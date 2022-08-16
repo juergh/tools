@@ -1,0 +1,51 @@
+#!/bin/bash -eu
+
+function usage()
+{
+        cat <<EOF
+Usage: $(basename "${0}") [-h] VERSION
+
+Fetch Ubuntu mainline kernel Debian packages.
+
+Positional arguements:
+  VERSION     Kernel version (5.15, 5.16.1, ...).
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+arch=amd64
+flavor=generic
+
+version=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${version}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			version=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${version}" ] ; then
+	usage
+	exit 2
+fi
+
+url=https://kernel.ubuntu.com/~kernel-ppa/mainline/v${version}
+
+while IFS= read -r deb ; do
+	wget -O "${deb#*/}" "${url}"/"${deb}"
+done < <(curl -s "${url}"/ | \
+			 grep -o ">${arch}/linux-[^<]*-${flavor}_[^<]*_${arch}.deb<" | \
+			 tr -d '><')
