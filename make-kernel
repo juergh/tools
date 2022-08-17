@@ -134,7 +134,7 @@ function get_upstream_schroot()
 		5.15)
 			series=jammy
 			;;
-		5.19)
+		5.19|6.0)
 			series=kinetic
 			;;
 		*)
@@ -208,14 +208,6 @@ function build_upstream_kernel()
 	if ! [ -d "${buildd}" ] ; then
 		mkdir -p "${buildd}"
 	fi
-	cp "${CONFIG}" "${buildd}/.config"
-
-	# We're building out-of-tree so squirrel away .config or make will complain
-	# about a tainted source
-	if [ -e .config ] ; then
-		mv .config .config.squirrel
-		trap "mv .config.squirrel .config" EXIT INT TERM HUP
-	fi
 
 	# Number of parallel gcc build jobs
 	found=0
@@ -232,8 +224,15 @@ function build_upstream_kernel()
 	# Print interesting variables
 	print_vars SCHROOT DEB_ARCH TARGET ARCH CROSS_COMPILE ARGS
 
+	# Copy/generate the config file
+	if [ -e "${CONFIG}" ] ; then
+		cp "${CONFIG}" "${buildd}/.config"
+	else
+		run_in_schroot  make O="${buildd}" clean defconfig
+	fi
+
 	# Finally kick off the build
-	run_in_schroot make "${TARGET[@]}" O="${buildd}" "${ARGS[@]}"
+	run_in_schroot make O="${buildd}" "${TARGET[@]}" "${ARGS[@]}"
 }
 
 
@@ -321,7 +320,7 @@ EOF
 # Parse the commandline
 
 DEB_ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
-CONFIG=.config
+CONFIG=
 DRY_RUN=0
 SCHROOT=
 TARGET=()
@@ -373,12 +372,13 @@ done
 
 trap out INT TERM EXIT HUP
 
+if [ -n "${CONFIG}" ] && ! [ -e "${CONFIG}" ] ; then
+	echo "+++ Error: Config file not found: ${CONFIG}" >&2
+	exit 1
+fi
+
 if [ ${UBUNTU} -eq 1 ] ; then
 	build_ubuntu_kernel 2>&1 | tee "make-kernel-${DEB_ARCH}.log"
 else
-	if ! [ -e "${CONFIG}" ] ; then
-		echo "+++ Error: Config file not found: ${CONFIG}" >&2
-		exit 1
-	fi
 	build_upstream_kernel 2>&1 | tee "make-kernel-${DEB_ARCH}.log"
 fi
