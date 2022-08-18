@@ -1,0 +1,167 @@
+#!/bin/bash -eu
+#
+# Create keys and certificates for UEFI secure boot
+#
+
+function cinfo()
+{
+    echo -e "\e[0;33m+++ ${*}\e[0m"
+}
+
+certs_d="$(dirname "$(readlink -e "${BASH_SOURCE[0]}")")/certs"
+
+guid=11111111-2222-3333-4444-0123456789ab
+timestamp=$(date --utc +"%Y-%m-%d %H:%M:%S")
+
+keys_d=keys-$(date --date="$timestamp" +"%Y%m%d-%H%M%S")
+tarball=${keys_d}.tgz
+
+mkdir "${keys_d}" && cd "${keys_d}"
+
+# -----------------------------------------------------------------------------
+# Custom keys and certificates
+
+cinfo "Generating custom keys and certificates (-> .{key,crt}, .crt -> .cer)"
+for n in PK KEK db ; do
+	openssl req -newkey rsa:2048 -nodes -new -x509 -sha256 -days 3650 \
+			-subj "/CN=${USER}'s ${n} key (${timestamp})" -keyout "${n}.key" \
+			-out "${n}.crt"
+	openssl x509 -inform PEM -in "${n}.crt" -outform DER -out "${n}.cer"
+done
+
+cinfo "Generating custom EFI signature lists (.crt -> .esl)"
+for n in PK KEK db ; do
+	cert-to-efi-sig-list -g "${guid}" "${n}.crt" "${n}.esl"
+done
+touch "noPK.esl"
+
+cinfo "Signing the custom EFI signature lists (.esl -> .auth)"
+for n in noPK PK KEK db ; do
+	if [ "${n}" = "db" ] ; then
+		k=KEK
+	else
+		k=PK
+	fi
+
+	cinfo "Generating ${n}.auth"
+	sign-efi-sig-list -t "${timestamp}" -g "${guid}" -k "${k}.key" \
+					  -c "${k}.crt" "${n#no}" "${n}.esl" "${n}.auth"
+done
+
+
+# -----------------------------------------------------------------------------
+# 3rd party certificates
+
+providers=(microsoft canonical)
+
+# shellcheck disable=SC2034
+microsoft_guid=77fa9abd-0359-4d32-bd60-28f4e78f784b
+# shellcheck disable=SC2034
+microsoft_db=(microsoft-pca-public microsoft-uefica-public)
+# shellcheck disable=SC2034
+microsoft_KEK=(microsoft-kekca-public)
+
+# shellcheck disable=SC2034
+canonical_guid=e40ac46d-e82e-4c9c-a314-0fc7b2008710
+# shellcheck disable=SC2034
+canonical_db=(canonical-master-public canonical-signing-public)
+# shellcheck disable=SC2034
+canonical_KEK=("")
+
+certs=$(cd "${certs_d}" && ls -- *.der)
+
+cinfo "Copying and converting 3rd party certificates (-> .cer, .cer -> .crt, .crt -> .esl)"
+for c in ${certs} ; do
+	n=${c%.*}
+
+	# Copy cert (DER)
+	cp "${certs_d}/${c}" "${n}.cer"
+
+	# Convert to crt (PEM)
+	openssl x509 -inform DER -in "${n}.cer" -outform PEM -out "${n}.crt"
+
+	# Convert to esl (EFI sig list)
+	guid=${n%%-*}_guid
+	cert-to-efi-sig-list -g "${!guid}" "${n}.crt" "${n}.esl"
+done
+
+for p in "${providers[@]}" ; do
+	cinfo "Combining and signing ${p^} EFI signature lists (.esl -> .auth)"
+	for var in db KEK ; do
+		p_var="${p}_${var}[@]"
+		for c in "${!p_var}" ; do
+			if [ -n "${c}" ] ; then
+				cat "${c}.esl" >> "${var}_${p}.esl"
+			fi
+		done
+
+		if [ -e "${var}_${p}.esl" ] ; then
+			cinfo "Generating ${var}_add_${p}.auth"
+			guid=${p}_guid
+			sign-efi-sig-list -a -t "${timestamp}" -g "${!guid}" -k KEK.key \
+							  -c KEK.crt "${var}" "${var}_${p}.esl" \
+							  "${var}_add_${p}.auth"
+		fi
+	done
+done
+
+
+# -----------------------------------------------------------------------------
+# Create scripts for enrolling the keys and for enabling and disabling secure
+# boot
+
+cat <<EOF >enroll-keys.sh
+#!/bin/bash -e
+
+function updatevar()
+{
+	local efivars=/sys/firmware/efi/efivars
+	if [ \$(ls -l \${efivars}/\${@: -1}-* 2>/dev/null | wc -l) -gt 0 ] ; then
+		chattr -i \${efivars}/\${@: -1}-*
+	fi
+
+	efi-updatevar \${@}
+}
+
+updatevar -e -f KEK.esl KEK
+updatevar -a -f KEK_add_microsoft.auth KEK
+
+updatevar -e -f db.esl db
+updatevar -a -f db_add_microsoft.auth db
+#updatevar -a -f db_add_canonical.auth db
+
+updatevar -f PK.auth PK
+
+efi-readvar
+EOF
+
+cat <<EOF >disable-sb.sh
+#!/bin/bash -e
+
+efivars=/sys/firmware/efi/efivars
+if [ \$(ls -l \${efivars}/PK-* 2>/dev/null | wc -l) -gt 0 ] ; then
+	chattr -i \${efivars}/PK-*
+fi
+
+efi-updatevar -f noPK.auth PK
+EOF
+
+cat <<EOF >enable-sb.sh
+#!/bin/bash -e
+
+efivars=/sys/firmware/efi/efivars
+if [ \$(ls -l \${efivars}/PK-* 2>/dev/null | wc -l) -gt 0 ] ; then
+	chattr -i \${efivars}/PK-*
+fi
+
+efi-updatevar -f PK.auth PK
+EOF
+
+chmod 755 -- *.sh
+
+
+# -----------------------------------------------------------------------------
+# Create a tarball containing all the keys
+
+cd .. && tar -czf "${tarball}" "${keys_d}"
+cinfo "Created tarball ${tarball} with keys and certificates"

@@ -1,0 +1,103 @@
+#!/bin/bash -eu
+#
+# Copy cards from a Trello board to a Jira board
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: trello2jira -b BOARD [-c COMPONENT] [-d] [-h]
+
+Loop through all cards of the provided Trello board and create corresponding
+Jira issues.
+
+Optional arguments:
+  -b, --board BOARD          Trello boardname.
+  -c, --component COMPONENT  Jira component name. If not provided, defaults to
+                             BOARD.
+  -d, --dry-run              Show what would be done but don't create Jira
+                             issues.
+  -h, --help                 Show this help text and exit.
+EOF
+}
+
+board=
+component=
+user=
+dry_run=0
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-b|--board)
+			shift
+			board=${1}
+			;;
+		-c|--component)
+			shift
+			component=${1}
+			;;
+		-d|--dry-run)
+			dry_run=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+if [ -z "${board}" ] ; then
+	usage
+	exit 2
+fi
+
+if [ -z "${component}" ] ; then
+	component=${board}
+fi
+
+# Map Trello columns to Jira statuses
+declare -A STATUS_MAP=(
+	["notice"]="notice"
+	["backlog"]="backlog"
+	["blocked or on hold"]="Notice"
+	["in progress"]="in progress"
+	["waiting on feedback"]="in review"
+	["fix committed"]="in progress"
+	["fix commited"]="in progress"
+	["done"]="done"
+	["on deck"]="to do"
+)
+
+# so-trello binary
+SO_TRELLO_BIN=${SO_TRELLO_BIN:-/srv/git/so-trello/bin/so-trello}
+
+# Cycle through the board lists and cards
+while IFS= read -r list ; do
+	list_id=${list%% *}
+	list_name=${list#* }
+	echo "List: ${list_name}"
+	list_name=${list_name,,}
+
+	if [ "${list_name#done }" != "${list_name}" ] ; then
+		list_name="done"
+	fi
+	status=${STATUS_MAP[${list_name}]:-}
+	if [ -z "${status}" ] ; then
+		echo "Error: Unable to map list name: ${list_name}" >&2
+	fi
+
+	while IFS= read -r card ; do
+		card_id=${card%% *}
+		card_name=${card#* }
+		echo "  Card: ${card_name}"
+
+		if [ ${dry_run} -eq 0 ] ; then
+			./card2issue -c "${component}" -s "${status}" "${card_id}"
+		fi
+	done < <("${SO_TRELLO_BIN}" list-cards --list "${list_id}")
+done < <("${SO_TRELLO_BIN}" board-lists --board "${board}")
