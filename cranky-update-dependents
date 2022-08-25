@@ -16,17 +16,20 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: cranky-update-dependents [-f] [-h]
+Usage: cranky-update-dependents [-f] [-h] [-r]
 
 Update all dependent kernel packages.
 
 Optional arguments:
-  -f, --force  Update existing tags.
-  -h, --help   Show this help text and exit.
+  -f, --force   Update existing tags.
+  -h, --help    Show this help text and exit.
+  -r, --re-run  Do a re-run, i.e., reset HEAD to the latest remote tag before
+                running 'cranky update-dependent'.
 EOF
 }
 
 tag_opts=()
+re_run=0
 
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
@@ -36,6 +39,9 @@ while [ "${#}" -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-r|--re-run)
+			re_run=1
 			;;
 		*)
 			echo "Invalid argument: ${1}" >&2
@@ -65,8 +71,8 @@ while IFS= read -r path ; do
 
 	git fetch --tags
 
-	# Prevent reruns
-	if ! git ls-remote --tags origin | grep -q "refs/tags/${tag}$" ; then
+	if [ ${re_run} -eq 0 ] && \
+	   ! git ls-remote --tags origin | grep -q "refs/tags/${tag}$" ; then
 		echo "HEAD tag does not exist remotely" >&2
 		exit 1
 	fi
@@ -76,7 +82,11 @@ while IFS= read -r path ; do
 	tag_latest=$(git tag | grep "${tag_base}" | sort -V | tail -1)
 
 	git clean -dxf
-	git merge --ff-only "${tag_latest}"
+	if [ ${re_run} -eq 0 ] ; then
+		git merge --ff-only "${tag_latest}"
+	else
+		git reset --hard "${tag_latest}"
+	fi
 
 	cranky update-dependent
 	cranky tag "${tag_opts[@]}"
