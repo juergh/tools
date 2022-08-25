@@ -52,14 +52,32 @@ while IFS= read -r path ; do
 		continue
 	fi
 
-	branch=$(git branch | grep " cranky/" | sed -e 's,.* cranky/,,')
-
 	echo "${path}"
-	git fetch
+
+	branch=$(git branch | grep " cranky/" | sed -e 's,.* cranky/,,')
 	git checkout cranky/"${branch}"
-	git reset --hard origin/"${branch}"
+
+	tag=$(git describe --exact-match HEAD 2>/dev/null || echo)
+	if [ -z "${tag}" ] ; then
+		echo "Current HEAD is untagged" >&2
+		exit 1
+	fi
+
+	git fetch --tags
+
+	# Prevent reruns
+	if ! git ls-remote --tags origin | grep -q "refs/tags/${tag}$" ; then
+		echo "HEAD tag does not exist remotely" >&2
+		exit 1
+	fi
+
+	tag_base=$(echo "${tag}" | \
+				   sed -e 's/_[0-9\.]*$//' -e 's/[0-9]\+\.[0-9]\+$//')
+	tag_latest=$(git tag | grep "${tag_base}" | sort -V | tail -1)
 
 	git clean -dxf
+	git merge --ff-only "${tag_latest}"
+
 	cranky update-dependent
 	cranky tag "${tag_opts[@]}"
 
