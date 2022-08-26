@@ -78,26 +78,33 @@ while IFS= read -r path ; do
 	fi
 
 	tag_prefix=$(echo "${tag}" | \
-					 sed -e 's/[_+][0-9\.]*$//' -e 's/[0-9]\+\.[0-9]\+$//')
+					 sed -e 's/_[0-9.]*$//' \
+						 -e 's/+[0-9]*$//' \
+						 -e 's/+signed[0-9]*$//' \
+						 -e 's/[0-9]*\.[0-9]*$//')
 	if [ -z "${tag_prefix}" ] ; then
 		echo "Failed to parse tag ${tag}" >&2
 		exit 1
 	fi
-	tag_latest=$(git tag | grep "${tag_prefix}" | sort -V | tail -1)
+	tag_latest=$(git ls-remote --tags | grep -o "${tag_prefix}.*[0-9]$" | \
+					 sort -V | tail -1)
 	if [ -z "${tag_latest}" ] ; then
 		echo "Failed to find latest remote tag (tag prefix: ${tag_prefix})" >&2
 		exit 1
 	fi
 
 	git clean -dxf
-	if [ ${re_run} -eq 0 ] ; then
-		git merge --ff-only "${tag_latest}"
-	else
-		git reset --hard "${tag_latest}"
+	if [ ${re_run} -eq 1 ] ; then
+		git reset --hard origin/"${branch}"
 	fi
+	git merge --ff-only "${tag_latest}"
 
 	cranky update-dependent
-	cranky tag "${tag_opts[@]}"
+	if [ ${re_run} -eq 1 ] ; then
+		cranky tag -f "${tag_opts[@]}"
+	else
+		cranky tag "${tag_opts[@]}"
+	fi
 
 	echo
 	git --no-pager log origin/"${branch}"~1..
