@@ -181,6 +181,7 @@ Positional arguments:
 Optional arguments:
   -h, --help                Show this help text and exit.
   -s, --sru-cycle SR_CYCLE  SRU cycle name, e.g., 2022.05.30-1.
+  -r, --rerun               Rerun 'cranky link-tb'.
 EOF
 }
 
@@ -201,18 +202,21 @@ HELP_OPT_ARGS=()
 ARGS=()
 
 while [ ${#} -gt 0 ] ; do
-    case "${1}" in
-        -h|--help)
-            HELP=1
-            ;;
+	case "${1}" in
+		-h|--help)
+			HELP=1
+			;;
 		-s|--sru-cycle)
-            shift
-            LINK_ARGS=("-s" "${1}")
-            ;;
+			shift
+			LINK_ARGS+=("-s" "${1}")
+			;;
+		-r|--rerun)
+			LINK_ARGS+=("-r")
+			;;
 		*)
 			ARGS=("${@}")
 			break
-            ;;
+			;;
 	esac
 	shift
 done
