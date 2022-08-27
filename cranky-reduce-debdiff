@@ -135,9 +135,19 @@ if [ -z "${prev_version}" ] ; then
 	fi
 fi
 
-# Find the master commits
+# Find the current master commit
 master=$(find_master_commit "${DEBIAN}"/changelog "${version}")
+if [ -z "${master}" ] ; then
+	echo "Unable to find master commit for version ${version}" >&2
+	exit 1
+fi
+
+# Find the previous master commit
 master_prev=$(find_master_commit "${DEBIAN}"/changelog "${prev_version}")
+if [ -z "${master_prev}" ] ; then
+	echo "Unable to find master commit for previous version ${prev_version}" >&2
+	exit 1
+fi
 
 # Create master diff hunks
 echo "Creating master diff hunks for ${master_prev%% *}..${master%% *}" \
