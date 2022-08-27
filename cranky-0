@@ -72,7 +72,7 @@ function do_close()
 {
 	./update-dkms-versions
 	run cranky close
-	run cranky tag
+	run cranky tag "${TAG_ARGS[@]}"
 }
 
 function do_dependents()
@@ -181,7 +181,7 @@ Positional arguments:
 Optional arguments:
   -h, --help                Show this help text and exit.
   -s, --sru-cycle SR_CYCLE  SRU cycle name, e.g., 2022.05.30-1.
-  -r, --rerun               Rerun 'cranky link-tb'.
+  -r, --rerun               Rerun 'cranky link-tb' and retag.
 EOF
 }
 
@@ -195,6 +195,7 @@ PPA=
 
 # Optional subcommand arguments
 LINK_ARGS=()
+TAG_ARGS=()
 
 HELP=0
 HELP_POS_ARGS=()
@@ -212,6 +213,7 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-r|--rerun)
 			LINK_ARGS+=("-r")
+			TAG_ARGS+=("-f")
 			;;
 		*)
 			ARGS=("${@}")
