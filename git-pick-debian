@@ -6,22 +6,31 @@
 function debian_pick()
 {
 	local commit=${1}
-	local trailer
+	local dirs trailer
 
-	if [ -n "$(git status --porcelain -- debian debian.*)" ] ; then
+	# List of debian directories
+	readarray -t dirs < <(git ls-tree --name-only "${commit}" | \
+							  grep ^debian || true)
+
+	if [ ${#dirs[@]} -eq 0 ] ; then
+		# No debian* dirs
+		return
+	fi
+
+	if [ -n "$(git status --porcelain -- "${dirs[@]}")" ] ; then
 		echo "Repo is unlcean" >&2
 		exit 1
 	fi
 
-	if [ -z "$(git diff "${commit}"~1.."${commit}" -- debian debian.*)" ] ; then
+	if [ -z "$(git diff "${commit}"~1.."${commit}" -- "${dirs[@]}")" ] ; then
 		# No debian* changes
 		return
 	fi
 
 	# Apply and commit the changes
-	git diff "${commit}"~1.."${commit}" -- debian debian.* | git apply -
-	git add debian debian.*
-	git commit -C "${commit}" -- debian debian.*
+	git diff "${commit}"~1.."${commit}" -- "${dirs[@]}" | git apply -
+	git add -f "${dirs[@]}"
+	git commit -C "${commit}"
 
 	# Ammend the commit message
 	trailer=()
