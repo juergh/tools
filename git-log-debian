@@ -1,0 +1,65 @@
+#!/bin/bash -eu
+#
+# Show Ubuntu kernel debian* commits and follow them across branches
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] REV_RANGE
+
+Show commits that modify debian/* and debian.* in the provided REV_RANGE.
+
+If the last commit in the REV_RANGE is an initial import commit that references
+a tag name in its commit message, follow that tag.
+
+Optional arguments:
+  -v, -verbose  Increase verbosity.
+  -h, --help    Show this help text and exit.
+EOF
+}
+
+function log_debian()
+{
+	local line commit tag
+
+	while IFS= read -r line ; do
+		commit=${line%% *}
+		echo "${line}"
+	done < <(git log --oneline "${@}" -- debian debian.*)
+
+	if [ "${VERBOSE}" -eq 1 ] ; then
+		{
+			echo
+			git log "${commit}" -1
+			echo
+		} >&2
+	fi
+
+	tag=$(git log --format=%b "${commit}" -1 | grep -oP "Ubuntu-.*[0-9]" || \
+			  echo)
+	if [ -n "${tag}" ] ; then
+		# Follow the referenced tag
+		log_debian "${tag}"
+	fi
+}
+
+VERBOSE=0
+
+while [ ${#} -ne 0 ] ; do
+	case "${1}" in
+		-h,--help)
+			usage
+			exit
+			;;
+		-v,-verbose)
+			VERBOSE=1
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
+
+log_debian "${@}"
