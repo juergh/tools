@@ -1,17 +1,15 @@
 #!/bin/bash -eu
 #
-# Show Ubuntu kernel debian* commits and follow them across branches
+# Show Ubuntu kernel debian* commits and follow them across rebases
 #
 
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] REV_RANGE
+Usage: $(basename "${0}") [-h] [COMMIT]
 
-Show commits that modify debian/* and debian.* in the provided REV_RANGE.
-
-If the last commit in the REV_RANGE is an initial import commit that references
-a tag name in its commit message, follow that tag.
+Show commits that modify debian/* and debian.* starting from the provided
+COMMIT, or HEAD if not provided. Follow tags across rebases.
 
 Optional arguments:
   -v, -verbose  Increase verbosity.
@@ -21,30 +19,50 @@ EOF
 
 function log_debian()
 {
-	local line commit tag
+	local start=${1}
+	local first line commit subject tag
 
+	first=1
 	while IFS= read -r line ; do
+		if [ ${first} -eq 1 ] ; then
+			echo "${line}"
+			first=0
+			continue
+		fi
+
 		commit=${line%% *}
+		subject=${line#* }
+
+		# Check if this is a release commit
+		if [ "${subject#UBUNTU: Ubuntu-}" != "${subject}" ] ; then
+			tag=${subject#UBUNTU: }
+			tag=${tag//~/_}
+			if git rev-parse "${tag}" >/dev/null 2>&1 ; then
+				# Follow the tag
+				log_debian "${tag}"
+				return
+			fi
+			echo "Release tag does not exist: ${tag}" >&2
+		fi
+
 		echo "${line}"
-	done < <(git log --oneline "${@}" -- debian debian.*)
+	done < <(git log --oneline "${start}" -- debian debian.*)
 
-	if [ "${VERBOSE}" -eq 1 ] ; then
-		{
-			echo
-			git log "${commit}" -1
-			echo
-		} >&2
-	fi
-
+	# Check if this is an import from another tree and follow it
 	tag=$(git log --format=%b "${commit}" -1 | grep -oP "Ubuntu-.*[0-9]" || \
 			  echo)
 	if [ -n "${tag}" ] ; then
-		# Follow the referenced tag
-		log_debian "${tag}"
+		if git rev-parse "${tag}" >/dev/null 2>&1 ; then
+			# Follow the tag
+			log_debian "${tag}"
+		else
+			echo "Import tag does not exist: ${tag}" >&2
+		fi
 	fi
 }
 
 VERBOSE=0
+commit=
 
 while [ ${#} -ne 0 ] ; do
 	case "${1}" in
@@ -56,10 +74,18 @@ while [ ${#} -ne 0 ] ; do
 			VERBOSE=1
 			;;
 		*)
-			break
+			if [ -n "${commit}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			commit=${1}
 			;;
 	esac
 	shift
 done
 
-log_debian "${@}"
+if [ -z "${commit}" ] ; then
+	commit=HEAD
+fi
+
+log_debian "${commit}"
