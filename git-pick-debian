@@ -1,47 +1,114 @@
 #!/bin/bash -eu
 #
-# Pick debian* changes from a git commit
+# Pick debian{,.*} changes from a git commit
 #
 
-function debian_pick()
+function do_pick()
 {
 	local commit=${1}
-	local dirs trailer
+	local d
 
-	# List of debian directories
-	readarray -t dirs < <(git ls-tree --name-only "${commit}" | \
-							  grep ^debian || true)
+	# Pick debian changes
+	git diff "${commit}"~1.."${commit}" -- debian debian.\* | git apply -
+	for d in debian debian.* ; do
+		[ -d "${d}" ] && git add "${d}" || true
+	done
+	git commit -C "${commit}"
+}
 
-	if [ ${#dirs[@]} -eq 0 ] ; then
-		# No debian* dirs
-		return
-	fi
+function do_resync()
+{
+	local commit=${1}
+	local d
 
-	if [ -n "$(git status --porcelain -- "${dirs[@]}")" ] ; then
-		echo "Repo is unlcean" >&2
+	echo "-- Resync debian changes from commit ${commit}"
+
+	# Resync debian changes
+	git diff "${commit}" -- debian debian.\* | git apply -R -
+	for d in debian debian.* ; do
+		[ -d "${d}" ] && git add "${d}" || true
+	done
+	git commit --amend --no-edit
+}
+
+function do_import()
+{
+	local commit=${1}
+	local d
+
+	echo "-- Import debian changes from commit ${commit}"
+
+	# Import debian changes
+	git diff "${commit}" -- debian debian.\* | git apply -R -
+	for d in debian debian.* ; do
+		[ -d "${d}" ] && git add "${d}" || true
+	done
+	git commit -C "${commit}"
+}
+
+function pick_debian()
+{
+	local commit=${1}
+	local applied diffs trailer
+
+	if [ -n "$(git status --porcelain -- debian debian.\*)" ] ; then
+		echo "-- Repo is unclean" >&2
 		exit 1
 	fi
 
-	if [ -z "$(git diff "${commit}"~1.."${commit}" -- "${dirs[@]}")" ] ; then
-		# No debian* changes
+	commit=$(git rev-parse "${commit}")
+
+	if [ -z "$(git diff "${commit}"~1.."${commit}" -- debian debian.\*)" ] ; then
+		# No debian changes
 		return
 	fi
 
-	# Apply and commit the changes
-	git diff "${commit}"~1.."${commit}" -- "${dirs[@]}" | git apply -
-	git add -f "${dirs[@]}"
-	git commit -C "${commit}"
-
-	# Ammend the commit message
-	trailer=()
-	if [ "${CHERRYPICK}" -eq 1 ] ; then
-		trailer+=("(cherry picked debian* changes from commit $(git rev-parse "${commit}"))")
+	# Pick the debian changes
+	if do_pick "${commit}" ; then
+		applied=1
+	else
+		echo "-- Failed to pick debian changes from ${commit}" >&2
+		if [ "${IMPORT}" -eq 0 ] ; then
+			exit 1
+		fi
+		applied=0
 	fi
+
+	# Check if there are still debian differences
+	if [ -n "$(git diff "${commit}" -- debian debian.\*)" ] ; then
+		diffs=1
+	else
+		diffs=0
+	fi
+
+	trailer=()
+	if [ ${applied} -eq 1 ] && [ "${TRAILER}" -eq 1 ] ; then
+		trailer+=("(cherry picked debian{,.*}/ changes from commit ${commit})")
+	fi
+
+	# Resync debian files
+	if [ ${applied} -eq 1 ] && [ ${diffs} -eq 1 ] && [ "${RESYNC}" -eq 1 ] ; then
+		do_resync "${commit}"
+		if [ "${TRAILER}" -eq 1 ] ; then
+			trailer+=("(resynced debian{,.*}/ files from commit ${commit})")
+		fi
+	fi
+
+	# Import debian files
+	if [ ${applied} -eq 0 ] && [ ${diffs} -eq 1 ] && [ "${IMPORT}" -eq 1 ] ; then
+		do_import "${commit}"
+		if [ "${TRAILER}" -eq 1 ] ; then
+			trailer+=("(imported debian{,.*}/ files from commit ${commit})")
+		fi
+	fi
+
 	if [ "${SIGNOFF}" -eq 1 ] ; then
 		trailer+=("Signed-off-by: $(git config --get user.name) <$(git config --get user.email)>")
 	fi
+
+	# Ammend the commit message
 	if [ ${#trailer[@]} -ne 0 ] ; then
-		git commit --amend --message="$(git log --format=%B "${commit}" -1)
+		git commit --amend --message="$(git log --format=%B HEAD -1)
 $(printf "\n%s" "${trailer[@]}")"
 	fi
 }
@@ -49,33 +116,47 @@ $(printf "\n%s" "${trailer[@]}")"
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] [-s] [-x] COMMIT...
+Usage: $(basename "${0}") [-h] [-i] [-r] [-s] [-x] COMMIT...
 
-Pick debian* changes from the provided COMMIT(s). Just like 'git cherry-pick'
-but only pickes changes to debian* files.
+Pick debian{,.*} changes from the provided COMMIT(s). Just like
+'git cherry-pick' but only pickes changes to debian{,.*} files.
 
 Optional arguments:
+  -d, --debug    Enable debugging (set -x).
   -h, --help     Show this help text and exit.
+  -i, --import   Import debian files after a failed cherry pick.
+  -r, --resync   Resync debian files after a successful cherry pick.
   -s, --signoff  Add a Signed-off-by line to the commit message.
-  -x             Add a '(picked ... from commit <COMMIT>)' line to the commit
-                 message.
+  -x             Add a '(cherry picked ... from commit <COMMIT>)' line to the
+                 commit message.
 EOF
 }
 
+IMPORT=0
+RESYNC=0
 SIGNOFF=0
-CHERRYPICK=0
+TRAILER=0
 
 while [ ${#} -ne 0 ] ; do
 	case "${1}" in
+		-d|--debug)
+			set -x
+			;;
 		-h|--help)
 			usage
 			exit
+			;;
+		-i|--import)
+			IMPORT=1
+			;;
+		-r|--resync)
+			RESYNC=1
 			;;
 		-s|--signoff)
 			SIGNOFF=1
 			;;
 		-x)
-			CHERRYPICK=1
+			TRAILER=1
 			;;
 		*)
 			break
@@ -84,6 +165,12 @@ while [ ${#} -ne 0 ] ; do
 	shift
 done
 
+if [ -e .gitignore ] ; then
+	cp .gitignore .gitignore.backup
+	trap "mv .gitignore.backup .gitignore" EXIT
+	sed -i '/^\/*debian/d' .gitignore
+fi
+
 for arg in "${@}" ; do
-	debian_pick "${arg}"
+	pick_debian "${arg}"
 done
