@@ -81,6 +81,7 @@ function pick_debian()
 
 	# Check if there are still debian differences
 	if [ -n "$(git diff "${commit}" -- debian debian.\*)" ] ; then
+		echo "-- Found debian differences between HEAD and commit ${commit}" >&2
 		diffs=1
 	else
 		diffs=0
@@ -121,9 +122,11 @@ $(printf "\n%s" "${trailer[@]}")"
 
 	# Return failures
 	if [ ${applied} -eq 0 ] && [ "${IMPORT}" -eq 0 ] ; then
+		echo "-- Failed" >&2
 		return 1
 	fi
 	if [ ${applied} -eq 1 ] && [ ${diffs} -eq 1 ] && [ "${EDIFF}" -eq 1 ] ; then
+		echo "-- Failed" >&2
 		return 125
 	fi
 }
