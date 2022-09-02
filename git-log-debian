@@ -3,35 +3,62 @@
 # Show Ubuntu kernel debian* commits and follow them across rebases
 #
 
-function usage()
+function out()
 {
-	cat <<EOF
-Usage: $(basename "${0}") [-h] [COMMIT]
+	local rc=${?}
 
-Show commits that modify debian/* and debian.* starting from the provided
-COMMIT, or HEAD if not provided. Follow tags across rebases.
+	trap "" EXIT
 
-Optional arguments:
-  -v, -verbose  Increase verbosity.
-  -h, --help    Show this help text and exit.
-EOF
+	if [ "${rc}" -ne 0 ] ; then
+		echo "-- Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function parse_changelog()
+{
+	local commit=${1}
+	local debian
+
+	debian=$(git show "${commit}":debian/debian.env 2>/dev/null | \
+				 sed -e 's/DEBIAN=//')
+	if [ -z "${debian}" ] ; then
+		debian=debian.master
+	fi
+
+	# Print 'source version release'
+	{ git show "${commit}":"${debian}"/changelog 2>/dev/null || echo ; } | \
+		head -1 | sed -e 's/;.*//' -e 's/[()]//g'
+}
+
+function tag_name()
+{
+	local name=${1} version=${2}
+	local tag
+
+	tag=${name#linux}
+	tag=Ubuntu${tag}-${version}
+	tag=${tag//~/_}
+
+	echo "${tag}"
 }
 
 function log_debian()
 {
 	local start=${1}
-	local first line commit subject tag
+	local first line commit subject tag n1 v1 r1 n2 v2 r2
 
 	first=1
 	while IFS= read -r line ; do
+		commit=${line%% *}
+		subject=${line#* }
+
 		if [ ${first} -eq 1 ] ; then
 			echo "${line}"
 			first=0
 			continue
 		fi
-
-		commit=${line%% *}
-		subject=${line#* }
 
 		# Check if this is a release commit
 		if [ "${subject#UBUNTU: Ubuntu-}" != "${subject}" ] ; then
@@ -39,29 +66,59 @@ function log_debian()
 			tag=${tag//~/_}
 			if git rev-parse "${tag}" >/dev/null 2>&1 ; then
 				# Follow the tag
+				echo "-- Follow release tag ${tag}" >&2
 				log_debian "${tag}"
 				return
 			fi
-			echo "Release tag does not exist: ${tag}" >&2
+			echo "-- Release tag does not exist: ${tag}" >&2
+
+		# Check if the package name/version/release changed
+		elif [ "${subject}" != "UBUNTU: Start new release" ] ; then
+			IFS=" " read -r n1 v1 r1 < <(parse_changelog "${commit}")
+			IFS=" " read -r n2 v2 r2 < <(parse_changelog "${commit}"~1)
+
+			# No previous entry: Probably an initial import
+			if [ -z "${n2}${v2}${r2}" ] && [ -n "${n1}${v1}${r1}" ] ; then
+				tag=$(tag_name "${n1}" "${v1}")
+				if git rev-parse "${tag}" >/dev/null 2>&1 ; then
+					# Follow the tag
+					echo "-- Follow import tag ${tag}" >&2
+					log_debian "${tag}"
+					return
+				fi
+				echo "-- Import tag does not exist: ${tag}" >&2
+
+			# Previous entry != current entry: Probably a rename or rebase of
+			# some sort
+			elif [ "${n1}${v1}${r1}" != "${n2}${v2}${r2}" ] ; then
+				tag=$(tag_name "${n2}" "${v2}")
+				if git rev-parse "${tag}" >/dev/null 2>&1 ; then
+					# Follow the tag
+					echo "-- Follow rename tag ${tag}" >&2
+					log_debian "${tag}"
+					return
+				fi
+				echo "-- Rename tag does not exist: ${tag}" >&2
+			fi
 		fi
 
 		echo "${line}"
 	done < <(git log --oneline "${start}" -- debian debian.*)
-
-	# Check if this is an import from another tree and follow it
-	tag=$(git log --format=%b "${commit}" -1 | grep -oP "Ubuntu-.*[0-9]" || \
-			  echo)
-	if [ -n "${tag}" ] ; then
-		if git rev-parse "${tag}" >/dev/null 2>&1 ; then
-			# Follow the tag
-			log_debian "${tag}"
-		else
-			echo "Import tag does not exist: ${tag}" >&2
-		fi
-	fi
 }
 
-VERBOSE=0
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [COMMIT]
+
+Show commits that modify debian and debian.* files starting from COMMIT or
+HEAD if not provided. Follow commits across rebases.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
 commit=
 
 while [ ${#} -ne 0 ] ; do
@@ -69,9 +126,6 @@ while [ ${#} -ne 0 ] ; do
 		-h,--help)
 			usage
 			exit
-			;;
-		-v,-verbose)
-			VERBOSE=1
 			;;
 		*)
 			if [ -n "${commit}" ] ; then
@@ -87,5 +141,7 @@ done
 if [ -z "${commit}" ] ; then
 	commit=HEAD
 fi
+
+trap out EXIT
 
 log_debian "${commit}"
