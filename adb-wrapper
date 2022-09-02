@@ -57,6 +57,9 @@ function adb_pull_storage()
 
 	mkdir -p "${dst_dir}"
 	while IFS= read -r rmt_file ; do
+		if [ "${rmt_file/\/.trashed-/}" != "${rmt_file}" ] ; then
+			continue
+		fi
 		if ! [ -e "${dst_dir}/${rmt_file##*/}" ] ; then
 			adb -s "${SERIAL}" pull "${rmt_file}" "${dst_dir}"
 		fi
