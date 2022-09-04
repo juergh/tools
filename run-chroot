@@ -183,7 +183,10 @@ EOF
 if sh -c 'command -v apt-get' &> /dev/null ; then
     apt-get update
     apt-get -y dist-upgrade
+    apt-get -y install sudo
 fi
+echo "${USER} ALL = NOPASSWD: ALL" > /etc/sudoers.d/"${USER}"
+chmod 644 /etc/sudoers.d/"${USER}"
 EOF
 fi
 
