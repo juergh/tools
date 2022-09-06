@@ -22,7 +22,7 @@ fi
 
 debs=$(dpkg-checkbuilddeps 2>&1 | \
            sed -e 's/^.*Unmet build dependencies: //' \
-               -e 's/([^)]*)//g')
+               -e 's/([^)]*)//g' -e 's/\s|\s/ /g')
 
 if [ -z "${debs}" ] ; then
     echo "Empty list of build dependencies??"
