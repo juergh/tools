@@ -66,7 +66,12 @@ if [ -d CONFIGS ] ; then
 fi
 
 echo "-- Create configs"
-cranky fdr clean genconfigs
+fakeroot debian/rules clean
+series=$(dpkg-parsechangelog -SDistribution)
+if [ "${series}" = "UNRELEASED" ] ; then
+	series=$(dpkg-parsechangelog -SDistribution -o1 -c1)
+fi
+run-chroot "${series}" -- debian/rules genconfigs
 
 rm -rf MASTERCONFIGS
 mv CONFIGS MASTERCONFIGS
