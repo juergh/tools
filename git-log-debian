@@ -70,7 +70,7 @@ function log_debian()
 				log_debian "${tag}"
 				return
 			fi
-			echo "-- Release tag does not exist: ${tag}" >&2
+			echo "-- Release tag not found: ${tag}" >&2
 
 		# Check if the package name/version/release changed
 		elif [ "${subject}" != "UBUNTU: Start new release" ] ; then
@@ -86,7 +86,7 @@ function log_debian()
 					log_debian "${tag}"
 					return
 				fi
-				echo "-- Import tag does not exist: ${tag}" >&2
+				echo "-- Import tag not found: ${tag}" >&2
 
 			# Previous entry != current entry: Probably a rename or rebase of
 			# some sort
@@ -98,7 +98,7 @@ function log_debian()
 					log_debian "${tag}"
 					return
 				fi
-				echo "-- Rename tag does not exist: ${tag}" >&2
+				echo "-- Rename tag not found: ${tag}" >&2
 			fi
 		fi
 
