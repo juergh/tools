@@ -44,12 +44,17 @@ def find_provenance(commit):
     return 'not-found'
 
 
-def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, note,
+def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, note, prefix,
                color=NONE):
     """
     Modify a commit message
     """
     subject = msg.pop(0)
+
+    # -------------------------------------------------------------------------
+    # Add a subject prefix
+    if prefix and not subject.startswith(prefix):
+        subject = color[0] + prefix + subject + color[1]
 
     # -------------------------------------------------------------------------
     # Remove leading and trailing newlines
@@ -219,32 +224,35 @@ def main():
     Main entry point
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("-f", "--force", action="store_true",
-                        help="Really do run git filter-branch.")
-    parser.add_argument("-r", "--req", metavar="nick[,nick,...]",
-                        help="IRC nickname of the person who requested the "
-                        "commit(s). Can be a comma separated list of "
-                        "multiple nicknames.")
     parser.add_argument("-a", "--ack", metavar="nick[,nick,...]",
                         help="IRC nickname of the person who ack'ed the "
                         "commit(s). Can be a comma separated list of "
                         "multiple nicknames.")
-    parser.add_argument("-s", "--sob", metavar="nick[,nick,...]",
-                        help="IRC nickname of the person who signed off on "
-                        "commit(s). Can be a comma separated list of "
-                        "multiple nicknames.")
-    parser.add_argument("-p", "--provenance", metavar="provenance",
-                        help="The name of the provenance for the commit(s). "
-                        "It will be appended to the last "
-                        "'cherry picked/backported from commit' line.")
     parser.add_argument("-b", "--bug", metavar="bug[,bug,...]",
                         help="Launchpad bug number. Can be a comma separated "
                         "list of multiple bug numbers.")
     parser.add_argument("-c", "--cve", metavar="cve[,cve,...]",
                         help="CVE number. Can be a comma separated list of "
                         "multiple cve numbers.")
+    parser.add_argument("-f", "--force", action="store_true",
+                        help="Really do run git filter-branch.")
     parser.add_argument("-n", "--note", metavar="note",
                         help="Add a note before the last sob line.")
+    parser.add_argument("-p", "--provenance", metavar="provenance",
+                        help="The name of the provenance for the commit(s). "
+                        "It will be appended to the last "
+                        "'cherry picked/backported from commit' line.")
+    parser.add_argument("-r", "--req", metavar="nick[,nick,...]",
+                        help="IRC nickname of the person who requested the "
+                        "commit(s). Can be a comma separated list of "
+                        "multiple nicknames.")
+    parser.add_argument("-s", "--sob", metavar="nick[,nick,...]",
+                        help="IRC nickname of the person who signed off on "
+                        "commit(s). Can be a comma separated list of "
+                        "multiple nicknames.")
+    parser.add_argument("-u", "--subject-prefix", metavar="prefix",
+                        default='',
+                        help="Add a subject prefix.")
     parser.add_argument("rev_list_opts", nargs="*", metavar="rev-list-options",
                         help="Arguments for git rev-list. All positive refs "
                         "included by these options are rewritten.")
@@ -281,7 +289,7 @@ def main():
 
         # Modify the message and print it
         msg = modify_msg(msg, reqs, acks, sobs, args.provenance, bugs, cves,
-                         args.note)
+                         args.note, args.subject_prefix)
         print("\n".join(msg))
 
         return 0
@@ -290,8 +298,8 @@ def main():
     mf_cmd = [sys.argv[0]]
     for key, val in vars(args).items():
         if key in ("req", "ack", "sob", "provenance", "bug", "cve",
-                   "note") and val:
-            mf_cmd.extend(["--" + key, "'" + val + "'"])
+                   "note", "subject_prefix") and val:
+            mf_cmd.extend(["--" + key.replace('_', '-'), "'" + val + "'"])
 
     # Construct the git-filter-branch command
     gfb_cmd = ["git", "filter-branch", "--force", "--msg-filter",
@@ -322,7 +330,7 @@ def main():
         # Modify the commit message and print it
         _, msg = run_cmd(["git", "log", "--format=%B", commit, "-1"])
         msg = modify_msg(msg, reqs, acks, sobs, args.provenance, bugs, cves,
-                         args.note, color=GREEN)
+                         args.note, args.subject_prefix, color=GREEN)
         for m in msg:
             print("    {}".format(m))
         print()
