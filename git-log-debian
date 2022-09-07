@@ -123,9 +123,13 @@ commit=
 
 while [ ${#} -ne 0 ] ; do
 	case "${1}" in
-		-h,--help)
+		-h|--help)
 			usage
 			exit
+			;;
+		-*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
 			;;
 		*)
 			if [ -n "${commit}" ] ; then
@@ -143,5 +147,10 @@ if [ -z "${commit}" ] ; then
 fi
 
 trap out EXIT
+
+if ! git rev-parse --quiet --verify "${commit}" >/dev/null ; then
+	echo "Commit does not exist: ${commit}" >&2
+	exit 1
+fi
 
 log_debian "${commit}"
