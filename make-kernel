@@ -232,7 +232,7 @@ function build_upstream_kernel()
 	fi
 
 	# Finally kick off the build
-	run_in_schroot make O="${buildd}" "${TARGET[@]}" "${ARGS[@]}"
+	run_in_schroot make O="${buildd}" "${ARGS[@]}" "${TARGET[@]}"
 }
 
 
