@@ -76,7 +76,7 @@ function do_close()
 
 function do_dependents()
 {
-	run cranky-update-dependents
+	run cranky-update-dependents "${TAG_ARGS[@]}"
 }
 
 function do_verify()
