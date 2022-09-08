@@ -1,0 +1,3 @@
+#!/bin/bash
+
+cranky shell-helper source-packages-path "${@}"
