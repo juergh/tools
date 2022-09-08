@@ -61,9 +61,15 @@ function do_link()
 	run cranky link-tb "${LINK_ARGS[@]}"
 }
 
+function do_dkms()
+{
+	if [ -e ./update-dkms-versions ] ; then
+		./update-dkms-versions
+	fi
+}
+
 function do_close()
 {
-	./update-dkms-versions
 	run cranky close
 	run cranky tag "${TAG_ARGS[@]}"
 }
