@@ -6,18 +6,36 @@
 function usage()
 {
 	cat <<EOF
-Usage: lint-any [-h] FILE [FILE...]
+Usage: lint-any [-h] [-d ID] FILE [FILE...]
 
 Run the relevant linting tools (shellcheck, flake8, pylint) on the provided
 files.
 
 Optional arguments:
-  -h, --help  Show this help text.
+  -d, --disable ID  Disable the checker with the given id. Can be a comma-
+                    separated list.
+  -h, --help        Show this help text.
 EOF
 }
 
+shellcheck_exclude="--exclude=SC1117"
+flake_ignore="--ignore=E501,E302,E305,E402,W504"
+pylint_disable="--disable=C0301,W0311,E0401,C1801,R0912,C0326,R0903,C0330,W0621,C0103,C0114,C0115,C0116"
+
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-d|--disable)
+			shift
+			while IFS= read -r id ; do
+				if [ "${id#SC}" != "${id}" ] ; then
+					shellcheck_exclude="${shellcheck_exclude},${id}"
+				elif [ "${#id}" -eq 4 ] ; then
+					flake_ignore="${flake_ignore},${id}"
+				else
+					pylint_disable="${pylint_disable},${id}"
+				fi
+			done < <(echo "${1}" | tr ',' '\n')
+			;;
 		-h|--help)
 			usage
 			exit
@@ -55,12 +73,13 @@ done
 
 if [ ${#shell_scripts[@]} -gt 0 ] ; then
 	echo "-- Running shellcheck"
-	shellcheck --external-sources --exclude=SC1117 "${shell_scripts[@]}" || true
+	shellcheck --external-sources "${shellcheck_exclude}" "${shell_scripts[@]}" || true
 fi
 
 if [ ${#python_scripts[@]} -gt 0 ] ; then
 	echo "-- Running flake8"
-	flake8 --ignore=E501,E302,E305,E402,W504 "${python_scripts[@]}" || true
+	flake8 "${flake_ignore}" "${python_scripts[@]}" || true
+
 	echo "-- Running pylint"
-	pylint --disable=C0301,W0311,E0401,C1801,R0912,C0326,R0903,C0330,W0621,C0103,C0114,C0115,C0116 "${python_scripts[@]}" || true
+	pylint "${pylint_disable}" "${python_scripts[@]}" || true
 fi
