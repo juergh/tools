@@ -18,14 +18,6 @@ function run()
 	"${@}"
 }
 
-function is_clean()
-{
-	if [ -n "$(git status --porcelain)" ] ; then
-		echo "Repo is not clean" >&2
-		exit 1
-	fi
-}
-
 function shift_ARGS()
 {
 	if [ ${#ARGS[@]} -eq 0 ] ; then
@@ -50,6 +42,7 @@ function do_rebase()
 
 function do_open()
 {
+	git clean -dxf
 	run cranky open
 }
 
