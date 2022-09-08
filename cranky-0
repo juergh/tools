@@ -30,6 +30,14 @@ function shift_ARGS()
 	ARGS=("${ARGS[@]:1}")
 }
 
+function do_checkout()
+{
+	. debian/debian.env
+	package=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S source)
+	series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S distribution)
+	cranky checkout "${series}":"${package}"
+}
+
 function do_fix()
 {
 	run cranky fix
