@@ -1,5 +1,18 @@
 #!/bin/bash -eu
 
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
 function pr_banner()
 {
 	local txt
@@ -30,16 +43,38 @@ function shift_ARGS()
 	ARGS=("${ARGS[@]:1}")
 }
 
+function source_debian_env()
+{
+	if [ -z "${DEBIAN:-}" ] ; then
+		# shellcheck disable=SC1091
+		. debian/debian.env
+	fi
+}
+
+# ----------------------------------------------------------------------------
+# Subcommands
+
 function do_checkout()
 {
-	. debian/debian.env
+	source_debian_env
+
 	package=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S source)
 	series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S distribution)
-	cranky checkout "${series}":"${package}"
+
+	run cranky checkout "${series}":"${package}"
 }
 
 function do_fix()
 {
+
+	source_debian_env
+
+	series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S distribution)
+	if [ "${series}" = "UNRELEASED" ] ; then
+		echo "Invalid series: ${series}" >&2
+		exit 1
+	fi
+
 	run cranky fix
 }
 
@@ -50,7 +85,7 @@ function do_rebase()
 
 function do_open()
 {
-	git clean -dxf
+	run git clean -dxf
 	run cranky open
 }
 
@@ -72,7 +107,7 @@ function do_link()
 function do_dkms()
 {
 	if [ -e ./update-dkms-versions ] ; then
-		./update-dkms-versions
+		run /update-dkms-versions
 	fi
 }
 
@@ -165,6 +200,9 @@ function do_dput()
 	run cranky dput-sources "${PPA}"
 }
 
+# ----------------------------------------------------------------------------
+# Usage
+
 function usage()
 {
 	echo -n "Usage: $(basename "${0}") [-h]"
@@ -244,15 +282,7 @@ if [ ${#ARGS[@]} -ne 0 ] || [ ${HELP} -eq 1 ] ; then
 	exit 2
 fi
 
-# Check the current branch
-branch=$(git rev-parse --abbrev-ref HEAD)
-case "${branch}" in
-	cranky/*-next) ;;
-	*)
-		echo "Invalid branch: ${branch}" >&2
-		exit 1
-		;;
-esac
+trap out EXIT INT TERM HUP
 
 # Run the command(s)
 for cmd in "${CMDS[@]}" ; do
