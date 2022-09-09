@@ -107,7 +107,7 @@ function do_link()
 function do_dkms()
 {
 	if [ -e ./update-dkms-versions ] ; then
-		run /update-dkms-versions
+		run ./update-dkms-versions
 	fi
 }
 
