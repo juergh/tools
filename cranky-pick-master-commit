@@ -1,0 +1,23 @@
+#!/bin/bash -eu
+#
+# Cherry pick (and modify) a debian.master commit onto a derivative
+#
+
+commit=$1
+
+. debian/debian.env
+
+git format-patch --keep-subject --stdout "${commit}" -1 > .patch
+
+# Modify the subject
+deriv=${DEBIAN#debian.}
+sed -i -E "s/^(Subject: UBUNTU: \[[a-zA-Z]+\]:*)\s+(.*)$/\1 ${deriv}: \2/" .patch
+
+# Add a note
+sed -i "/^---$/i [juergh: Ported from debian.master.]" .patch
+
+# Modify the file path(s)
+sed -i "s,/debian.master/,/${DEBIAN}/,g" .patch
+
+# Apply the patch
+git am -3 -s .patch
