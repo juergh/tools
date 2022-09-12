@@ -62,7 +62,7 @@ trap out EXIT INT TERM HUP
 
 echo "Collecting downstream commits..."
 while IFS= read -r tag ; do
-	list-downstream-commits "${tag}" > "${TMPD}"/"${tag}"
+	git-log-downstream "${tag}" > "${TMPD}"/"${tag}"
 done < <(git tag | grep "${branch}"-20)
 
 if ! ls  "${TMPD}"/"${branch}"-20* >/dev/null 2>&1 ; then
