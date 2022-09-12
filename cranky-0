@@ -110,7 +110,7 @@ function do_link()
 	if [ "${RERUN}" -eq 1 ] ; then
 		args+=("-re-run")
 	fi
-	if [ -z "${SRU_CYCLE}" ] ; then
+	if [ -n "${SRU_CYCLE}" ] ; then
 		args+=("--sru-cycle" "${SRU_CYLE}")
 	fi
 
