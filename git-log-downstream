@@ -3,11 +3,6 @@
 # List downstream commits
 #
 
-function pr_yellow()
-{
-    echo -e "\033[93m${*}\033[0m"
-}
-
 function out()
 {
 	local rc=${?}
@@ -25,16 +20,23 @@ function out()
 	exit "${rc}"
 }
 
+function pr_yellow()
+{
+	echo -e "\033[93m${*}\033[0m"
+}
+
 function usage()
 {
 	cat <<EOF
-Usage: list-downstream-commits [-d] [-h] [-r] [-u] [BRANCH]
+Usage: $(basename "${0}") [-d] [-h] [-r] [-u] [BRANCH]
 
 List the downstream commits on the current (or provided) branch.
 
 Optional arguments:
-  -c, --color   Color filtered commits rather than removing them from the list.
+  -c, --color   Color filtered commits rather than removing them from the
+                output.
   -d, --debian  Filter debian commits.
+  -f, --files   Show names of changed files.
   -h, --help    Show this help text and exit.
   -r, --revert  Filter reverted commits.
   -u, --ubuntu  Filter UBUNTU commits.
@@ -45,6 +47,7 @@ color=0
 filter_debian=0
 filter_ubuntu=0
 filter_revert=0
+files=0
 branch=
 
 while [ "${#}" -gt 0 ] ; do
@@ -54,6 +57,9 @@ while [ "${#}" -gt 0 ] ; do
 			;;
 		-d|--debian)
 			filter_debian=1
+			;;
+		-f|--files)
+			files=1
 			;;
 		-h|--help)
 			usage
@@ -120,7 +126,7 @@ while IFS= read -r line ; do
 	# Filter debian commits
 	if [ ${filter_debian} -eq 1 ] ; then
 		if ! git log --format= --name-only "${commit}" -1 | \
-			 grep -qv '^debian' ; then
+				grep -qv '^debian' ; then
 			if [ ${color} -eq 1 ] ; then
 				pr_yellow "${line}"
 			fi
@@ -130,21 +136,21 @@ while IFS= read -r line ; do
 
 	# Filter ubuntu commits
 	if [ ${filter_ubuntu} -eq 1 ] ; then
-	   case "${subject}" in
-		   UBUNTU:\ Start\ new\ release|\
-		   UBUNTU:\ link-to-tracker*|\
-		   UBUNTU:\ Ubuntu"${deriv}"-[0-9]*\.[0-9]*\.[0-9]*|\
-		   UBUNTU:\ Ubuntu-unstable-[0-9]*\.[0-9]*\.[0-9]*|\
-		   UBUNTU:\ *Update\ to\ upstream*|\
-		   UBUNTU:\ \[[cC]onfig\]*|\
-		   UBUNTU:\ \[[pP]ackaging\]*|\
-		   UBUNTU:\ \[[dD]ebian\]*)
+		case "${subject}" in
+			UBUNTU:\ Start\ new\ release|\
+			UBUNTU:\ link-to-tracker*|\
+			UBUNTU:\ Ubuntu"${deriv}"-[0-9]*\.[0-9]*\.[0-9]*|\
+			UBUNTU:\ Ubuntu-unstable-[0-9]*\.[0-9]*\.[0-9]*|\
+			UBUNTU:\ *Update\ to\ upstream*|\
+			UBUNTU:\ \[[cC]onfig\]*|\
+			UBUNTU:\ \[[pP]ackaging\]*|\
+			UBUNTU:\ \[[dD]ebian\]*)
 				if [ ${color} -eq 1 ] ; then
 					pr_yellow "${line}"
 				fi
-			   continue
-			   ;;
-	   esac
+				continue
+				;;
+		esac
 	fi
 
 	# Filter reverted commits
@@ -173,4 +179,7 @@ while IFS= read -r line ; do
 	fi
 
 	echo "${line}"
+	if [ ${files} -eq 1 ] ; then
+		git log --format= --name-only "${line%% *}" -1 | sed 's/^/  F: /'
+	fi
 done < <(git log --no-merges --format='%h %s' "${rev_range}")
