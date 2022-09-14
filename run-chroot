@@ -37,28 +37,32 @@ function hostarch()
 
 function usage()
 {
+	local release arch
+
+	release=$(lsb_release -c -s)
+	arch=$(hostarch "${release}")
+
 	cat <<EOF
-Usage: run-chroot [-c] [-d] [-h] [-p] [-r] [-s] [-u USER] [CHROOT[-ARCH]] [--]
+Usage: run-chroot [-d] [-h] [-l c|s] [-p] [-r] [-u USER] [CHROOT[-ARCH]] [--]
        [COMMAND [ARGS]]
 
 Run a chroot session. Create it first, if it doesn't exist.
 
 Positional arguments:
-  CHROOT                 Name of an existing session or chroot. If not
-                         provided, defaults to the name of the running release
-                         ($(lsb_release -c -s)).
-  ARCH                   Chroot architecture. If not provided, defaults to the
-                         running host architecture ($(dpkg-architecture -q DEB_HOST_ARCH)/$(dpkg-architecture -q DEB_HOST_GNU_CPU)).
+  CHROOT                       Name of an existing chroot or session. If not
+                               provided, defaults to the name of the running
+                               release (${release}).
+  ARCH                         Chroot architecture. If not provided, defaults
+                               to the running host architecture (${arch}).
 
 Optional 
-  -c, --list-chroots     List existing chroots.
-  -d, --destroy          Destroy a session.
-  -h, --help             Show this help text and exit.
-  -p, --no-preserve-env  Don't preserve the user's environment inside the
-                         chroot.
-  -r, --recreate         Recreate an already existing session.
-  -s, --list-sessions    List existing sessions.
-  -u, --user USER        Run the session as the user USER.
+  -d, --destroy                Destroy a session.
+  -h, --help                   Show this help text and exit.
+  -l, --list [chroot|session]  List exisiting chroots or sessions.
+  -p, --no-preserve-env        Don't preserve the user's environment inside
+                               the chroot.
+  -r, --recreate               Recreate an already existing session.
+  -u, --user USER              Run the session as the user USER.
 EOF
 }
 
@@ -70,15 +74,24 @@ chroot=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
-		-c|--list-chroots)
-			schroot -l --all | grep "^source:" | sed 's/^source://' | sort
-			exit
-			;;
 		-d|--destroy)
 			destroy=1
 			;;
 		-h|--help)
 			usage
+			exit
+			;;
+		-l|--list)
+			shift
+			case "${1:-}" in
+				c|chroot)  regex="^source:"  ;;
+				s|session) regex="^session:" ;;
+				*)
+					echo "Invalid type: ${1:-}" >&2
+					exit 2
+					;;
+			esac
+			schroot -l --all | grep "${regex}" | sed "s/${regex}//" | sort
 			exit
 			;;
 		-p|--no-preserve-env)
@@ -87,13 +100,9 @@ while [ $# -gt 0 ] ; do
 		-r|--recreate)
 			recreate=1
 			;;
-		-s|--list-sessions)
-			schroot -l --all | grep "^session:" | sed 's/^session://' | sort
-			exit
-			;;
 		-u|--user)
 			shift
-			user=${1}
+			user=${1:-}
 			;;
 		--)
 			shift
