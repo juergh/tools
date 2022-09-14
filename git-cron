@@ -1,0 +1,72 @@
+#!/bin/bash -u
+#
+# Update git repos and mirrors
+#
+
+update_repo()
+{
+	local repo=${1}
+
+	date -R
+	echo "-- Update repo $(pwd)/${repo}"
+
+	git -C "${repo}" fetch
+	git -C "${repo}" reset --hard FETCH_HEAD
+	date -R > "${repo}"/.fetched
+}
+
+update_mirror()
+{
+	local repo=${1}
+
+	date -R
+	echo "-- Update mirror $(pwd)/${repo}"
+
+	git -C "${repo}" fetch --all --tags
+	date -R > "${repo}"/.fetched
+}
+
+do_hourly()
+{
+	# Update repos
+	for repo in * ; do
+		if [ -e "${repo}/.git" ] ; then
+			update_repo "${repo}"
+		fi
+	done
+}
+
+do_daily()
+{
+	if [ -d linux.git ] ; then
+		# Update the main linux mirror first (since all the others use it as a
+		# reference)
+		update_mirror linux.git
+
+		# Update the fixes file
+		echo "-- Find fixes commits"
+		find-fixes linux.git linux.fixes
+	fi
+
+	# Update the remaining repos and mirrors
+	for repo in * ; do
+		if ! [ -d "${repo}" ] || [ "${repo}" = "linux.git" ] ; then
+			continue
+		fi
+		if [ -e "${repo}/.git" ] ; then
+			update_repo "${repo}"
+		else
+			update_mirror "${repo}"
+		fi
+	done
+}
+
+cmd=${1}
+dir=${2}
+
+if ! cd "${dir}" ; then
+	echo "-- Failed to cd to ${dir}" >&2
+	exit 1
+fi
+
+do_"${cmd}"
