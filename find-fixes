@@ -5,9 +5,12 @@
 # commits that fix other commits.
 #
 
-if [ $# != 2 ] ; then
-	cat <<EOF >&2
-Usage: find-fixes GIT_DIR START_COMMIT|FIXES_FILE
+usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}")[-h] GIT_DIR START_COMMIT|FIXES_FILE
+
+Find commits with 'Fixes:' tags in the provided git repository.
 
 Positional argument:
   GIT_DIR       The local git repo to search.
@@ -18,17 +21,45 @@ Positional argument:
                 commit for the search is read from the first line of the
                 <FIXES_FILE> file, if it exists. Otherwise the whole commit
                 history is searched.
+
+Optional arguments:
+  -h, --help    Show this help text and exit.
 EOF
-	exit 1
+}
+
+git_dir=
+commit_file=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -z "${git_dir}" ] ; then
+				git_dir=${1}
+			elif [ -z "${commit_file}" ] ; then
+				commit_file=${1}
+			else
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${git_dir}" ] || [ -z "${commit_file}" ] ; then
+	usage
+	exit 2
 fi
 
-git_dir=${1}
-
-if echo "${2}" | grep -qP "^[0-9a-f]{12,}$" ; then
-	rev_range=${2}..
+if echo "${commit_file}" | grep -qP "^[0-9a-f]{12,}$" ; then
+	rev_range=${commit_file}..
 	fixes_file=
 else
-	fixes_file=${2}
+	fixes_file=${commit_file}
 	rev_range=
 fi
 
@@ -49,7 +80,7 @@ fi
 
 # Parse the commits
 git --git-dir "${git_dir}" log --abbrev-commit --abbrev=12 \
-	--format="__COMMIT__%h%n__SUBJECT__%s%n%b%n__END__%n" ${rev_range} | \
+	--format="__COMMIT__%h%n__SUBJECT__%s%n%b%n__END__%n" "${rev_range}" | \
 	grep -P '^__COMMIT__|^__SUBJECT__|^\s*Fixes:.*\b[0-9a-f]{8,}\b|^__END__' | \
 while IFS= read -r line ; do
 	case "${line}" in
