@@ -1,6 +1,6 @@
 #!/bin/bash -u
 #
-# Update git repos and mirrors
+# Update local git repos and mirrors
 #
 
 update_repo()
@@ -12,7 +12,7 @@ update_repo()
 
 	git -C "${repo}" fetch
 	git -C "${repo}" reset --hard FETCH_HEAD
-	date -R > "${repo}"/.fetched
+	date -R > "${repo}"/.update
 }
 
 update_mirror()
@@ -23,14 +23,14 @@ update_mirror()
 	echo "-- Update mirror $(pwd)/${repo}"
 
 	git -C "${repo}" fetch --all --tags
-	date -R > "${repo}"/.fetched
+	date -R > "${repo}"/.update
 }
 
 do_hourly()
 {
 	# Update repos
 	for repo in * ; do
-		if [ -e "${repo}/.git" ] ; then
+		if [ -d "${repo}"/.git ] ; then
 			update_repo "${repo}"
 		fi
 	done
@@ -48,18 +48,20 @@ do_daily()
 		find-fixes linux.git linux.fixes
 	fi
 
-	# Update the remaining repos and mirrors
-	for repo in * ; do
-		if ! [ -d "${repo}" ] || [ "${repo}" = "linux.git" ] ; then
-			continue
-		fi
-		if [ -e "${repo}/.git" ] ; then
-			update_repo "${repo}"
-		else
+	# Update the remaining mirrors
+	for repo in *.git ; do
+		if [ "${repo}" != "linux.git" ] ; then
 			update_mirror "${repo}"
 		fi
 	done
 }
+
+if [ ${#} -ne 2 ] ; then
+	cat <<EOF
+Usage: $(basename "${0}") hourly|daily GIT_DIR
+EOF
+	exit 2
+fi
 
 cmd=${1}
 dir=${2}
