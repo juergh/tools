@@ -1,5 +1,0 @@
-#!/bin/sh
-
-export PATH=/srv/git/tools:${PATH}
-
-git-fetch-daily /srv/git > /srv/git/git-fetch-daily.log 2>&1
