@@ -1,0 +1,59 @@
+#!/bin/bash -eu
+#
+# Create an 'Update to upstream raspberrypi ...' commit
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h]
+
+Create an 'Update to upstream raspberrypi ...' commit.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+while [ $# -gt 0 ] ; do
+	case "$1" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+commit=$(git log -1 | grep -P 'from commit [0-9a-f]{40}' | \
+			 grep -oP '[0-9a-f]{40}' || true)
+if [ -z "${commit}" ] ; then
+	echo "No cherry-pick tag found" >&2
+	exit 1
+fi
+
+tag=$(git tag --points-at "${commit}" 2>/dev/null | grep "^rpi-" || true)
+if [ -z "${tag}" ] ; then
+	echo "Tag not found for commit ${commit}" >&2
+	exit 1
+fi
+
+branch=${tag%.y-*}.y
+date=${tag#*.y-}
+
+subject=$(git log --format=%s "${commit}" -1)
+
+cat <<EOF > debian.raspi/upstream-raspberrypi
+# The following upstream raspberrypi releases have been ported:
+[upstream-raspberrypi]:
+    ${branch} = ${commit::12} ("${subject}") [${date}]
+EOF
+
+git commit -s \
+	-m "UBUNTU: raspi: Update to upstream raspberrypi ${branch} (${date})" \
+	-m "Ignore: yes" \
+	--  debian.raspi/upstream-raspberrypi
