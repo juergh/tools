@@ -36,7 +36,8 @@ if [ -z "${commit}" ] ; then
 	exit 1
 fi
 
-tag=$(git tag --points-at "${commit}" 2>/dev/null | grep "^rpi-" || true)
+tag=$(git tag --points-at "${commit}" 2>/dev/null | grep "^rpi-" | sort -V | \
+		  tail -1)
 if [ -z "${tag}" ] ; then
 	echo "Tag not found for commit ${commit}" >&2
 	exit 1
