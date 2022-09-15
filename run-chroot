@@ -43,7 +43,7 @@ function usage()
 	arch=$(hostarch "${release}")
 
 	cat <<EOF
-Usage: run-chroot [-d] [-h] [-l c|s] [-p] [-r] [-u USER] [CHROOT[-ARCH]] [--]
+Usage: run-chroot [-d] [-h] [-l c|s] [-p] [-u USER] [CHROOT[-ARCH]] [--]
        [COMMAND [ARGS]]
 
 Run a chroot session. Create it first, if it doesn't exist.
@@ -61,14 +61,12 @@ Optional
   -l, --list [chroot|session]  List exisiting chroots or sessions.
   -p, --no-preserve-env        Don't preserve the user's environment inside
                                the chroot.
-  -r, --recreate               Recreate an already existing session.
   -u, --user USER              Run the session as the user USER.
 EOF
 }
 
 destroy=0
 preserve_env=1
-recreate=0
 user=${USER}
 chroot=
 
@@ -96,9 +94,6 @@ while [ $# -gt 0 ] ; do
 			;;
 		-p|--no-preserve-env)
 			preserve_env=0
-			;;
-		-r|--recreate)
-			recreate=1
 			;;
 		-u|--user)
 			shift
@@ -164,12 +159,6 @@ if [ "${destroy}" -eq 1 ] ; then
 	pr_info "Destroy existing session ${session}"
 	schroot -e -c "${session}"
 	exit
-fi
-
-# Destroy an existing session if -r, --recreate is provided
-if [ "${recreate}" -eq 1 ] && session_exists "${session}" ; then
-	pr_info "Destroy existing session ${session}"
-	schroot -e -c "${session}"
 fi
 
 # Create the session if it doesn't exist
