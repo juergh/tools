@@ -1,0 +1,5 @@
+#!/bin/sh
+
+export PATH=/data/git/tools:${PATH}
+
+git-update daily /data/git > /data/git/git-update-daily.log 2>&1
