@@ -10,10 +10,10 @@ update_repo()
 	(
 		cd "${repo}" || exit 1
 
-		date -R
+		date -R | tee .update
 		echo "-- Update repo $(pwd)"
 
-		git fetch
+		git fetch --tags
 		git reset --hard FETCH_HEAD
 		date -R > .update
 	)
@@ -26,10 +26,10 @@ update_mirror()
 	(
 		cd "${repo}" || exit 1
 
-		date -R
+		date -R | tee .update
 		echo "-- Update mirror $(pwd)"
 
-		git fetch --all --tags
+		git fetch --tags
 		date -R > .update
 	)
 }
