@@ -7,23 +7,31 @@ update_repo()
 {
 	local repo=${1}
 
-	date -R
-	echo "-- Update repo $(pwd)/${repo}"
+	(
+		cd "${repo}" || exit 1
 
-	git -C "${repo}" fetch
-	git -C "${repo}" reset --hard FETCH_HEAD
-	date -R > "${repo}"/.update
+		date -R
+		echo "-- Update repo $(pwd)"
+
+		git fetch
+		git reset --hard FETCH_HEAD
+		date -R > .update
+	)
 }
 
 update_mirror()
 {
 	local repo=${1}
 
-	date -R
-	echo "-- Update mirror $(pwd)/${repo}"
+	(
+		cd "${repo}" || exit 1
 
-	git -C "${repo}" fetch --all --tags
-	date -R > "${repo}"/.update
+		date -R
+		echo "-- Update mirror $(pwd)"
+
+		git fetch --all --tags
+		date -R > .update
+	)
 }
 
 do_hourly()
@@ -50,7 +58,7 @@ do_daily()
 
 	# Update the remaining mirrors
 	for repo in *.git ; do
-		if [ "${repo}" != "linux.git" ] ; then
+		if [ -d "${repo}" ] && [ "${repo}" != "linux.git" ] ; then
 			update_mirror "${repo}"
 		fi
 	done
