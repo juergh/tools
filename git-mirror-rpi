@@ -8,23 +8,41 @@ if ! cd "${1}" ; then
     exit 1
 fi
 
+today=$(date +'%Y-%m-%d')
+
 date -R
 
-echo "-- Fetch https://github.com/raspberrypi/linux.git"
-git fetch --force https://github.com/raspberrypi/linux.git refs/*:refs/*
+# Save the current branch state
+git for-each-ref refs/heads > .heads
 
-# shellcheck disable=SC2010
-while IFS= read -r ref ; do
-	commit=${ref%% *}
-	if ! git for-each-ref refs/tags/ | grep -q "${commit}" ; then
-		tag=${ref##*/}-$(date +'%Y-%m-%d')
-		echo "-- Create tag ${tag}"
-		git tag "${tag}" "${commit}"
+echo "-- Update mirror $(pwd)"
+git fetch
+
+while IFS= read -r head ; do
+	branch=${head#*refs/heads/}
+	tag=${branch}_${today}
+
+	prev_tag=${branch}_${today}@1
+	prev_commit=$(grep -P "/${branch}$" .heads | awk '{ print $1 }')
+
+	if ! git merge-base --is-ancestor "${prev_commit}" "${branch}" ; then
+		# The branch was force-updated, so tag the previous and current
+		# branch heads
+		echo "-- Create tags ${prev_tag} ${tag}"
+		git tag -a -m "Autotag: ${prev_tag}" "${prev_tag}" "${prev_commit}"
+		git tag -a -m "Autotag: ${tag}" "${tag}" "${branch}"
 	fi
-done < <(git for-each-ref refs/heads/ | grep -E '/rpi-[0-9]+\.[0-9]+\.y$')
+
+	if ! git tag | grep -qP "^${branch}_\d{4}-\d{2}-\d{2}$" ; then
+		# There is no branch tag at all, so create one
+		echo "-- Create tag ${tag}"
+		git tag -a -m "Autotag: ${tag}" "${tag}" "${branch}"
+	fi
+
+done < <(git for-each-ref refs/heads | grep -P '/rpi-[0-9]+\.[0-9]+\.y$')
 
 echo "-- Push to Launchpad"
-git push --force git+ssh://juergh@git.launchpad.net/~juergh/+git/linux-rpi refs/*:refs/*
+git push --mirror lp
 
 echo "-- Done"
 date -R
