@@ -16,6 +16,13 @@ function out()
 	exit "${rc}"
 }
 
+function pr_info()
+{
+	if [ "${QUIET}" -eq 0 ] ; then
+		echo "${*}" >&2
+	fi
+}
+
 function parse_changelog()
 {
 	local commit=${1}
@@ -66,11 +73,11 @@ function log_debian()
 			tag=${tag//~/_}
 			if git rev-parse "${tag}" >/dev/null 2>&1 ; then
 				# Follow the tag
-				echo "-- Follow release tag ${tag}" >&2
+				pr_info "-- Follow release tag ${tag}"
 				log_debian "${tag}"
 				return
 			fi
-			echo "-- Release tag not found: ${tag}" >&2
+			pr_info "-- Release tag not found: ${tag}"
 
 		# Check if the package name/version/release changed
 		elif [ "${subject}" != "UBUNTU: Start new release" ] ; then
@@ -82,11 +89,11 @@ function log_debian()
 				tag=$(tag_name "${n1}" "${v1}")
 				if git rev-parse "${tag}" >/dev/null 2>&1 ; then
 					# Follow the tag
-					echo "-- Follow import tag ${tag}" >&2
+					pr_info "-- Follow import tag ${tag}"
 					log_debian "${tag}"
 					return
 				fi
-				echo "-- Import tag not found: ${tag}" >&2
+				pr_info "-- Import tag not found: ${tag}"
 
 			# Previous entry != current entry: Probably a rename or rebase of
 			# some sort
@@ -94,11 +101,11 @@ function log_debian()
 				tag=$(tag_name "${n2}" "${v2}")
 				if git rev-parse "${tag}" >/dev/null 2>&1 ; then
 					# Follow the tag
-					echo "-- Follow rename tag ${tag}" >&2
+					pr_info "-- Follow rename tag ${tag}"
 					log_debian "${tag}"
 					return
 				fi
-				echo "-- Rename tag not found: ${tag}" >&2
+				pr_info "-- Rename tag not found: ${tag}"
 			fi
 		fi
 
@@ -109,16 +116,18 @@ function log_debian()
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] [COMMIT]
+Usage: $(basename "${0}") [-h] [-q] [COMMIT]
 
 Show commits that modify debian and debian.* files starting from COMMIT or
 HEAD if not provided. Follow commits across rebases.
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -h, --help   Show this help text and exit.
+  -q, --quiet  Quiet mode.
 EOF
 }
 
+QUIET=0
 commit=
 
 while [ ${#} -ne 0 ] ; do
@@ -126,6 +135,9 @@ while [ ${#} -ne 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-q|--quiet)
+			QUIET=1
 			;;
 		-*)
 			echo "Invalid argument: ${1}" >&2
