@@ -111,7 +111,7 @@ function do_link()
 		args+=("-re-run")
 	fi
 	if [ -n "${SRU_CYCLE}" ] ; then
-		args+=("--sru-cycle" "${SRU_CYLE}")
+		args+=("--sru-cycle" "${SRU_CYCLE}")
 	fi
 
 	run cranky link-tb "${args[@]}"
