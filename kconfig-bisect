@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+#
+# Use binary search to find the config change that introduced a bug
+#
+
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+
+from collections import OrderedDict
+from difflib import Differ
+from prettytable import PrettyTable
+
+def read_config_file(config_file):
+    '''
+    Read a config file into an ordered dict
+    '''
+    configs = OrderedDict()
+    with open(config_file, encoding='utf-8') as fh:
+        for line in fh:
+            line = line.strip()
+            if line.startswith('CONFIG_'):
+                cfg, val = line.split('=', 1)
+            elif line.startswith('# CONFIG_'):
+                cfg = line.split(' ')[1]
+                # val = '___UNSET___'
+                val = None
+            elif line.startswith('# Linux/'):
+                arch = line.split(' ')[1].split('/')[1]
+                continue
+            else:
+                continue
+            configs[cfg] = val
+    return arch, configs
+
+def write_config_file(configs):
+    '''
+    Write an ordered dict to a config file
+    '''
+    with open('.config', 'w', encoding='utf-8') as fh:
+        for cfg, val in configs.items():
+            if val is None:
+                fh.write(f'# {cfg} is not set\n')
+            else:
+                fh.write(f'{cfg}={val}\n')
+
+def merge_configs(good_configs, bad_configs):
+    '''
+    Merge two ordered dicts
+    '''
+    differ = Differ()
+    result = differ.compare(list(good_configs.keys()),
+                            list(bad_configs.keys()))
+
+    all_configs = []
+    for r in list(result):
+        if r[0:2] in ('- ', '+ ', '  '):
+            all_configs.append(r[2:])
+
+    merged_configs = OrderedDict()
+    for cfg in all_configs:
+        merged_configs[cfg] = {
+            'good': good_configs.get(cfg),
+            'bad': bad_configs.get(cfg),
+        }
+    return merged_configs
+
+def generate_config_file(arch, configs, merged_configs, prev_new_configs=None):
+    '''
+    Generate a new config file
+    '''
+    if prev_new_configs is None:
+        prev_new_configs = []
+
+    # Write the config file and determine all new config options
+    write_config_file(configs)
+    p = subprocess.run(['make', f'ARCH={arch}', 'listnewconfig'],
+                       stdout=subprocess.PIPE, text=True, check=True)
+    new_configs = [p.strip() for p in p.stdout.split('\n') if p.strip()]
+
+    if not new_configs or new_configs == prev_new_configs:
+        # All done, i.e., no new configs or new configs didn't change from the
+        # previous run.
+        subprocess.run(['make', f'ARCH={arch}', 'olddefconfig'], check=True)
+        return
+
+    # For the new config options, use the values from the 'good' config if they
+    # exist, or the defaults otherwise
+    for new in new_configs:
+        cfg, val = new.split('=', 1)
+        if cfg in merged_configs:
+            val = merged_configs[cfg]['good']
+
+        print(f'-- New config: {cfg} -> {str(val)}')
+        configs[cfg] = val
+
+    # Rerun
+    generate_config_file(arch, configs, merged_configs, new_configs)
+
+def main():
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(title='subcommands', required=True)
+
+    sparser = subparsers.add_parser('start',
+                                    help='Start a new bisect run')
+    sparser.add_argument('good_config', metavar='good.config',
+                         help='Good config file')
+    sparser.add_argument('bad_config', metavar='bad.config',
+                         help='Bad config file')
+    sparser.set_defaults(command='start')
+
+    sparser = subparsers.add_parser('good', help='Good test result')
+    sparser.set_defaults(command='good')
+
+    sparser = subparsers.add_parser('bad', help='Bad test result')
+    sparser.set_defaults(command='bad')
+
+    args = parser.parse_args()
+
+    kb_dir = '.kconfig-bisect'
+    good_config = os.path.join(kb_dir, 'good')
+    bad_config = os.path.join(kb_dir, 'bad')
+
+    if args.command == 'start':
+        if not os.path.exists(kb_dir):
+            os.mkdir(kb_dir)
+        shutil.copy(args.bad_config, bad_config)
+        shutil.copy(args.good_config, good_config)
+    elif args.command == 'good':
+        shutil.copy('.config', good_config)
+    elif args.command == 'bad':
+        shutil.copy('.config', bad_config)
+    else:
+        print('-- Internal errror')
+        return 1
+
+    # Read the config files
+    arch, good_configs = read_config_file(good_config)
+    _arch, bad_configs = read_config_file(bad_config)
+    if arch != _arch:
+        print(f'-- Config architectures don\'t match ({arch} != {_arch})')
+        return 1
+
+    # Merge the config files
+    merged_configs = merge_configs(good_configs, bad_configs)
+
+    # List of different configs
+    diff_configs = []
+    for cfg, val in merged_configs.items():
+        if val['good'] != val['bad']:
+            diff_configs.append(cfg)
+
+    if not diff_configs:
+        print('-- No differences found')
+        return 0
+
+    # Print the different config settings
+    print(f'-- Different configs: {len(diff_configs)}')
+    table = PrettyTable()
+    table.field_names = (['Config', 'Good', 'Bad'])
+    for cfg in diff_configs:
+        table.add_row([cfg, merged_configs[cfg]['good'],
+                       merged_configs[cfg]['bad']])
+    table.align = 'l'
+    print(table)
+
+    # Create a new config
+    new_configs = OrderedDict(bad_configs)
+    for cfg in diff_configs[0:int((len(diff_configs) / 2))]:
+        new_configs[cfg] = good_configs.get(cfg)
+
+    generate_config_file(arch, new_configs, merged_configs)
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())
