@@ -96,7 +96,7 @@ def generate_config_file(arch, configs, merged_configs, prev_new_configs=None):
         if cfg in merged_configs:
             val = merged_configs[cfg]['good']
 
-        print(f'-- New config: {cfg} -> {str(val)}')
+        print(f'-- New config:   {cfg} -> {str(val)}')
         configs[cfg] = val
 
     # Rerun
@@ -145,6 +145,7 @@ def main():
     if arch != _arch:
         print(f'-- Config architectures don\'t match ({arch} != {_arch})')
         return 1
+    print(f'-- Config arch:  {arch}')
 
     # Merge the config files
     merged_configs = merge_configs(good_configs, bad_configs)
@@ -160,7 +161,7 @@ def main():
         return 0
 
     # Print the different config settings
-    print(f'-- Different configs: {len(diff_configs)}')
+    print(f'-- Diff configs: {len(diff_configs)}')
     table = PrettyTable()
     table.field_names = (['Config', 'Good', 'Bad'])
     for cfg in diff_configs:
