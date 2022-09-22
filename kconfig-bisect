@@ -61,6 +61,9 @@ def merge_configs(good_configs, bad_configs):
 
     merged_configs = OrderedDict()
     for cfg in all_configs:
+        if cfg in merged_configs:
+            print(f'-- Internal error: Duplicate config in ordered dict: {cfg}')
+            sys.exit(1)
         merged_configs[cfg] = {
             'good': good_configs.get(cfg),
             'bad': bad_configs.get(cfg),
@@ -133,8 +136,8 @@ def main():
     elif args.command == 'bad':
         shutil.copy('.config', bad_config)
     else:
-        print('-- Internal errror')
-        return 1
+        print(f'-- Internal errror: Unsupported command: {args.command}')
+        sys.exit(1)
 
     # Read the config files
     arch, good_configs = read_config_file(good_config)
