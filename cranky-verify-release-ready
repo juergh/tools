@@ -3,12 +3,34 @@
 # Run verify-release-ready against a set of kernel packages
 #
 
+function check_emails()
+{
+	local ae sob
+
+	ae=$(git log --format=%ae -1)
+	printf "%60s: " "commit author email (${ae})"
+	if [ "${ae/@canonical.com/}" != "${ae}" ] ; then
+		echo -e "\033[32mpass\033[0m"
+	else
+		echo -e "\033[31mfail\033[0m"
+	fi
+
+	sob=$(git log -1 | grep 'Signed-off-by:')
+	sob=${sob#*Signed-off-by: }
+	printf "%60s: " "SOB (${sob})"
+	if [ "${sob/@canonical.com/}" != "${sob}" ] ; then
+		echo -e "\033[32mpass\033[0m"
+	else
+		echo -e "\033[31mfail\033[0m"
+	fi
+}
+
 function usage()
 {
     cat <<EOF
 Usage: cranky-verify-release-ready [-c] [-h]
 
-Run verify-release-ready.
+Run verify-release-ready and check commit author and SOB email addresses.
 
 Optional arguments:
   -c, --current  Run verify-release-ready only in the current directory.
@@ -36,11 +58,13 @@ while [ ${#} -gt 0 ] ; do
 done
 
 if [ ${current} -eq 1 ] ; then
+	check_emails
 	"${KTEAM_TOOLS}"/maintscripts/verify-release-ready
 else
 	while IFS= read -r path ; do
 		echo "${path}"
 		cd "${path}"
+		check_emails
 		"${KTEAM_TOOLS}"/maintscripts/verify-release-ready || true
 		echo
 	done < <(cranky shell-helper source-packages-path)
