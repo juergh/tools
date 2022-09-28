@@ -6,6 +6,8 @@
 import argparse
 import sys
 
+import requests
+
 from launchpadlib.launchpad import Launchpad
 
 # -----------------------------------------------------------------------------
@@ -154,6 +156,27 @@ def do_show_binaries(args):
                                       arch,
                                       binary.pocket.lower(),
                                       binary.binaryFileUrls()[0]))
+
+@add_help('Download latest binary packages')
+@add_arg('handle', help='Source package handle (series/source)')
+@add_arg('-a', '--arch', help='Download binaries for the provided ' +
+         'architecure. Can be a list of comma-separated architectures')
+@add_arg('-l', '--all', action='store_true', help='Query all pockets, ' +
+         'including proposed')
+@add_arg('-p', '--pocket', help='Query only the specified pocket')
+def do_pull_binaries(args):
+    arches = args.arch.split(',') if args.arch else None
+    pockets = pocket_list(args.pocket, args.all)
+    binaries = lp_get_binaries(args.lp, args.handle, pockets)
+    for binary in binaries:
+        arch = binary.distro_arch_series_link.split('/')[-1]
+        if arches and arch not in arches:
+            continue
+        url = binary.binaryFileUrls()[0]
+        print(f'Download {url}')
+        with open(url.split('/')[-1], 'wb') as fh:
+            r = requests.get(url)
+            fh.write(r.content)
 
 # -----------------------------------------------------------------------------
 # Main entry point
