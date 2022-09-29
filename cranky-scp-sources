@@ -1,0 +1,43 @@
+#!/bin/bash -eu
+
+host=${1}
+
+readarray -t paths < <(cranky shell-helper source-packages-path)
+
+first=1
+for path in "${paths[@]}" ; do
+	cd "${path}"
+
+	DEBIAN=debian
+	if [ -e debian/debian.env ] ; then
+		# shellcheck disable=SC1091
+		. debian/debian.env
+	fi
+
+	name=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+	version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Version)
+
+	files=(
+		../${name}_${version}_source.changes
+		../${name}_${version}.dsc
+	)
+
+	if ! gpg --verify-files "${files[@]}" 2>/dev/null ; then
+		echo "Invalid signature(s) on ${files[*]}" >&2
+		exit 1
+	fi
+
+	if [ ${first} -eq 1 ] ; then
+		first=0
+		ae=$(git log --format=%ae -1)
+		user=$(grep "<${ae}>" ~/.kteam.rc | awk '{print $1}' | tr -d '"' |
+				   tr -d "'")
+		if [ -z "${user}" ] ; then
+			echo "Failed to determine username for ${ae}" >&2
+			exit 1
+		fi
+		echo "Create ${host}:review/${user}"
+		ssh "${host}" "mkdir -p review/${user}"
+	fi
+	scp "${files[@]}" "${host}":review/"${user}"
+done
