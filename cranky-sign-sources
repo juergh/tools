@@ -3,7 +3,7 @@
 readarray -t paths < <(cranky shell-helper source-packages-path)
 
 for path in "${paths[@]}" ; do
-    cd "${path}"
+	cd "${path}"
 	echo
 
 	DEBIAN=debian
@@ -16,12 +16,6 @@ for path in "${paths[@]}" ; do
 	version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Version)
 
 	changes=../${name}_${version}_source.changes
-	if [ -e "${changes}" ] ; then
-		echo "Sign ${changes}"
-		debsign --re-sign -e "${DEBEMAIL}" "${changes}"
-	else
-		dsc=../${name}_${version}.dsc
-		echo "Sign ${dsc}"
-		debsign --re-sign -e "${DEBEMAIL}" "${dsc}"
-	fi
+	echo "Sign ${changes}"
+	debsign --re-sign -e "${DEBEMAIL}" "${changes}"
 done
