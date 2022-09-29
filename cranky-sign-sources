@@ -1,0 +1,27 @@
+#!/bin/bash -eu
+
+readarray -t paths < <(cranky shell-helper source-packages-path)
+
+for path in "${paths[@]}" ; do
+    cd "${path}"
+	echo
+
+	DEBIAN=debian
+	if [ -e debian/debian.env ] ; then
+		# shellcheck disable=SC1091
+		. debian/debian.env
+	fi
+
+	name=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+	version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Version)
+
+	changes=../${name}_${version}_source.changes
+	if [ -e "${changes}" ] ; then
+		echo "Sign ${changes}"
+		debsign --re-sign -e "${DEBEMAIL}" "${changes}"
+	else
+		dsc=../${name}_${version}.dsc
+		echo "Sign ${dsc}"
+		debsign --re-sign -e "${DEBEMAIL}" "${dsc}"
+	fi
+done
