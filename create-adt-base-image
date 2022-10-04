@@ -45,117 +45,143 @@ function wait_for_status()
 	return 1
 }
 
+function list_image_props()
+{
+	local image=${1}
+
+	cat <<EOF | python3 -
+import json
+import sys
+
+try:
+    image_meta = json.loads('''
+$(openstack image show -f json "${image}")
+''')
+except:
+    sys.exit(1)
+
+for key, val in image_meta['properties'].items():
+        print(key + '=' + val)
+EOF
+}
+
+function set_IMAGE_PROPS()
+{
+	local image=${1}
+	local prop
+
+	while IFS= read -r prop ; do
+		key=${prop%%=*}
+		val=${prop#*=}
+		IMAGE_PROPS["${key}"]="${val}"
+	done < <(list_image_props "${image}")
+}
+
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] [-i IMAGE] [-k KEYNAME] RELEASE ARCH
+Usage: $(basename "${0}") [-h] [-k KEYNAME] IMAGE
 
 Create a base Ubuntu ADT image in OpenStack from an existing Ubuntu OpenStack
 image.
 
 Postional arguments:
-  RELEASE                 Image release name (bionic, focal, ...).
-  ARCH                    Image architecture (amd64, armhf, ...).
+  IMAGE                   OpenStack image name or ID.
 
 Optional arguments:
   -e, --keep              Keep server.
   -h, --help              Show this help text and exit.
-  -i, --image IMAGE       An existing Openstack image to use as the base image
-                          for the ADT image. If not provided, uses the latest
-                          available daily image for the provided release and
-                          architecture.
   -k, --key-name KEYNAME  An existing OpenStack SSH keyname. If not provided,
                           uses the current username as the keyname.
 EOF
 }
 
 declare -A release_map=(
-	["kinetic"]="22.10"
-	["jammy"]="22.04"
-	["impish"]="21.10"
-	["hirsute"]="21.04"
-	["focal"]="20.04"
-	["bionic"]="18.04"
-	["xenial"]="16.04"
-	["trusty"]="14.04"
+	["22.10"]="kinetic"
+	["22.04"]="jammy"
+	["20.04"]="focal"
+	["18.04"]="bionic"
+	["16.04"]="xenial"
+	["14.04"]="trusty"
+	["XXX"]=""
 )
 
-KEEP=0
-image=
+declare -A arch_map=(
+	["aarch64"]="arm64"
+	["arm"]="armhf"
+	["i686"]="i386"
+	["powerpc64el"]="ppc64le"
+	["s390x"]="s390x"
+	["x86_64"]="amd64"
+	["XXX"]=""
+)
+
+keep=0
 key_name=${USER}
-release=
-arch=
+image=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
 		-e|--keep)
-			KEEP=1
+			keep=1
 			;;
 		-h|--help)
 			usage
 			exit
 			;;
-		-i|--image)
-			shift
-			image=${1}
-			;;
 		-k|--key-name)
 			shift
 			key_name=${1}
 			;;
+		-*)
+			echo "-- Error: Invalid argument: ${1}" >&2
+			exit 2
+			;;
 		*)
-			if [ -z "${release}" ] ; then
-				release=${1}
-				release_num=${release_map[${release}]:-}
-				if [ -z "${release_num}" ] ; then
-					echo "-- Error: Invalid release: ${release}" >&2
-					exit 2
-				fi
-			elif [ -z "${arch}" ] ; then
-				arch=${1}
-			else
+			if [ -n "${image}" ] ; then
 				echo "-- Error: Invalid argument: ${1}" >&2
 				exit 2
 			fi
+			image=${1}
 			;;
 	esac
 	shift
 done
 
-if [ -z "${release}" ] || [ -z "${arch}" ] ; then
+if [ -z "${image}" ] ; then
 	usage
 	exit 2
 fi
 
+flavor=autopkgtest
 network=net_kernel-automated-tests
 security_group=allow-ping-and-ssh
 
 setup_testbed=${AUTOPKGTEST}/setup-commands/setup-testbed
-setup_canonical=${AUTOPKGTEST_CLOUD}/charms/focal/autopkgtest-cloud-worker/autopkgtest-cloud/worker-config-production/setup-canonical.sh
+setup_canonical=${AUTOPKGTEST_CLOUD}/autopkgtest-cloud/worker-config-production/setup-canonical.sh
 
 # Globals
 USER_DATA=
 SERVER_NAME=
+KEEP=${keep}
 trap out EXIT INT TERM HUP
 
 test -e "${setup_testbed}"
 test -e "${setup_canonical}"
 
-if [ -z "${image}" ] ; then
-	# Get the latest daily image for the provided release and arch
-	image=$(openstack image list \
-					  --status active \
-					  --property product_name=com.ubuntu.cloud.daily:server:"${release_num}":"${arch}" \
-					  --sort name:asc \
-					  --format value \
-					  --column Name  | \
-				tail -1)
-	if [ -z "${image}" ] ; then
-		echo "-- Error: Unable to find a base image" >&2
-		exit 1
-	fi
-	echo "-- Base image: ${image}"
+# Get the image properties
+declare -A IMAGE_PROPS
+set_IMAGE_PROPS "${image}"
+
+release_num=${IMAGE_PROPS["os_version"]:-XXX}
+release=${release_map[${release_num}]}
+arch=${arch_map[${IMAGE_PROPS["architecture"]:-XXX}]}
+
+if [ -z "${release}" ] || [ -z "${arch}" ] ; then
+	echo "-- Error: Unable to determine image release and/or architecture" >&2
+	exit 1
 fi
+echo "-- Image release/architecture: ${release}/${arch}"
 
 # Create cloud-init userdata
 USER_DATA=$(mktemp)
@@ -174,6 +200,7 @@ if [ "${arch}" = amd64 ] && [ "${release_num%.*}" -ge 20 ] ; then
 apt:
   primary:
     - arches: [amd64, i386]
+      uri: http://ftpmaster.internal/ubuntu
 runcmd:
     - dpkg --add-architecture i386
 EOF
@@ -183,7 +210,7 @@ fi
 SERVER_NAME=juergh/adt-${release}-${arch}-$(date +%Y%m%d-%H%M%S)
 echo "-- Server name: ${SERVER_NAME}"
 server_id=$(openstack server create \
-					  --flavor autopkgtest \
+					  --flavor "${flavor}" \
 					  --image "${image}" \
 					  --user-data "${USER_DATA}" \
 					  --key-name "${key_name}" \
