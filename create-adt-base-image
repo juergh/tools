@@ -55,7 +55,7 @@ import sys
 
 try:
     image_meta = json.loads('''
-$(openstack image show -f json "${image}")
+$(openstack image show -f json "${image}" | sed "/simplestreams_metadata/d")
 ''')
 except:
     sys.exit(1)
@@ -153,7 +153,7 @@ if [ -z "${image}" ] ; then
 	exit 2
 fi
 
-flavor=autopkgtest
+flavor=m1.small
 network=net_kernel-automated-tests
 security_group=allow-ping-and-ssh
 
