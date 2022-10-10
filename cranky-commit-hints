@@ -52,16 +52,16 @@ p=$(git diff "${hints}" | grep -c "^+result" || true)
 
 case "${m}-${p}" in
 	0-1)
-		subject="${series}/${name}: Hint ${pkg} for ${version}"
+		subject="${series::1}/${name}: hint ${pkg} for ${version}"
 		;;
 	0-*)
-		subject="${series}/${name}: Hints for ${version}"
+		subject="${series::1}/${name}: hints for ${version}"
 		;;
 	1-1)
-		subject="${series}/${name}: Fix ${pkg} hint for ${version}"
+		subject="${series::1}/${name}: fix ${pkg} hint for ${version}"
 		;;
 	*-*)
-		subject="${series}/${name}: Fix hints for ${version}"
+		subject="${series::1}/${name}: fix hints for ${version}"
 		;;
 esac
 
