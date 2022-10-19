@@ -170,6 +170,7 @@ if ! session_exists "${session}" ; then
 			cat <<EOF | sudo tee --append '/etc/schroot/sbuild/fstab' >/dev/null
 # Allow use of /home for run-chroot
 /home           /home           none    rw,bind         0       0
+/vol1           /vol1           none    rw,bind         0       0
 EOF
 		fi
 	fi
@@ -183,8 +184,16 @@ if sh -c 'command -v apt-get' &> /dev/null ; then
     apt-get -y dist-upgrade
     apt-get -y install sudo
 fi
+
 echo "${USER} ALL = NOPASSWD: ALL" > /etc/sudoers.d/"${USER}"
 chmod 644 /etc/sudoers.d/"${USER}"
+
+if ! [ -e /etc/hosts ] ; then
+    cat << __EOF__ > /etc/hosts
+127.0.0.1 localhost
+127.0.1.1 $(hostname)
+__EOF__
+fi
 EOF
 fi
 
