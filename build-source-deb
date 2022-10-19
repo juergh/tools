@@ -60,7 +60,9 @@ if [ -z "${release}" ] ; then
 	fi
 fi
 
+set -x
 run-chroot "${release}" -- fakeroot ./debian/rules clean
+set +x
 
 opts+=(
 	"-S"   # Build sources
@@ -75,4 +77,6 @@ if [ ${orig} -eq 1 ] ; then
 	opts+=("-sa")  # Include the original source tarball
 fi
 
+set -x
 run-chroot "${release}" -- dpkg-buildpackage "${opts[@]}" "${@}"
+set +x
