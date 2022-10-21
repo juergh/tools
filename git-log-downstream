@@ -89,13 +89,15 @@ fi
 TMPF=
 trap out EXIT
 
-is_ubuntu=0
-deriv=
-if [ -e debian/debian.env ] ; then
+# Check if this is an Ubunut kernel
+debian_env=$(git show "${branch}":debian/debian.env 2>/dev/null | \
+				 grep DEBIAN || true)
+if [ -z "${debian_env}" ] ; then
+	is_ubuntu=0
+	deriv=
+else
 	is_ubuntu=1
-	# shellcheck disable=SC1091
-	. debian/debian.env
-	deriv=-${DEBIAN#*debian.}
+	deriv=-${debian_env#*debian.}
 fi
 
 # Determine the rev range to process
