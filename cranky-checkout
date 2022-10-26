@@ -1,0 +1,91 @@
+#!/bin/bash -eu
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [-r] [handle]
+
+Check out Ubuntu kernel repos.
+
+Optional arguments:
+  -h, --help    Show this help text and exit.
+  -r, --rebase  Rebase to the latest tag.
+EOF
+}
+
+rebase=0
+handle=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-r|--rebase)
+			rebase=1
+			;;
+		*)
+			if [ -n "${handle}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			handle=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${handle}" ] ; then
+	if ! [ -d debian ] ; then
+		echo "No handle provided and not an Ubuntu kernel repo" >&1
+		exit 1
+	fi
+
+	DEBIAN=
+	if [ -e debian/debian.env ] ; then
+		# shellcheck disable=SC1091
+		. debian/debian.env
+	fi
+	series=$(dpkg-parsechangelog -l"${DEBIAN}"/changelog -SDistribution)
+	package=$(dpkg-parsechangelog -l"${DEBIAN}"/changelog -SSource)
+	handle=${series}:${package}
+fi
+
+cranky checkout "${handle}"
+
+if [ "${rebase}" -eq 0 ] ; then
+	exit
+fi
+
+while IFS= read -r path ; do
+	(
+		echo
+		echo "${path}"
+		cd "${path}"
+
+        tag=$(git describe --exact-match HEAD 2>/dev/null || true)
+		if [ -z "${tag}" ] ; then
+			echo "HEAD is not tagged" >&2
+			exit 1
+		fi
+		echo "HEAD tag:   ${tag}"
+
+		base_tag=$(echo "${tag}" | grep -oP '^.*?-\d+\.\d+\.\d+')
+		latest_tag=$(git tag | grep -F "${base_tag}" | sort -V | tail -1)
+		if [ -z "${latest_tag}" ] ; then
+			echo "Failed to determine latest tag" >&2
+			exit 1
+		fi
+		echo "Latest tag: ${latest_tag}"
+
+		if [ "${tag}" != "${latest_tag}" ] ; then
+			# Update the current branch to the latest tag
+			if [ -e debian/debian.env ] ; then
+				git reset --hard "${latest_tag}"
+			else
+				git merge --ff-only "${latest_tag}"
+			fi
+		fi
+	)
+done < <(cranky shell-helper source-packages-path "${handle}")
