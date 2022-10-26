@@ -170,7 +170,6 @@ if ! session_exists "${session}" ; then
 			cat <<EOF | sudo tee --append '/etc/schroot/sbuild/fstab' >/dev/null
 # Allow use of /home for run-chroot
 /home           /home           none    rw,bind         0       0
-/vol1           /vol1           none    rw,bind         0       0
 EOF
 		fi
 	fi
