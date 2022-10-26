@@ -48,12 +48,7 @@ function source_debian_env()
 
 function do_checkout()
 {
-	source_debian_env
-
-	package=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S source)
-	series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S distribution)
-
-	run cranky checkout "${series}":"${package}"
+	run cranky-checkout -r
 }
 
 # fix -------------------------------------------------------------------------
