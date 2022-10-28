@@ -1,10 +1,16 @@
 #!/bin/bash -eu
 
-url=${1:-}
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [URL]
 
-if [ -z "${url}" ] ; then
-	url=$(cat archive)
-fi
+Fetch an email archive.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
 
 declare -A month=(
 	[january]=01
@@ -20,6 +26,39 @@ declare -A month=(
 	[november]=11
 	[december]=12
 )
+
+url=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${url}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			url=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${url}" ] ; then
+	if ! [ -e url ] ; then
+		echo "No URL provided and no url file found" >&2
+		exit 1
+	fi
+	url=$(cat url)
+fi
+
+# Save the URL
+echo "${url}" > url
+
+mkdir -p archives
+cd archives
 
 # Remove the newest archive (could be incomplete/partial)
 ls 20*.txt 2>/dev/null | tail -1 | xargs rm -f
