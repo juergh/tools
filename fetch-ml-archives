@@ -7,6 +7,10 @@ Usage: $(basename "${0}") [-h] [URL]
 
 Fetch an email archive.
 
+Positional arguments:
+  URL         Mailing list archive URL. If not provided, read the URL from the
+              file 'url' in the current directory.
+
 Optional arguments:
   -h, --help  Show this help text and exit.
 EOF
