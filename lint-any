@@ -20,7 +20,7 @@ EOF
 
 shellcheck_exclude="--exclude=SC1117"
 flake_ignore="--ignore=E501,E302,E305,E402,W504"
-pylint_disable="--disable=C0301,W0311,E0401,C1801,R0912,C0326,R0903,C0330,W0621,C0103,C0114,C0115,C0116"
+pylint_disable="--disable=C0301,W0311,E0401,C1801,R0912,C0326,R0903,C0330,W0621,C0103,C0114,C0115,C0116,C0209"
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
