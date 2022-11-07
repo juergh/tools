@@ -46,9 +46,14 @@ function source_debian_env()
 
 # checkout --------------------------------------------------------------------
 
+# shellcheck disable=SC2034
+checkout_opt_args=(
+	"[-r]|-r, --rebase|Rebase onto the latest tag if HEAD is untagged."
+)
+
 function do_checkout()
 {
-	run cranky-checkout -r
+	run cranky-checkout -u
 }
 
 # fix -------------------------------------------------------------------------
@@ -312,7 +317,7 @@ done
 readarray -t cmds < <(echo "${0##*--}" | tr "-" "\n")
 
 OPT_ARGS=(
-	"[-d]|-d, --dry run|"
+	"[-d]|-d, --dry-run|"
 	"[-h]|-h, --help|Show this help text and exit."
 )
 
