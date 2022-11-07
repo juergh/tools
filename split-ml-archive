@@ -6,9 +6,11 @@
 import argparse
 import email
 import os
-import pytz
+import re
+import sys
 
 import dateutil.parser
+import pytz
 
 def split_list(data):
     """
@@ -20,72 +22,87 @@ def split_list(data):
             idx = cnt
     return (data[:idx], data[(idx + 1):])
 
-def save_mail(rootdir, data, dry_run=False):
+def save_mail(data, args):
     """
     Save a mail to disk
     """
+    if not data:
+        return
+
     # Get the message ID and date from the mail data
     msg = email.message_from_string(''.join(data))
     message_id = msg['Message-ID']
     date = msg['Date']
 
     if date is None:
-        print("Error: Date not found in header")
+        print('Error: Date not found in header', file=sys.stderr)
+        if args.debug:
+            print(msg)
         return
 
     if message_id is None:
-        print("Error: Message-ID not found in header")
+        print('Error: Message-ID not found in header', file=sys.stderr)
+        if args.debug:
+            print(msg)
         return
 
     if not message_id.startswith('<') and not message_id.endswith('>'):
-        print("Error: Invalid Message-ID: {}".format(message_id))
+        print('Error: Invalid Message-ID: {}'.format(message_id),
+              file=sys.stderr)
+        if args.debug:
+            print(msg)
         return
 
     # Convert the date to UTC
     date = dateutil.parser.parse(date, fuzzy=True)
-    date = date.replace(tzinfo=pytz.UTC) - date.utcoffset()
+    if date.utcoffset():
+        date = date.replace(tzinfo=pytz.UTC) - date.utcoffset()
 
     # Strip '<' and '>' from the message ID and replace '/' with '--'
     message_id = message_id[1:-1].replace('/', '--')
 
     # Construct the directory and file names
-    dirname = os.path.join(rootdir, "{:04d}".format(date.year),
-                           "{:02d}".format(date.month))
+    dirname = os.path.join(args.outdir, '{:04d}'.format(date.year),
+                           '{:02d}'.format(date.month))
     filename = os.path.join(dirname, message_id)
 
     if os.path.exists(filename):
         return
 
-    if dry_run:
-        print("[Dry run] {}".format(filename))
+    if args.dry_run:
+        print('[Dry run] {}'.format(filename))
         return
 
     if not os.path.exists(dirname):
         os.makedirs(dirname)
 
-    print("Create {}".format(filename))
-    with open(filename, 'w', encoding="utf-8") as fh:
+    print('Create {}'.format(filename))
+    with open(filename, 'w', encoding='utf-8') as fh:
         fh.write(''.join(data))
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--dry-run", action="store_true", default=False)
-    parser.add_argument("-o", "--outdir", metavar="OUTDIR", default=".")
-    parser.add_argument("infile", metavar="INFILE", nargs='+')
+    parser.add_argument('-x', '--debug', action='store_true', default=False)
+    parser.add_argument('-d', '--dry-run', action='store_true', default=False)
+    parser.add_argument('-o', '--outdir', metavar='OUTDIR', default='.')
+    parser.add_argument('infile', metavar='INFILE', nargs='+')
     args = parser.parse_args()
 
+    weekday = r'(Mon|Tue|Wed|Thu|Fri|Sat|Sun)'
+    month = r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)'
+    re_from = re.compile(r'^From \S+ at \S+  ' + weekday + ' ' + month +
+                         r' ( |\d)\d \d{2}:\d{2}:\d{2} \d{4}\n$')
+
     for filename in args.infile:
-        with open(filename, encoding="utf-8") as fh:
+        with open(filename, encoding='utf-8', errors='ignore') as fh:
             data = []
             for line in fh:
+                if re_from.match(line):
+                    save_mail(data, args)
+                    data = []
                 data.append(line)
-
-                if line.startswith("Message-ID: "):
-                    # Found a mail header, so save the previous mail
-                    (mail, data) = split_list(data)
-                    if mail:
-                        save_mail(args.outdir, mail, dry_run=args.dry_run)
-
             if data:
-                # Save the last mail
-                save_mail(args.outdir, data, dry_run=args.dry_run)
+                save_mail(data, args)
+
+if __name__ == '__main__':
+    main()
