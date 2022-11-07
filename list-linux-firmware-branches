@@ -1,0 +1,19 @@
+#!/bin/bash
+#
+# List unreleased commits on linux-firmware branches
+#
+
+for branch in trusty xenial bionic focal jammy kinetic lunar ; do
+	version=$(git show "${branch}":debian/changelog | \
+				  dpkg-parsechangelog -l- -Sversion)
+	if [ "${version%.0}" != "${version}" ] ; then
+		# Dummy initial SRU release version, pull the next one
+		version=$(git show "${branch}":debian/changelog | \
+					  dpkg-parsechangelog -l- -Sversion -o1 -c1)
+	fi
+	tag=Ubuntu-${version}
+
+	echo "-- $branch"
+	git log --oneline "${tag}".."${branch}"
+	echo
+done
