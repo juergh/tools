@@ -66,13 +66,27 @@ while IFS= read -r line ; do
 	fi
 	href=${href%%\'*}
 
+	# Get the job name from the URL
 	job=$(curl -s "${base_url}"/"${href}" | grep ">Jenkins Job<" | \
 			  tr '"' "'")
 	job=${job##*/all/job/}
 	job=${job%%/*}
-	echo "-- Found ${job}"
 
-	jjobs+=("${job}")
+	# Get the job build status
+	tmpf=$(mktemp)
+	curl -s "${jenkins_url}"/job/"${job}"/ > "${tmpf}"
+	if grep -q 'pending.Already running' "${tmpf}" ; then
+		status="\033[33mpending\033[0m"
+	elif grep -q 'Estimated remaining time' "${tmpf}" ; then
+		status="\033[36mbuilding\033[0m"
+	else
+		status="\033[32mready\033[0m"
+		jjobs+=("${job}")
+	fi
+	rm -f "${tmpf}"
+
+	echo -e "-- Found ${job} (${status})"
+
 done < <(curl -s "${results_url}" | grep -E "${results}" -A1 | tr '"' "'")
 
 if [ ${dry_run} -eq 1 ] ; then
@@ -82,5 +96,5 @@ fi
 echo
 for job in "${jjobs[@]}" ; do
 	echo "-- Build ${job}"
-	java -jar "${jenkins_cli}" -s "${jenkins_url}" -webSocket build "${job}" || true
+	java -jar "${jenkins_cli}" -s "${jenkins_url}" build "${job}" || true
 done
