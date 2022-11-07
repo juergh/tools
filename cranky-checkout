@@ -3,24 +3,29 @@
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] [-r] [-u] [handle]
+Usage: $(basename "${0}") [-d] [-h] [-r] [-u] [handle]
 
 Check out Ubuntu kernel repos.
 
 Optional arguments:
-  -h, --help    Show this help text and exit.
-  -r, --rebase  Rebase onto the latest tag if the HEAD is untagged (implies
-                --update).
-  -u, --update  Update the local branch to the latest tag.
+  -d, --dry-run  Do a dry run.
+  -h, --help     Show this help text and exit.
+  -r, --rebase   Rebase onto the latest tag if HEAD is untagged (implies
+                 --update).
+  -u, --update   Update the local branch to the latest tag.
 EOF
 }
 
+run=()
 rebase=0
 update=0
 handle=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-d|--dry-run)
+			run=("echo" "[dry-run]")
+			;;
 		-h|--help)
 			usage
 			exit
@@ -58,7 +63,7 @@ if [ -z "${handle}" ] ; then
 	handle=${series}:${package}
 fi
 
-cranky checkout "${handle}"
+"${run[@]}" cranky checkout "${handle}"
 
 if [ "${update}" -eq 0 ] ; then
 	exit
@@ -75,9 +80,9 @@ while IFS= read -r path ; do
 			echo "HEAD tag:   ${tag}"
 			rebase_tag=
 		else
+			echo "HEAD is untagged"
 			if [ ${rebase} -eq 0 ] ; then
-				echo "HEAD is untagged" >&2
-				exit 1
+				exit
 			fi
 			while IFS= read -r commit ; do
 				tag=$(git describe --exact-match "${commit}" 2>/dev/null || \
@@ -85,8 +90,7 @@ while IFS= read -r path ; do
 				if [ -n "${tag}" ] ; then
 					break
 				fi
-			done < <(git log --format=%c)
-			echo "HEAD is untagged"
+			done < <(git log --format=%h)
 			echo "Branch tag: ${tag}"
 			rebase_tag=${tag}
 		fi
@@ -95,7 +99,7 @@ while IFS= read -r path ; do
 		latest_tag=$(git tag | grep -F "${base_tag}" | sort -V | tail -1)
 		if [ -z "${latest_tag}" ] ; then
 			echo "Failed to determine latest tag" >&2
-			exit 1
+			exit
 		fi
 		echo "Latest tag: ${latest_tag}"
 
@@ -103,12 +107,12 @@ while IFS= read -r path ; do
 			# Update the current branch to the latest tag
 			if [ -e debian/debian.env ] ; then
 				if [ -n "${rebase_tag}" ] ; then
-					git rebase --onto "${latest_tag}" "${rebase_tag}"
+					"${run[@]}" git rebase --onto "${latest_tag}" "${rebase_tag}"
 				else
-					git reset --hard "${latest_tag}"
+					"${run[@]}" git reset --hard "${latest_tag}"
 				fi
 			else
-				git merge --ff-only "${latest_tag}"
+				"${run[@]}" git merge --ff-only "${latest_tag}"
 			fi
 		fi
 	)
