@@ -3,17 +3,20 @@
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] [-r] [handle]
+Usage: $(basename "${0}") [-h] [-r] [-u] [handle]
 
 Check out Ubuntu kernel repos.
 
 Optional arguments:
   -h, --help    Show this help text and exit.
-  -r, --rebase  Rebase to the latest tag.
+  -r, --rebase  Rebase onto the latest tag if the HEAD is untagged (implies
+                --update).
+  -u, --update  Update the local branch to the latest tag.
 EOF
 }
 
 rebase=0
+update=0
 handle=
 
 while [ ${#} -gt 0 ] ; do
@@ -24,6 +27,9 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-r|--rebase)
 			rebase=1
+			;;
+		-u|--update)
+			update=1
 			;;
 		*)
 			if [ -n "${handle}" ] ; then
@@ -54,7 +60,7 @@ fi
 
 cranky checkout "${handle}"
 
-if [ "${rebase}" -eq 0 ] ; then
+if [ "${update}" -eq 0 ] ; then
 	exit
 fi
 
@@ -65,11 +71,25 @@ while IFS= read -r path ; do
 		cd "${path}"
 
         tag=$(git describe --exact-match HEAD 2>/dev/null || true)
-		if [ -z "${tag}" ] ; then
-			echo "HEAD is not tagged" >&2
-			exit 1
+		if [ -n "${tag}" ] ; then
+			echo "HEAD tag:   ${tag}"
+			rebase_tag=
+		else
+			if [ ${rebase} -eq 0 ] ; then
+				echo "HEAD is untagged" >&2
+				exit 1
+			fi
+			while IFS= read -r commit ; do
+				tag=$(git describe --exact-match "${commit}" 2>/dev/null || \
+						  true)
+				if [ -n "${tag}" ] ; then
+					break
+				fi
+			done < <(git log --format=%c)
+			echo "HEAD is untagged"
+			echo "Branch tag: ${tag}"
+			rebase_tag=${tag}
 		fi
-		echo "HEAD tag:   ${tag}"
 
 		base_tag=$(echo "${tag}" | grep -oP '^.*?-\d+\.\d+\.\d+')
 		latest_tag=$(git tag | grep -F "${base_tag}" | sort -V | tail -1)
@@ -82,7 +102,11 @@ while IFS= read -r path ; do
 		if [ "${tag}" != "${latest_tag}" ] ; then
 			# Update the current branch to the latest tag
 			if [ -e debian/debian.env ] ; then
-				git reset --hard "${latest_tag}"
+				if [ -n "${rebase_tag}" ] ; then
+					git rebase --onto "${latest_tag}" "${rebase_tag}"
+				else
+					git reset --hard "${latest_tag}"
+				fi
 			else
 				git merge --ff-only "${latest_tag}"
 			fi
