@@ -71,17 +71,11 @@ for s in ${status//,/ } ; do
 done
 re_result="${re_result%|})\""
 
-jenkins_url=http://10.246.72.9:8080
-
-jenkins_cli=~/.cache/jenkins-cli.jar
-if ! [ -e "${jenkins_cli}" ] ; then
-	wget -O "${jenkins_cli}" "${jenkins_url}"/jnlpJars/jenkins-cli.jar
-fi
-
 base_url=${results_url#*://}
 base_url=${base_url%%/*}
 base_url=${results_url%%://*}://${base_url}
 
+jenkins_url=
 jjobs=()
 
 while IFS= read -r line ; do
@@ -91,16 +85,26 @@ while IFS= read -r line ; do
 	fi
 	href=${href%%\'*}
 
-	# Determine the job name
+	# Determine the job url
 	if [ "${href%/}" != "${href}" ] ; then
-		job=${href%/}
-		job=${job##*/}
+		job_url=${href}
 	else
-		job=$(curl -s "${base_url}"/"${href}" | grep ">Jenkins Job<" | \
-				  tr '"' "'")
-		job=${job##*/all/job/}
-		job=${job%%/*}
+		job_url=$(curl -s "${base_url}"/"${href}" | \
+					  grep ">Jenkins Job<" | tr '"' "'")
+		job_url=${job_url##*href=\'}
+		job_url=${job_url%%\'*}
 	fi
+
+	# Extract the jenkins URL
+	if [ -z "${jenkins_url}" ] ; then
+		jenkins_url=${job_url#*://}
+		jenkins_url=${job_url%%://*}://${jenkins_url%%/*}
+		echo "-- Jenkins URL: ${jenkins_url}"
+	fi
+
+	# Extract the job name
+	job=${job_url%/}
+	job=${job##*/}
 
 	# Get the job build status
 	tmpf=$(mktemp)
@@ -115,16 +119,22 @@ while IFS= read -r line ; do
 	fi
 	rm -f "${tmpf}"
 
-	echo -e "-- Found ${job} (${status})"
+	echo -e "-- Job: ${job} (${status})"
 
 done < <(curl -s "${results_url}" | grep -E "${re_result}" -A1 | tr '"' "'")
 
 if [ ${dry_run} -eq 1 ] ; then
+	echo "-- Dry run, exiting..."
 	exit
+fi
+
+jenkins_cli=~/.cache/jenkins-cli.jar
+if ! [ -e "${jenkins_cli}" ] ; then
+	wget -O "${jenkins_cli}" "${jenkins_url}"/jnlpJars/jenkins-cli.jar
 fi
 
 echo
 for job in "${jjobs[@]}" ; do
-	echo "-- Build ${job}"
+	echo "-- Trigger: ${job}"
 	java -jar "${jenkins_cli}" -s "${jenkins_url}" build "${job}" || true
 done
