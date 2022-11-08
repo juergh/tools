@@ -16,9 +16,7 @@ for delim in (':', '/'):
         break
 series, package = args.handle.split(delim)
 
-tmp = args.tag.split('-')
-branch = '-'.join(tmp[:2])
-date = '-'.join(tmp[2:])
+branch, date = args.tag.split('_')
 
 title = "{}/{}: Update to upstream raspberrypi {} ({})".format(series, package,
                                                                branch, date)
