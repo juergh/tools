@@ -8,11 +8,15 @@ import yaml
 
 parser = argparse.ArgumentParser()
 parser.add_argument('series', nargs='?')
+parser.add_argument('-i', '--infile',
+                    help='input kernel-series.yaml file')
 parser.add_argument('-o', '--owner', action='store_true',
                     help='show kernel owners')
 args = parser.parse_args()
 
-with open('/srv/git/kteam-tools/info/kernel-series.yaml') as fh:
+if not args.infile:
+    args.infile = '/data/git/kteam-tools/info/kernel-series.yaml'
+with open(args.infile) as fh:
     kernel_series = yaml.safe_load(fh)
 
 for series, series_data in kernel_series.items():
