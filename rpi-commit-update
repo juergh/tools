@@ -29,7 +29,7 @@ while [ $# -gt 0 ] ; do
 	shift
 done
 
-commit=$(git log -1 | grep -P 'from commit [0-9a-f]{40}' | \
+commit=$(git log | grep -m1 -P 'from commit [0-9a-f]{40}' | \
 			 grep -oP '[0-9a-f]{40}' || true)
 if [ -z "${commit}" ] ; then
 	echo "No cherry-pick tag found" >&2
@@ -43,8 +43,8 @@ if [ -z "${tag}" ] ; then
 	exit 1
 fi
 
-branch=${tag%.y-*}.y
-date=${tag#*.y-}
+branch=${tag%_*}
+date=${tag#*_}
 
 subject=$(git log --format=%s "${commit}" -1)
 
