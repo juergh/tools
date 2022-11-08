@@ -6,9 +6,18 @@
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") -h RESULTS_URL
+Usage: $(basename "${0}") -h RESULTS_URL [STATUS[,STATUS...]]
 
 Retrigger RT tests.
+
+Positional arguments:
+  RESULTS_URL    URL of the results page.
+  STATUS         Status of the tests to be retriggered. If not provided,
+                 defaults to F (failed). Can be a comma-separated list of
+                 multiple status values. Valid status values:
+                   D: Deploy failure
+                   F: Failed
+                   I: Incomplete
 
 Optional arguments:
   -d, --dry-run
@@ -18,6 +27,7 @@ EOF
 
 dry_run=0
 results_url=
+status=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -29,11 +39,14 @@ while [ ${#} -gt 0 ] ; do
 			exit
 			;;
 		*)
-			if [ -n "${results_url}" ] ; then
+			if [ -z "${results_url}" ] ; then
+				results_url=${1}
+			elif [ -z "${status}" ] ; then
+				status=${1}
+			else
 				usage
 				exit 2
 			fi
-			results_url=${1}
 			;;
 	esac
 	shift
@@ -44,7 +57,19 @@ if [ -z "${results_url}" ] ; then
 	exit 2
 fi
 
-results='td class="result (noprov|failed)"'
+if [ -z "${status}" ] ; then
+	status="F"
+fi
+
+re_result="td class=\"result ("
+for s in ${status//,/ } ; do
+	case "${s^^}" in
+		D) re_result="${re_result}noprov|" ;;
+		F) re_result="${re_result}failed|" ;;
+		I) re_result="${re_result}incomplete|" ;;
+	esac
+done
+re_result="${re_result%|})\""
 
 jenkins_url=http://10.246.72.9:8080
 
@@ -66,11 +91,16 @@ while IFS= read -r line ; do
 	fi
 	href=${href%%\'*}
 
-	# Get the job name from the URL
-	job=$(curl -s "${base_url}"/"${href}" | grep ">Jenkins Job<" | \
-			  tr '"' "'")
-	job=${job##*/all/job/}
-	job=${job%%/*}
+	# Determine the job name
+	if [ "${href%/}" != "${href}" ] ; then
+		job=${href%/}
+		job=${job##*/}
+	else
+		job=$(curl -s "${base_url}"/"${href}" | grep ">Jenkins Job<" | \
+				  tr '"' "'")
+		job=${job##*/all/job/}
+		job=${job%%/*}
+	fi
 
 	# Get the job build status
 	tmpf=$(mktemp)
@@ -87,7 +117,7 @@ while IFS= read -r line ; do
 
 	echo -e "-- Found ${job} (${status})"
 
-done < <(curl -s "${results_url}" | grep -E "${results}" -A1 | tr '"' "'")
+done < <(curl -s "${results_url}" | grep -E "${re_result}" -A1 | tr '"' "'")
 
 if [ ${dry_run} -eq 1 ] ; then
 	exit
