@@ -344,7 +344,7 @@ Signed-off-by: ${name} <${email}>
 EOF
 	git request-pull "${start}" "$(git config "remote.${remote}.url")" \
 		"${branch}":"${remote_branch}" | \
-		sed 's,git+ssh://[^@]*@git,https://git,'
+		sed 's,git+ssh://.*git,https://git,'
 }
 
 do_build_source()
