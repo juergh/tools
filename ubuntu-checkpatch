@@ -1,0 +1,703 @@
+#!/usr/bin/env python3
+#
+# Patch class
+#
+
+import argparse
+import email
+import logging
+import os
+import re
+import sys
+import yaml
+
+from launchpadlib.launchpad import Launchpad
+
+
+RE_TAG_TYPE = re.compile(r"^(PATCH|PULL)\s*(v\d+)?\s*(\d+/\d+)?$")
+RE_TAG_TARGET = re.compile(r"^([a-zA-Z0-9-.]+/?)+$")
+RE_TAG_FROM_COMMIT = re.compile(r"^\((cherry picked|backported) from commit ([0-9a-f]{40})\s*(.*)?\)$")
+
+# Global ugliness...
+KS = {}
+LP = None
+
+
+def get_kernel_series_yaml(ksfile):
+    """
+    Read kernel-series.yaml and return supported series/sources
+    """
+    if KS:
+        return KS
+
+    log.debug("Read %s", ksfile)
+
+    with open(os.path.expanduser(ksfile), encoding="utf=8") as fh:
+        ks = yaml.safe_load(fh)
+
+    for _, series_data in ks.items():
+        sources = series_data.get("sources")
+        if not sources:
+            continue
+
+        supported = series_data.get("supported", False)
+        development = series_data.get("development", False)
+        if not supported and not development:
+            continue
+
+        for source, source_data in sources.items():
+            source_supported = source_data.get("supported", True)
+            if supported and not source_supported:
+                continue
+
+            codename = series_data["codename"]
+            if codename not in KS:
+                KS[codename] = {}
+            KS[codename][source] = 1
+
+    return KS
+
+
+def get_launchpad():
+    """
+    Log into Launchpad
+    """
+    global LP
+
+    if not LP:
+        LP = Launchpad.login_anonymously("ubuntu-checkpatch", "production",
+                                         version="devel")
+    return LP
+
+
+def log_result(result, text, reason=""):
+    if result in ("fail"):
+        log_res = log.error
+        col = "31"  # red
+    elif result in ("pass"):
+        log_res = log.info
+        col = "32"  # green
+    elif result == "warn":
+        log_res = log.warning
+        col = "33"  # yellow
+    else:
+        log_res = log.info
+        col = "34"  # blue
+
+    col_result = "\033[{}m[{}]\033[0m".format(col, result)
+#    col_reason = "\033[{}m[reason: {}]\033[0m".format(col, reason)
+    col_reason = "\033[{}m[{}]\033[0m".format(col, reason)
+
+    log_res("    %-15s  %s%s%s", col_result, text, "  " if text and reason
+            else "", col_reason if reason else "")
+
+
+class Patch():
+    """
+    Patch class
+    """
+    def __init__(self, infile):
+        self.file = infile         # Patch file name
+
+        # Patch series data
+        self.scount = None         # Patch series count
+        self.cover_letter = False  # Is this a cover letter patch
+
+        # Message header data
+        self.msg_from = None       # Mail message sender/author
+        self.msg_subject = None    # Mail message subject
+        self.msg_body = None       # Mail message body
+
+        # Message subject data
+        self.tags = []             # All tags
+        self.deprecated_tags = []  # Deprecated tags
+        self.invalid_tags = []     # Invalid tags
+        self.target_tags = []      # Target series/source tags
+        self.subject = None        # Patch subject
+        self.type = None           # Patch type (PATCH or PULL)
+        self.version = None        # Patch submission version
+        self.count = None          # Patch count
+        self.total = None          # Total number of patches in series
+
+        # Message body data
+        self.buglinks = []         # Buglinks
+        self.cves = []             # CVE tags
+        self.sob = None            # Last signed-off-by signer
+        self.pr_url = None         # Pull request URL (and branch/tag)
+        self.pr_from = None        # Pull request from commit hash
+        self.pr_to = None          # Pull request to commit hash
+        self.cherry_pick = None    # Cherry picked commit hash
+        self.backport = None       # Backported commit hash
+        self.comments = []         # Modification comment
+        self.provenance = None     # Original commit provenance
+
+    def _parse_msg_subject(self):
+        """
+        Parse the mail subject line
+        """
+        log.debug("Parse mail subject: %s", self.msg_subject)
+
+        # Extract the leading tags from the subject line
+        # This could be as simple as
+        #   tags = subject.split("] ")[0][1:].split("][")
+        # but we make it a little more robust to allow for spaces between tags
+        is_tag = False
+        tag = ""
+        for i, c in enumerate(self.msg_subject):
+            if c == "[":
+                is_tag = True
+            elif c == "]":
+                is_tag = False
+                self.tags.append(tag)
+                tag = ""
+            elif is_tag:
+                tag = tag + c
+            elif c != " ":
+                # Non-whitespace character outside of a tag so end the tag
+                # parsing
+                self.subject = self.msg_subject[i:]
+                break
+
+        # Parse the tags
+        for tag in self.tags:
+            # Deprecated tag
+            if tag == "SRU":
+                self.deprecated_tags.append(tag)
+                continue
+
+            # Check if this is a PATCH/PULL tag
+            m = RE_TAG_TYPE.match(tag)
+            if m:
+                self.type = m.group(1)      # PATCH|PULL
+                if m.group(2) is not None:  # vN
+                    self.version = int(m.group(2)[1:])
+                if m.group(3) is not None:  # x/y
+                    x, y = m.group(3).split("/")
+                    self.count = int(x)
+                    self.total = int(y)
+                    if self.count == 0:
+                        self.cover_letter = True
+                continue
+
+            # Check if this is a series/source target tag
+            m = RE_TAG_TARGET.match(tag)
+            if m:
+                self.target_tags.append(tag)
+                continue
+
+            # Invalid tag
+            self.invalid_tags.append(tag)
+
+    def _parse_msg_body(self):
+        """
+        Parse the mail body
+        """
+        log.debug("Parse mail body")
+
+        body = self.msg_body.split("\n")
+
+        # Parse the commit message
+        sob = 0
+        for i, line in enumerate(body):
+            if line.startswith("diff --git "):
+                break
+            if line.startswith("BugLink: http"):
+                self.buglinks.append(line.split(" ", 2)[1:])
+            elif line.startswith("CVE-"):
+                self.cves.append(line.split(" ")[0])
+            elif line.startswith("Signed-off-by:"):
+                self.sob = line.split(" ", 1)[1]
+                sob = i
+            elif line.startswith("The following changes since commit "):
+                self.pr_from = line.split(" ")[5][:-1]
+            elif line.startswith("for you to fetch changes up to "):
+                self.pr_to = line.split(" ")[7][:-1]
+                self.pr_url = body[i - 2].strip()
+                break
+
+        if sob:
+            # Walk backwards from the last SOB and parse the "trailer"
+            is_comment = False
+            for line in list(reversed(body[:sob])):
+                # Modification comment
+                if line.startswith("[") or line.endswith("]") or is_comment:
+                    self.comments.insert(0, line)
+                    is_comment = not line.startswith("[")
+                    continue
+
+                # cherry picked or backported from (with provenance) tag
+                m = RE_TAG_FROM_COMMIT.match(line)
+                if m:
+                    if m.group(1) == "cherry picked":
+                        self.cherry_pick = m.group(2)
+                    elif m.group(1) == "backported":
+                        self.backport = m.group(2)
+                    self.provenance = m.group(3)
+                    continue
+
+                # End of mail "trailer"
+                break
+
+    def parse(self):
+        """
+        Parse a patch (or pull-request) file
+        """
+        if not os.path.exists(self.file):
+            log.error("File not found: %s", self.file)
+            sys.exit(1)
+
+        log.debug("Parse patch file: %s", self.file)
+
+        with open(self.file, encoding="utf-8") as fh:
+            msg = email.message_from_file(fh)
+
+        # Parse the message header
+        self.msg_from = msg["From"]
+        if msg["Subject"]:
+            self.msg_subject = msg["Subject"].replace("\n", "")
+        self.msg_body = msg.get_payload()
+
+        if not (self.msg_from and self.msg_subject and self.msg_body):
+            log.error("Unable to parse patch file: %s", self.file)
+            sys.exit(1)
+
+        # Parse the message subject and body
+        self._parse_msg_subject()
+        self._parse_msg_body()
+
+        # Print message header data
+        log.debug("                Patch file: %s", self.file)
+        log.debug("              Message from: %s", self.msg_from)
+        log.debug("           Message subject: %s", self.msg_subject)
+
+        # Print patch series data
+        log.debug("        Patch series count: %s", self.scount)
+        log.debug("              Cover letter: %s", self.cover_letter)
+
+        # Print message subject data
+        log.debug("              Subject tags: %s", self.tags)
+        log.debug("           Deprecated tags: %s", self.deprecated_tags)
+        log.debug("              Invalid tags: %s", self.invalid_tags)
+        log.debug(" Series/source target tags: %s", self.target_tags)
+        log.debug("             Patch subject: %s", self.subject)
+        log.debug("                Patch type: %s", self.type)
+        log.debug("             Patch version: %s", self.version)
+        log.debug("               Patch count: %s", self.count)
+        log.debug("               Patch total: %s", self.total)
+
+        # Print message body data
+        log.debug("                  Buglinks: %s", self.buglinks)
+        log.debug("                      CVEs: %s", self.cves)
+        log.debug("             Signed-off-by: %s", self.sob)
+        log.debug("   PR URL (and branch/tag): %s", self.pr_url)
+        log.debug("            PR from commit: %s", self.pr_from)
+        log.debug("           PR up to commit: %s", self.pr_to)
+        log.debug("        Cherry picked from: %s", self.cherry_pick)
+        log.debug("           Backported from: %s", self.backport)
+        log.debug("           Changes comment: %s", self.comments)
+        log.debug("Original commit provenance: %s", self.provenance)
+
+    def check_target(self, ksfile=None):
+        """
+        Check the target tags (series/source) and verify that all combinations
+        are valid by looking them up in the provided kernel-series.yaml
+        """
+        log.info("Check target series/source:")
+
+        if not self.target_tags:
+            log_result("fail", "", reason="missing series/source target tag")
+            return 1
+
+        rc = 0
+        ks = get_kernel_series_yaml(ksfile)
+
+        for target in self.target_tags:
+            log.info("  %s:", target)
+
+            series = []
+            source = []
+            for val in target.split("/"):
+                val = val.lower()
+                if len(val) == 1:
+                    # Single letter series name, find the full series name
+                    name = None
+                    for k in ks:
+                        if k.startswith(val):
+                            name = k
+                            break
+                    if not name:
+                        log_result("fail", val, reason="unknow series letter")
+                        rc += 1
+                    else:
+                        series.append(name)
+                    continue
+
+                if val in ks:
+                    # Full series name
+                    series.append(val)
+                    continue
+
+                # Must be a source name then
+                if not val.startswith("linux"):
+                    val = "linux-" + val
+                source.append(val)
+
+            if not source:
+                # No source specified, so default to "linux"
+                source = ["linux"]
+
+            log.debug("Series: %s", series)
+            log.debug("Source: %s", source)
+
+            # Verify that all series/source combinations are valid
+            valid = []
+            invalid = []
+            for ser in series:
+                for src in source:
+                    ser_src = "{}/{}".format(ser, src)
+                    if src in ks[ser]:
+                        valid.append(ser_src)
+                    else:
+                        invalid.append(ser_src)
+                        rc += 1
+
+            if len(valid):
+                log_result("pass", ", ".join(valid))
+            if len(invalid):
+                log_result("fail", ", ".join(invalid), reason="invalid " +
+                           "series/source combination")
+
+        return rc
+
+    def check_version(self):
+        """
+        Check patch version
+        """
+        log.info("Check patch version:")
+
+        if self.version is None:
+            log_result("skip", "", reason="no version specified")
+            return 0
+
+        ver = "v{}".format(self.version)
+
+        if self.version < 1:
+            log_result("fail", ver, reason="version < 1")
+            return 1
+
+        if self.version == 1:
+            log_result("warn", ver, reason="not required")
+            return 1 << 8
+
+        log_result("pass", ver)
+        return 0
+
+    def check_count_total(self):
+        """
+        Check the patch count and total numbers
+        """
+        log.info("Check patch count/total:")
+
+        if self.count is None:
+            log_result("skip", "", reason="no count/total specified")
+            return 0
+
+        cnt_tot = "{}/{}".format(self.count, self.total)
+
+        if self.count < 0 or self.total < 1 or self.count > self.total:
+            log_result("fail", cnt_tot, reason="invalid count and/or total")
+            return 1
+
+        if self.scount == 1 and self.count == 1 and self.total == 1:
+            log_result("warn", cnt_tot, reason="not required")
+            return 1 << 8
+
+        log_result("pass", cnt_tot)
+        return 0
+
+    def check_buglink_cve(self):
+        """
+        Check for a buglink and/or CVE tag
+        """
+        log.info("Check BugLink and CVE tag:")
+
+        if not self.buglinks and not self.cves:
+            log_result("fail", "", reason="missing buglink/CVE tag")
+            return 1
+
+        if self.cves:
+            log_result("found", ", ".join(self.cves))
+
+        rc = 0
+
+        for bl in self.buglinks:
+            if len(bl) > 1:
+                # BugLink with trailing title
+                if re.match(r"\((LP|SF)#: \d+\).$", bl[1]):
+                    log_result("pass", " ".join(bl))
+                else:
+                    log_result("fail", " ".join(bl), reason="incorrect or " +
+                               "missing LP/SF bug reference")
+                    rc += 1
+            else:
+                try:
+                    # Query LP
+                    bugnum = bl[0].split("/")[-1]
+                    lp = get_launchpad()
+                    title = lp.bugs[bugnum].title
+                    log_result("pass", "{} ({})".format(bl[0], title))
+                except BaseException:
+                    log_result("fail", bl[0], reason="failed to query " +
+                               "Launchpad for bug details")
+                    rc += 1
+
+        return rc
+
+    def check_cherrypick_backport(self):
+        """
+        Check for a cherry-pick or backport tag
+        """
+        log.info("Check cherry-pick or backport tag:")
+
+        if not self.cherry_pick and not self.backport:
+            if self.subject.startswith("UBUNTU: "):
+                log_result("pass", "", reason="missing cherry-pick/backport " +
+                           "tag but patch is an UBUNTU patch")
+                return 0
+            log_result("fail", "", reason="missing cherry-pick/backport tag " +
+                       "and patch is not a SAUCE patch")
+            return 1
+
+        if self.cherry_pick and self.backport:
+            log_result("fail", "", reason="found both a cherry-pick and a " +
+                       "backport tag")
+            return 1
+
+        if self.cherry_pick:
+            commit = self.cherry_pick
+            log_result("pass", "cherry picked from commit {}".format(commit))
+
+        if self.backport:
+            commit = self.backport
+            log_result("pass", "backported from commit {}".format(commit))
+
+        # TODO: Check provenance and upstream commit existence
+        return 0
+
+    def check_signer_comment(self):
+        """
+        Check for a signer comment
+        """
+        log.info("Check signer comment:")
+
+        if self.comments:
+            log_result("pass", " ".join(self.comments))
+            return 0
+
+        if self.backport:
+            log_result("fail", "", reason="missing backport modification " +
+                       "comment")
+            return 1
+
+        log_result("pass", "", reason="no comment necessary")
+        return 0
+
+    def check_sob(self):
+        """
+        Check for a SOB tag
+        """
+        log.info("Check signed-off-by tag:")
+
+        if not self.sob:
+            log_result("fail", "", reason="missing signed-off-by tag")
+            return 1
+
+        log_result("pass", self.sob)
+        return 0
+
+    def check(self, ksfile=None):
+        """
+        Check patch
+        """
+        log.info("Check file %s", self.file)
+
+        rc = 0
+        rc += self.check_target(ksfile=ksfile)
+        rc += self.check_version()
+        rc += self.check_count_total()
+
+        # Skip the rest if this is a cover letter
+        if self.cover_letter:
+            return rc
+
+        rc += self.check_buglink_cve()
+        rc += self.check_cherrypick_backport()
+        rc += self.check_signer_comment()
+        rc += self.check_sob()
+
+        return rc
+
+class PatchSeries():
+    """
+    Patch series class
+    """
+    def __init__(self):
+        self.patches = []
+
+    def append(self, infile):
+        """
+        Append a patch to the series
+        """
+        self.patches.append(Patch(infile))
+
+    def parse(self):
+        """
+        Parse the patch series
+        """
+        for patch in self.patches:
+            patch.scount = len(self.patches)
+            patch.parse()
+
+    def check_type(self):
+        """
+        Check patch series type
+        """
+        log.info("Check patch series type:")
+
+        ps_type = self.patches[0].type
+
+        if ps_type not in ("PATCH", "PULL"):
+            log_result("fail", ps_type, reason="invalid series type")
+            return 1
+
+        if ps_type == "PULL" and len(self.patches) > 1:
+            log_result("fail", ps_type, reason="pull-request consists of " +
+                       "more than one file")
+            return 1
+
+        log_result("pass", ps_type)
+        return 0
+
+    def check_sob(self):
+        """
+        Check for identical SOB tags
+        """
+        rc = 0
+        first = True
+        sob = None
+        for patch in self.patches:
+            if patch.cover_letter:
+                continue
+            if first:
+                first = False
+                sob = patch.sob
+                continue
+            if sob and sob != patch.sob:
+                rc += 1
+        if not sob:
+            rc = 1
+
+        if rc:
+            log_result("fail", "Signed-off-by: <various>",
+                       reason="signed-off-by tags are different")
+            return rc
+
+        log_result("pass", "Signed-off-by: {}".format(sob))
+        return 0
+
+    def check_buglink(self):
+        """
+        Check for identical buglinks
+        """
+        cc = 0
+        buglink = {}
+        for patch in self.patches:
+            if patch.cover_letter:
+                cc = 1
+                continue
+            for bl in patch.buglinks:
+                buglink[bl[0]] = buglink.get(bl[0], 0) + 1
+
+        buglinks = []
+        for key, val in buglink.items():
+            if val == len(self.patches) - cc:
+                buglinks.append(key)
+
+        if not buglinks:
+            log_result("fail", "BugLink: <various>", reason="buglink tags " +
+                       "are different")
+            return 1
+
+        log_result("pass", "BugLink: {}".format(", ".join(buglinks)))
+        return 0
+
+    def check(self, ksfile=None):
+        """
+        Check the patch series
+        """
+        rc = self.check_type()
+        if rc:
+            return rc
+
+        for patch in self.patches:
+            log.info("")
+            rc += patch.check(ksfile=ksfile)
+
+        # Check consistency across all patches
+        log.info("")
+        log.info("Check patch series consistency:")
+        rc += self.check_sob()
+        rc += self.check_buglink()
+        # TODO: check monotonic increase of patch number
+
+        return rc
+
+
+def main(args):
+    # Create the patch series
+    ps = PatchSeries()
+    for infile in sorted(args.infile):
+        ps.append(infile)
+
+    # Parse and check the patch series
+    ps.parse()
+    rc = ps.check(ksfile="~/.cache/kernel-series.yaml")
+
+    return rc
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-v", "--verbose", action="store_true", default=False)
+    parser.add_argument("infile", metavar="INFILE", nargs="+")
+    args = parser.parse_args()
+
+    # Set up the logger
+    log = logging.getLogger("ubuntu-checkpatch")
+    handler = logging.StreamHandler()
+    if args.verbose:
+        log.setLevel(logging.DEBUG)
+        handler.setFormatter(logging.Formatter("%(levelname)7s -- %(message)s"))
+    else:
+        log.setLevel(logging.INFO)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+    log.addHandler(handler)
+
+    rc = 1
+    try:
+        rc = main(args)
+    except BaseException as ex:
+        if args.verbose:
+            raise ex
+        log.error("")
+        log.error("Error: %s", ex)
+
+    err = rc & 0xff
+    warn = (rc >> 8) & 0xff
+
+    # Print final results
+    log.info("")
+    log.info("Found %s warning%s", warn, "" if warn == 1 else "s")
+    log.info("Found %s error%s", err, "" if err == 1 else "s")
+
+    sys.exit(rc)
