@@ -110,8 +110,13 @@ class Check():
     def result(self, result, comment):
         self.results.append([result, comment])
 
-    def log(self):
-        for result, comment in self.results:
+    def log(self, num):
+        for i, (result, comment) in enumerate(self.results):
+            if len(self.results) == 1:
+                checknum = num
+            else:
+                checknum = "{}.{}".format(num, i + 1)
+
             if result == FAIL:
                 log = LOG.error
                 col = "31"  # red
@@ -126,7 +131,9 @@ class Check():
                 col = "34"  # blue
 
             result = "\033[{}m[{}]\033[0m".format(col, result)
-            log("Check %-19s  %s  %s", self.name, result, comment)
+
+            log("  Check #%-3s  %-19s  %s  %s", checknum, self.name, result,
+                comment)
 
 #    def run(self):
 #        pass
@@ -151,7 +158,6 @@ class CheckPatchTarget(Check):
         rc = 0
 
         for target in self.patch.target_tags:
-            invalid = []
             series = []
             source = []
             for val in target.split("/"):
@@ -165,7 +171,7 @@ class CheckPatchTarget(Check):
                             full_name = name
                             break
                     if not full_name:
-                        invalid.append(val)
+                        self.result(FAIL, "invalid series letter: " + val)
                         rc += 1
                     else:
                         series.append(full_name)
@@ -188,29 +194,17 @@ class CheckPatchTarget(Check):
             LOG.debug("Series: %s", series)
             LOG.debug("Source: %s", source)
 
-            # Invalid single letter series names
-            if invalid:
-                self.result(FAIL, "invalid series letters: {}".format(
-                    ", ".join(invalid)))
-
             # Verify that all series/source combinations are valid
-            valid = []
-            invalid = []
             for ser in series:
                 for src in source:
                     ser_src = "{}/{}".format(ser, src)
                     if src in self.ks[ser]:
-                        valid.append(ser_src)
+                        self.result(PASS, "valid series/source target: " +
+                                    ser_src)
                     else:
-                        invalid.append(ser_src)
+                        self.result(FAIL, "invalid series/source target: " +
+                                    ser_src)
                         rc += 1
-
-            if invalid:
-                self.result(FAIL, "invalid targets: {}".format(
-                    ", ".join(invalid)))
-            if valid:
-                self.result(PASS, "valid targets: {}".format(
-                    ", ".join(valid)))
 
         return rc
 
@@ -229,14 +223,14 @@ class CheckPatchVersion(Check):
         ver = self.patch.version
 
         if ver < 1:
-            self.result(FAIL, "invalid version: {}".format(ver))
+            self.result(FAIL, "invalid version: " + str(ver))
             return 1
 
         if ver == 1:
-            self.result(WARN, "unnecessary version: {}".format(ver))
+            self.result(WARN, "unnecessary version: " + str(ver))
             return 1 << 8
 
-        self.result(PASS, "valid version: {}".format(ver))
+        self.result(PASS, "valid version: " + str(ver))
         return 0
 
 
@@ -255,15 +249,15 @@ class CheckPatchCountTotal(Check):
 
         if ((self.patch.count < 0 or self.patch.total < 1 or
              self.patch.count > self.patch.total)):
-            self.result(FAIL, "invalid count and/or total: {}".format(cnt_tot))
+            self.result(FAIL, "invalid count and/or total: " + cnt_tot)
             return 1
 
         if ((self.patch.scount == 1 and self.patch.count == 1 and
              self.patch.total == 1)):
-            self.result(WARN, "unnecessary count/total: {}".format(cnt_tot))
+            self.result(WARN, "unnecessary count/total: " + cnt_tot)
             return 1 << 8
 
-        self.result(PASS, "valid count/total: {}".format(cnt_tot))
+        self.result(PASS, "valid count/total: " + cnt_tot)
         return 0
 
 
@@ -279,12 +273,12 @@ class CheckBugLinkCVE(Check):
         self.name = "buglink_cve"
 
         if not self.patch.buglinks and not self.patch.cves:
-            self.result(FAIL, "missing buglink/CVE tag")
+            self.result(FAIL, "missing BugLink/CVE tag")
             return 1
 
-        if self.patch.cves:
+        for cve in self.patch.cves:
             # TODO: Check CVE tag format
-            self.result(PASS, "CVEs: {}".format(", ".join(self.patch.cves)))
+            self.result(PASS, "valid CVE: " + cve)
 
         rc = 0
 
@@ -292,21 +286,20 @@ class CheckBugLinkCVE(Check):
             if len(link) > 1:
                 # BugLink with trailing title
                 if re.match(r"\((LP|SF)#: \d+\).$", link[1]):
-                    self.result(PASS, "valid BugLink: {}".format(
-                        " ".join(link)))
+                    self.result(PASS, "valid BugLink: " + " ".join(link))
                 else:
                     self.result(FAIL, "incorrect or missing LP/SF bug " +
-                                "reference: {}".format(" ".join(link)))
+                                "reference: " + " ".join(link))
                     rc += 1
             else:
                 try:
-                    # Query LP
+                    # Query Launchpad
                     bugnum = link[0].split("/")[-1]
                     title = self.lp.bugs[bugnum].title
-                    self.result(PASS, "valid Buglink: {} ({})".format(
+                    self.result(PASS, "valid BugLink: {} ({})".format(
                         link[0], title))
                 except BaseException:
-                    self.result(FAIL, "invalid Buglink: {}".format(link[0]))
+                    self.result(FAIL, "invalid BugLink: " + link[0])
                     rc += 1
 
         return rc
@@ -333,11 +326,11 @@ class CheckCherrypickBackport(Check):
 
         if self.patch.cherrypick:
             commit = self.patch.cherrypick
-            self.result(PASS, "valid cherrypick from {}".format(commit))
+            self.result(PASS, "valid cherrypick from commit: " + commit)
 
         if self.patch.backport:
             commit = self.patch.backport
-            self.result(PASS, "valid backport from {}".format(commit))
+            self.result(PASS, "valid backport from commit: " + commit)
 
         # TODO: Check provenance and upstream commit existence
         return 0
@@ -351,8 +344,8 @@ class CheckSignerComment(Check):
         self.name = "signer_comment"
 
         if self.patch.comments:
-            self.result(PASS, "valid comment: {}".format(
-                " ".join(self.patch.comments)))
+            self.result(PASS, "valid comment: " +
+                        " ".join(self.patch.comments))
             return 0
 
         if self.patch.backport:
@@ -375,8 +368,7 @@ class CheckSOB(Check):
             return 1
 
         # TODO: Check SOB format
-        self.result(PASS, "valid Signed-off-by tag: {}".format(
-            self.patch.sob))
+        self.result(PASS, "valid Signed-off-by tag: " + self.patch.sob)
         return 0
 
 
@@ -606,9 +598,9 @@ class Patch():
             ]
 
         rc = 0
-        for check in checks:
+        for i, check in enumerate(checks):
             rc += check.run()
-            check.log()
+            check.log(i + 1)
 
         return rc
 
@@ -678,7 +670,7 @@ class PatchSeries():
                        reason="signed-off-by tags are different")
             return rc
 
-        log_result("pass", "Signed-off-by: {}".format(sob))
+        log_result("pass", "Signed-off-by: " + sob)
         return 0
 
     def check_buglink(self):
@@ -704,7 +696,7 @@ class PatchSeries():
                        "are different")
             return 1
 
-        log_result("pass", "BugLink: {}".format(", ".join(buglinks)))
+        log_result("pass", "BugLink: " + ", ".join(buglinks))
         return 0
 
     def check(self, ksfile=None):
