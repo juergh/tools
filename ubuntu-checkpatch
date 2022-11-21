@@ -18,6 +18,12 @@ RE_TAG_TYPE = re.compile(r"^(PATCH|PULL)\s*(v\d+)?\s*(\d+/\d+)?$")
 RE_TAG_TARGET = re.compile(r"^([a-zA-Z0-9-.]+/?)+$")
 RE_TAG_FROM_COMMIT = re.compile(r"^\((cherry picked|backported) from commit ([0-9a-f]{40})\s*(.*)?\)$")
 
+# Check results
+SKIP = "skip"
+PASS = "pass"
+FAIL = "fail"
+WARN = "warn"
+
 # Global ugliness...
 KS = {}
 LP = None
@@ -92,6 +98,288 @@ def log_result(result, text, reason=""):
             else "", col_reason if reason else "")
 
 
+class Check():
+    """
+    Base check class
+    """
+    def __init__(self, patch):
+        self.patch = patch
+        self.name = None
+        self.results = []
+
+    def result(self, result, comment):
+        self.results.append([result, comment])
+
+    def log(self):
+        for result, comment in self.results:
+            if result == FAIL:
+                log = LOG.error
+                col = "31"  # red
+            elif result == PASS:
+                log = LOG.info
+                col = "32"  # green
+            elif result == WARN:
+                log = LOG.warning
+                col = "33"  # yellow
+            else:
+                log = LOG.info
+                col = "34"  # blue
+
+            result = "\033[{}m[{}]\033[0m".format(col, result)
+            log("Check %-19s  %s  %s", self.name, result, comment)
+
+#    def run(self):
+#        pass
+
+
+class CheckPatchTarget(Check):
+    """
+    Check the target tags (series/source) and verify that all combinations
+    are valid by looking them up in the provided kernel-series.yaml
+    """
+    def __init__(self, patch, ks):
+        super().__init__(patch)
+        self.ks = ks
+
+    def run(self):
+        self.name = "patch_target"
+
+        if not self.patch.target_tags:
+            self.result(FAIL, "missing series/source target tag")
+            return 1
+
+        rc = 0
+
+        for target in self.patch.target_tags:
+            invalid = []
+            series = []
+            source = []
+            for val in target.split("/"):
+                val = val.lower()
+
+                # Single letter series name, find the full series name
+                if len(val) == 1:
+                    full_name = None
+                    for name in self.ks:
+                        if name.startswith(val):
+                            full_name = name
+                            break
+                    if not full_name:
+                        invalid.append(val)
+                        rc += 1
+                    else:
+                        series.append(full_name)
+                    continue
+
+                # Full series name
+                if val in self.ks:
+                    series.append(val)
+                    continue
+
+                # Must be a source name then
+                if not val.startswith("linux"):
+                    val = "linux-" + val
+                source.append(val)
+
+            # No source specified, so default to "linux"
+            if not source:
+                source = ["linux"]
+
+            LOG.debug("Series: %s", series)
+            LOG.debug("Source: %s", source)
+
+            # Invalid single letter series names
+            if invalid:
+                self.result(FAIL, "invalid series letters: {}".format(
+                    ", ".join(invalid)))
+
+            # Verify that all series/source combinations are valid
+            valid = []
+            invalid = []
+            for ser in series:
+                for src in source:
+                    ser_src = "{}/{}".format(ser, src)
+                    if src in self.ks[ser]:
+                        valid.append(ser_src)
+                    else:
+                        invalid.append(ser_src)
+                        rc += 1
+
+            if invalid:
+                self.result(FAIL, "invalid targets: {}".format(
+                    ", ".join(invalid)))
+            if valid:
+                self.result(PASS, "valid targets: {}".format(
+                    ", ".join(valid)))
+
+        return rc
+
+
+class CheckPatchVersion(Check):
+    """
+    Check patch version
+    """
+    def run(self):
+        self.name = "patch_version"
+
+        if self.patch.version is None:
+            self.result(SKIP, "no version specified")
+            return 0
+
+        ver = self.patch.version
+
+        if ver < 1:
+            self.result(FAIL, "invalid version: {}".format(ver))
+            return 1
+
+        if ver == 1:
+            self.result(WARN, "unnecessary version: {}".format(ver))
+            return 1 << 8
+
+        self.result(PASS, "valid version: {}".format(ver))
+        return 0
+
+
+class CheckPatchCountTotal(Check):
+    """
+    Check patch count and total number
+    """
+    def run(self):
+        self.name = "patch_count_total"
+
+        if self.patch.count is None:
+            self.result(SKIP, "no count/total specified")
+            return 0
+
+        cnt_tot = "{}/{}".format(self.patch.count, self.patch.total)
+
+        if ((self.patch.count < 0 or self.patch.total < 1 or
+             self.patch.count > self.patch.total)):
+            self.result(FAIL, "invalid count and/or total: {}".format(cnt_tot))
+            return 1
+
+        if ((self.patch.scount == 1 and self.patch.count == 1 and
+             self.patch.total == 1)):
+            self.result(WARN, "unnecessary count/total: {}".format(cnt_tot))
+            return 1 << 8
+
+        self.result(PASS, "valid count/total: {}".format(cnt_tot))
+        return 0
+
+
+class CheckBugLinkCVE(Check):
+    """
+    Check buglink and/or CVE tags
+    """
+    def __init__(self, patch, lp):
+        super().__init__(patch)
+        self.lp = lp
+
+    def run(self):
+        self.name = "buglink_cve"
+
+        if not self.patch.buglinks and not self.patch.cves:
+            self.result(FAIL, "missing buglink/CVE tag")
+            return 1
+
+        if self.patch.cves:
+            # TODO: Check CVE tag format
+            self.result(PASS, "CVEs: {}".format(", ".join(self.patch.cves)))
+
+        rc = 0
+
+        for link in self.patch.buglinks:
+            if len(link) > 1:
+                # BugLink with trailing title
+                if re.match(r"\((LP|SF)#: \d+\).$", link[1]):
+                    self.result(PASS, "valid BugLink: {}".format(
+                        " ".join(link)))
+                else:
+                    self.result(FAIL, "incorrect or missing LP/SF bug " +
+                                "reference: {}".format(" ".join(link)))
+                    rc += 1
+            else:
+                try:
+                    # Query LP
+                    bugnum = link[0].split("/")[-1]
+                    title = self.lp.bugs[bugnum].title
+                    self.result(PASS, "valid Buglink: {} ({})".format(
+                        link[0], title))
+                except BaseException:
+                    self.result(FAIL, "invalid Buglink: {}".format(link[0]))
+                    rc += 1
+
+        return rc
+
+
+class CheckCherrypickBackport(Check):
+    """
+    Check cherrypick and backport tag
+    """
+    def run(self):
+        self.name = "cherrypick_backport"
+
+        if not self.patch.cherrypick and not self.patch.backport:
+            if self.patch.subject.startswith("UBUNTU: "):
+                self.result(PASS, "missing cherrypick/backport tag but " +
+                            "patch is an UBUNTU patch")
+                return 0
+            self.result(FAIL, "missing cherrypick/backport tag")
+            return 1
+
+        if self.patch.cherrypick and self.patch.backport:
+            self.result(FAIL, "cherrypick and backport tag present")
+            return 1
+
+        if self.patch.cherrypick:
+            commit = self.patch.cherrypick
+            self.result(PASS, "valid cherrypick from {}".format(commit))
+
+        if self.patch.backport:
+            commit = self.patch.backport
+            self.result(PASS, "valid backport from {}".format(commit))
+
+        # TODO: Check provenance and upstream commit existence
+        return 0
+
+
+class CheckSignerComment(Check):
+    """
+    Check signer comment
+    """
+    def run(self):
+        self.name = "signer_comment"
+
+        if self.patch.comments:
+            self.result(PASS, "valid comment: {}".format(
+                " ".join(self.patch.comments)))
+            return 0
+
+        if self.patch.backport:
+            self.result(FAIL, "missing backport modification comment")
+            return 1
+
+        self.result(PASS, "no comment necessary")
+        return 0
+
+
+class CheckSOB(Check):
+    """
+    Check SOB tag
+    """
+    def run(self):
+        self.name = "sob"
+
+        if not self.patch.sob:
+            self.result(FAIL, "missing signed-off-by tag")
+            return 1
+
+        # TODO: Check SOB format
+        self.result(PASS, "valid Signed-off-by tag: {}".format(
+            self.patch.sob))
+        return 0
+
+
 class Patch():
     """
     Patch class
@@ -126,7 +414,7 @@ class Patch():
         self.pr_url = None         # Pull request URL (and branch/tag)
         self.pr_from = None        # Pull request from commit hash
         self.pr_to = None          # Pull request to commit hash
-        self.cherry_pick = None    # Cherry picked commit hash
+        self.cherrypick = None     # Cherry picked commit hash
         self.backport = None       # Backported commit hash
         self.comments = []         # Modification comment
         self.provenance = None     # Original commit provenance
@@ -229,7 +517,7 @@ class Patch():
                 m = RE_TAG_FROM_COMMIT.match(line)
                 if m:
                     if m.group(1) == "cherry picked":
-                        self.cherry_pick = m.group(2)
+                        self.cherrypick = m.group(2)
                     elif m.group(1) == "backported":
                         self.backport = m.group(2)
                     self.provenance = m.group(3)
@@ -292,250 +580,38 @@ class Patch():
         LOG.debug("   PR URL (and branch/tag): %s", self.pr_url)
         LOG.debug("            PR from commit: %s", self.pr_from)
         LOG.debug("           PR up to commit: %s", self.pr_to)
-        LOG.debug("        Cherry picked from: %s", self.cherry_pick)
+        LOG.debug("         Cherrypicked from: %s", self.cherrypick)
         LOG.debug("           Backported from: %s", self.backport)
         LOG.debug("           Changes comment: %s", self.comments)
         LOG.debug("Original commit provenance: %s", self.provenance)
-
-    def check_target(self, ksfile=None):
-        """
-        Check the target tags (series/source) and verify that all combinations
-        are valid by looking them up in the provided kernel-series.yaml
-        """
-        LOG.info("Check target series/source:")
-
-        if not self.target_tags:
-            log_result("fail", "", reason="missing series/source target tag")
-            return 1
-
-        rc = 0
-        ks = get_kernel_series_yaml(ksfile)
-
-        for target in self.target_tags:
-            LOG.info("  %s:", target)
-
-            series = []
-            source = []
-            for val in target.split("/"):
-                val = val.lower()
-                if len(val) == 1:
-                    # Single letter series name, find the full series name
-                    name = None
-                    for k in ks:
-                        if k.startswith(val):
-                            name = k
-                            break
-                    if not name:
-                        log_result("fail", val, reason="unknow series letter")
-                        rc += 1
-                    else:
-                        series.append(name)
-                    continue
-
-                if val in ks:
-                    # Full series name
-                    series.append(val)
-                    continue
-
-                # Must be a source name then
-                if not val.startswith("linux"):
-                    val = "linux-" + val
-                source.append(val)
-
-            if not source:
-                # No source specified, so default to "linux"
-                source = ["linux"]
-
-            LOG.debug("Series: %s", series)
-            LOG.debug("Source: %s", source)
-
-            # Verify that all series/source combinations are valid
-            valid = []
-            invalid = []
-            for ser in series:
-                for src in source:
-                    ser_src = "{}/{}".format(ser, src)
-                    if src in ks[ser]:
-                        valid.append(ser_src)
-                    else:
-                        invalid.append(ser_src)
-                        rc += 1
-
-            if len(valid):
-                log_result("pass", ", ".join(valid))
-            if len(invalid):
-                log_result("fail", ", ".join(invalid), reason="invalid " +
-                           "series/source combination")
-
-        return rc
-
-    def check_version(self):
-        """
-        Check patch version
-        """
-        LOG.info("Check patch version:")
-
-        if self.version is None:
-            log_result("skip", "", reason="no version specified")
-            return 0
-
-        ver = "v{}".format(self.version)
-
-        if self.version < 1:
-            log_result("fail", ver, reason="version < 1")
-            return 1
-
-        if self.version == 1:
-            log_result("warn", ver, reason="not required")
-            return 1 << 8
-
-        log_result("pass", ver)
-        return 0
-
-    def check_count_total(self):
-        """
-        Check the patch count and total numbers
-        """
-        LOG.info("Check patch count/total:")
-
-        if self.count is None:
-            log_result("skip", "", reason="no count/total specified")
-            return 0
-
-        cnt_tot = "{}/{}".format(self.count, self.total)
-
-        if self.count < 0 or self.total < 1 or self.count > self.total:
-            log_result("fail", cnt_tot, reason="invalid count and/or total")
-            return 1
-
-        if self.scount == 1 and self.count == 1 and self.total == 1:
-            log_result("warn", cnt_tot, reason="not required")
-            return 1 << 8
-
-        log_result("pass", cnt_tot)
-        return 0
-
-    def check_buglink_cve(self):
-        """
-        Check for a buglink and/or CVE tag
-        """
-        LOG.info("Check BugLink and CVE tag:")
-
-        if not self.buglinks and not self.cves:
-            log_result("fail", "", reason="missing buglink/CVE tag")
-            return 1
-
-        if self.cves:
-            log_result("found", ", ".join(self.cves))
-
-        rc = 0
-
-        for bl in self.buglinks:
-            if len(bl) > 1:
-                # BugLink with trailing title
-                if re.match(r"\((LP|SF)#: \d+\).$", bl[1]):
-                    log_result("pass", " ".join(bl))
-                else:
-                    log_result("fail", " ".join(bl), reason="incorrect or " +
-                               "missing LP/SF bug reference")
-                    rc += 1
-            else:
-                try:
-                    # Query LP
-                    bugnum = bl[0].split("/")[-1]
-                    lp = get_launchpad()
-                    title = lp.bugs[bugnum].title
-                    log_result("pass", "{} ({})".format(bl[0], title))
-                except BaseException:
-                    log_result("fail", bl[0], reason="failed to query " +
-                               "Launchpad for bug details")
-                    rc += 1
-
-        return rc
-
-    def check_cherrypick_backport(self):
-        """
-        Check for a cherry-pick or backport tag
-        """
-        LOG.info("Check cherry-pick or backport tag:")
-
-        if not self.cherry_pick and not self.backport:
-            if self.subject.startswith("UBUNTU: "):
-                log_result("pass", "", reason="missing cherry-pick/backport " +
-                           "tag but patch is an UBUNTU patch")
-                return 0
-            log_result("fail", "", reason="missing cherry-pick/backport tag " +
-                       "and patch is not a SAUCE patch")
-            return 1
-
-        if self.cherry_pick and self.backport:
-            log_result("fail", "", reason="found both a cherry-pick and a " +
-                       "backport tag")
-            return 1
-
-        if self.cherry_pick:
-            commit = self.cherry_pick
-            log_result("pass", "cherry picked from commit {}".format(commit))
-
-        if self.backport:
-            commit = self.backport
-            log_result("pass", "backported from commit {}".format(commit))
-
-        # TODO: Check provenance and upstream commit existence
-        return 0
-
-    def check_signer_comment(self):
-        """
-        Check for a signer comment
-        """
-        LOG.info("Check signer comment:")
-
-        if self.comments:
-            log_result("pass", " ".join(self.comments))
-            return 0
-
-        if self.backport:
-            log_result("fail", "", reason="missing backport modification " +
-                       "comment")
-            return 1
-
-        log_result("pass", "", reason="no comment necessary")
-        return 0
-
-    def check_sob(self):
-        """
-        Check for a SOB tag
-        """
-        LOG.info("Check signed-off-by tag:")
-
-        if not self.sob:
-            log_result("fail", "", reason="missing signed-off-by tag")
-            return 1
-
-        log_result("pass", self.sob)
-        return 0
 
     def check(self, ksfile=None):
         """
         Check patch
         """
-        LOG.info("Check file %s", self.file)
+        LOG.info("File: %s", self.file)
+
+        checks = [
+            CheckPatchTarget(self, ks=get_kernel_series_yaml(ksfile)),
+            CheckPatchVersion(self),
+            CheckPatchCountTotal(self),
+        ]
+
+        if not self.cover_letter:
+            checks += [
+                CheckBugLinkCVE(self, lp=get_launchpad()),
+                CheckCherrypickBackport(self),
+                CheckSignerComment(self),
+                CheckSOB(self),
+            ]
 
         rc = 0
-        rc += self.check_target(ksfile=ksfile)
-        rc += self.check_version()
-        rc += self.check_count_total()
-
-        # Skip the rest if this is a cover letter
-        if self.cover_letter:
-            return rc
-
-        rc += self.check_buglink_cve()
-        rc += self.check_cherrypick_backport()
-        rc += self.check_signer_comment()
-        rc += self.check_sob()
+        for check in checks:
+            rc += check.run()
+            check.log()
 
         return rc
+
 
 class PatchSeries():
     """
