@@ -30,7 +30,7 @@ def get_kernel_series_yaml(ksfile):
     if KS:
         return KS
 
-    log.debug("Read %s", ksfile)
+    LOG.debug("Read %s", ksfile)
 
     with open(os.path.expanduser(ksfile), encoding="utf=8") as fh:
         ks = yaml.safe_load(fh)
@@ -72,16 +72,16 @@ def get_launchpad():
 
 def log_result(result, text, reason=""):
     if result in ("fail"):
-        log_res = log.error
+        log_res = LOG.error
         col = "31"  # red
     elif result in ("pass"):
-        log_res = log.info
+        log_res = LOG.info
         col = "32"  # green
     elif result == "warn":
-        log_res = log.warning
+        log_res = LOG.warning
         col = "33"  # yellow
     else:
-        log_res = log.info
+        log_res = LOG.info
         col = "34"  # blue
 
     col_result = "\033[{}m[{}]\033[0m".format(col, result)
@@ -135,7 +135,7 @@ class Patch():
         """
         Parse the mail subject line
         """
-        log.debug("Parse mail subject: %s", self.msg_subject)
+        LOG.debug("Parse mail subject: %s", self.msg_subject)
 
         # Extract the leading tags from the subject line
         # This could be as simple as
@@ -192,7 +192,7 @@ class Patch():
         """
         Parse the mail body
         """
-        log.debug("Parse mail body")
+        LOG.debug("Parse mail body")
 
         body = self.msg_body.split("\n")
 
@@ -243,10 +243,10 @@ class Patch():
         Parse a patch (or pull-request) file
         """
         if not os.path.exists(self.file):
-            log.error("File not found: %s", self.file)
+            LOG.error("File not found: %s", self.file)
             sys.exit(1)
 
-        log.debug("Parse patch file: %s", self.file)
+        LOG.debug("Parse patch file: %s", self.file)
 
         with open(self.file, encoding="utf-8") as fh:
             msg = email.message_from_file(fh)
@@ -258,7 +258,7 @@ class Patch():
         self.msg_body = msg.get_payload()
 
         if not (self.msg_from and self.msg_subject and self.msg_body):
-            log.error("Unable to parse patch file: %s", self.file)
+            LOG.error("Unable to parse patch file: %s", self.file)
             sys.exit(1)
 
         # Parse the message subject and body
@@ -266,43 +266,43 @@ class Patch():
         self._parse_msg_body()
 
         # Print message header data
-        log.debug("                Patch file: %s", self.file)
-        log.debug("              Message from: %s", self.msg_from)
-        log.debug("           Message subject: %s", self.msg_subject)
+        LOG.debug("                Patch file: %s", self.file)
+        LOG.debug("              Message from: %s", self.msg_from)
+        LOG.debug("           Message subject: %s", self.msg_subject)
 
         # Print patch series data
-        log.debug("        Patch series count: %s", self.scount)
-        log.debug("              Cover letter: %s", self.cover_letter)
+        LOG.debug("        Patch series count: %s", self.scount)
+        LOG.debug("              Cover letter: %s", self.cover_letter)
 
         # Print message subject data
-        log.debug("              Subject tags: %s", self.tags)
-        log.debug("           Deprecated tags: %s", self.deprecated_tags)
-        log.debug("              Invalid tags: %s", self.invalid_tags)
-        log.debug(" Series/source target tags: %s", self.target_tags)
-        log.debug("             Patch subject: %s", self.subject)
-        log.debug("                Patch type: %s", self.type)
-        log.debug("             Patch version: %s", self.version)
-        log.debug("               Patch count: %s", self.count)
-        log.debug("               Patch total: %s", self.total)
+        LOG.debug("              Subject tags: %s", self.tags)
+        LOG.debug("           Deprecated tags: %s", self.deprecated_tags)
+        LOG.debug("              Invalid tags: %s", self.invalid_tags)
+        LOG.debug(" Series/source target tags: %s", self.target_tags)
+        LOG.debug("             Patch subject: %s", self.subject)
+        LOG.debug("                Patch type: %s", self.type)
+        LOG.debug("             Patch version: %s", self.version)
+        LOG.debug("               Patch count: %s", self.count)
+        LOG.debug("               Patch total: %s", self.total)
 
         # Print message body data
-        log.debug("                  Buglinks: %s", self.buglinks)
-        log.debug("                      CVEs: %s", self.cves)
-        log.debug("             Signed-off-by: %s", self.sob)
-        log.debug("   PR URL (and branch/tag): %s", self.pr_url)
-        log.debug("            PR from commit: %s", self.pr_from)
-        log.debug("           PR up to commit: %s", self.pr_to)
-        log.debug("        Cherry picked from: %s", self.cherry_pick)
-        log.debug("           Backported from: %s", self.backport)
-        log.debug("           Changes comment: %s", self.comments)
-        log.debug("Original commit provenance: %s", self.provenance)
+        LOG.debug("                  Buglinks: %s", self.buglinks)
+        LOG.debug("                      CVEs: %s", self.cves)
+        LOG.debug("             Signed-off-by: %s", self.sob)
+        LOG.debug("   PR URL (and branch/tag): %s", self.pr_url)
+        LOG.debug("            PR from commit: %s", self.pr_from)
+        LOG.debug("           PR up to commit: %s", self.pr_to)
+        LOG.debug("        Cherry picked from: %s", self.cherry_pick)
+        LOG.debug("           Backported from: %s", self.backport)
+        LOG.debug("           Changes comment: %s", self.comments)
+        LOG.debug("Original commit provenance: %s", self.provenance)
 
     def check_target(self, ksfile=None):
         """
         Check the target tags (series/source) and verify that all combinations
         are valid by looking them up in the provided kernel-series.yaml
         """
-        log.info("Check target series/source:")
+        LOG.info("Check target series/source:")
 
         if not self.target_tags:
             log_result("fail", "", reason="missing series/source target tag")
@@ -312,7 +312,7 @@ class Patch():
         ks = get_kernel_series_yaml(ksfile)
 
         for target in self.target_tags:
-            log.info("  %s:", target)
+            LOG.info("  %s:", target)
 
             series = []
             source = []
@@ -346,8 +346,8 @@ class Patch():
                 # No source specified, so default to "linux"
                 source = ["linux"]
 
-            log.debug("Series: %s", series)
-            log.debug("Source: %s", source)
+            LOG.debug("Series: %s", series)
+            LOG.debug("Source: %s", source)
 
             # Verify that all series/source combinations are valid
             valid = []
@@ -373,7 +373,7 @@ class Patch():
         """
         Check patch version
         """
-        log.info("Check patch version:")
+        LOG.info("Check patch version:")
 
         if self.version is None:
             log_result("skip", "", reason="no version specified")
@@ -396,7 +396,7 @@ class Patch():
         """
         Check the patch count and total numbers
         """
-        log.info("Check patch count/total:")
+        LOG.info("Check patch count/total:")
 
         if self.count is None:
             log_result("skip", "", reason="no count/total specified")
@@ -419,7 +419,7 @@ class Patch():
         """
         Check for a buglink and/or CVE tag
         """
-        log.info("Check BugLink and CVE tag:")
+        LOG.info("Check BugLink and CVE tag:")
 
         if not self.buglinks and not self.cves:
             log_result("fail", "", reason="missing buglink/CVE tag")
@@ -457,7 +457,7 @@ class Patch():
         """
         Check for a cherry-pick or backport tag
         """
-        log.info("Check cherry-pick or backport tag:")
+        LOG.info("Check cherry-pick or backport tag:")
 
         if not self.cherry_pick and not self.backport:
             if self.subject.startswith("UBUNTU: "):
@@ -488,7 +488,7 @@ class Patch():
         """
         Check for a signer comment
         """
-        log.info("Check signer comment:")
+        LOG.info("Check signer comment:")
 
         if self.comments:
             log_result("pass", " ".join(self.comments))
@@ -506,7 +506,7 @@ class Patch():
         """
         Check for a SOB tag
         """
-        log.info("Check signed-off-by tag:")
+        LOG.info("Check signed-off-by tag:")
 
         if not self.sob:
             log_result("fail", "", reason="missing signed-off-by tag")
@@ -519,7 +519,7 @@ class Patch():
         """
         Check patch
         """
-        log.info("Check file %s", self.file)
+        LOG.info("Check file %s", self.file)
 
         rc = 0
         rc += self.check_target(ksfile=ksfile)
@@ -562,7 +562,7 @@ class PatchSeries():
         """
         Check patch series type
         """
-        log.info("Check patch series type:")
+        LOG.info("Check patch series type:")
 
         ps_type = self.patches[0].type
 
@@ -640,12 +640,12 @@ class PatchSeries():
             return rc
 
         for patch in self.patches:
-            log.info("")
+            LOG.info("")
             rc += patch.check(ksfile=ksfile)
 
         # Check consistency across all patches
-        log.info("")
-        log.info("Check patch series consistency:")
+        LOG.info("")
+        LOG.info("Check patch series consistency:")
         rc += self.check_sob()
         rc += self.check_buglink()
         # TODO: check monotonic increase of patch number
@@ -673,15 +673,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Set up the logger
-    log = logging.getLogger("ubuntu-checkpatch")
+    LOG = logging.getLogger("ubuntu-checkpatch")
     handler = logging.StreamHandler()
     if args.verbose:
-        log.setLevel(logging.DEBUG)
+        LOG.setLevel(logging.DEBUG)
         handler.setFormatter(logging.Formatter("%(levelname)7s -- %(message)s"))
     else:
-        log.setLevel(logging.INFO)
+        LOG.setLevel(logging.INFO)
         handler.setFormatter(logging.Formatter("%(message)s"))
-    log.addHandler(handler)
+    LOG.addHandler(handler)
 
     rc = 1
     try:
@@ -689,15 +689,15 @@ if __name__ == "__main__":
     except BaseException as ex:
         if args.verbose:
             raise ex
-        log.error("")
-        log.error("Error: %s", ex)
+        LOG.error("")
+        LOG.error("Error: %s", ex)
 
     err = rc & 0xff
     warn = (rc >> 8) & 0xff
 
     # Print final results
-    log.info("")
-    log.info("Found %s warning%s", warn, "" if warn == 1 else "s")
-    log.info("Found %s error%s", err, "" if err == 1 else "s")
+    LOG.info("")
+    LOG.info("Found %s warning%s", warn, "" if warn == 1 else "s")
+    LOG.info("Found %s error%s", err, "" if err == 1 else "s")
 
     sys.exit(rc)
