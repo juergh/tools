@@ -102,15 +102,16 @@ class Check():
     """
     Base check class
     """
-    def __init__(self, patch):
-        self.patch = patch
+    def __init__(self, patch_or_series):
+        self.patch = patch_or_series
+        self.series = patch_or_series
         self.name = None
         self.results = []
 
     def result(self, result, comment):
         self.results.append([result, comment])
 
-    def log(self, num):
+    def log(self, num=1):
         for i, (result, comment) in enumerate(self.results):
             if len(self.results) == 1:
                 checknum = num
@@ -263,7 +264,7 @@ class CheckPatchCountTotal(Check):
 
 class CheckBugLinkCVE(Check):
     """
-    Check buglink and/or CVE tags
+    Check BugLinks and/or CVEs
     """
     def __init__(self, patch, lp):
         super().__init__(patch)
@@ -273,7 +274,7 @@ class CheckBugLinkCVE(Check):
         self.name = "buglink_cve"
 
         if not self.patch.buglinks and not self.patch.cves:
-            self.result(FAIL, "missing BugLink/CVE tag")
+            self.result(FAIL, "missing BugLink/CVE")
             return 1
 
         for cve in self.patch.cves:
@@ -307,21 +308,21 @@ class CheckBugLinkCVE(Check):
 
 class CheckCherrypickBackport(Check):
     """
-    Check cherrypick and backport tag
+    Check cherrypick and backport lines
     """
     def run(self):
         self.name = "cherrypick_backport"
 
         if not self.patch.cherrypick and not self.patch.backport:
             if self.patch.subject.startswith("UBUNTU: "):
-                self.result(PASS, "missing cherrypick/backport tag but " +
+                self.result(PASS, "missing cherrypick/backport line but " +
                             "patch is an UBUNTU patch")
                 return 0
-            self.result(FAIL, "missing cherrypick/backport tag")
+            self.result(FAIL, "missing cherrypick/backport line")
             return 1
 
         if self.patch.cherrypick and self.patch.backport:
-            self.result(FAIL, "cherrypick and backport tag present")
+            self.result(FAIL, "cherrypick and backport lines present")
             return 1
 
         if self.patch.cherrypick:
@@ -364,11 +365,91 @@ class CheckSOB(Check):
         self.name = "sob"
 
         if not self.patch.sob:
-            self.result(FAIL, "missing signed-off-by tag")
+            self.result(FAIL, "missing Signed-off-by tag")
             return 1
 
         # TODO: Check SOB format
         self.result(PASS, "valid Signed-off-by tag: " + self.patch.sob)
+        return 0
+
+
+class CheckSeriesType(Check):
+    """
+    Check series type
+    """
+    def run(self):
+        self.name = "series_type"
+
+        stype = self.series.patches[0].type
+
+        if stype not in ("PATCH", "PULL"):
+            self.result(FAIL, "invalid series type: " + stype)
+            return 1
+
+        if stype == "PULL" and len(self.series.patches) > 1:
+            self.result(FAIL, "pull-request consists of more than one file")
+            return 1
+
+        self.result(PASS, "valid series type: " + stype)
+        return 0
+
+
+class CheckSeriesSOB(Check):
+    """
+    Check identical SOB tags
+    """
+    def run(self):
+        self.name = "series_sob"
+
+        rc = 0
+        first = True
+        sob = None
+        for patch in self.series.patches:
+            if patch.cover_letter:
+                continue
+            if first:
+                first = False
+                sob = patch.sob
+                continue
+            if sob and sob != patch.sob:
+                rc += 1
+        if not sob:
+            rc = 1
+
+        if rc:
+            self.result(FAIL, "inconsistent Signed-off-by tags")
+            return rc
+
+        self.result(PASS, "consistent Signed-off-by tag: " + sob)
+        return 0
+
+
+class CheckSeriesBugLink(Check):
+    """
+    Check identical buglinks
+    """
+    def run(self):
+        self.name = "series_buglink"
+
+        cc = 0
+        buglink = {}
+        for patch in self.series.patches:
+            if patch.cover_letter:
+                cc = 1
+                continue
+            for link in patch.buglinks:
+                buglink[link[0]] = buglink.get(link[0], 0) + 1
+
+        rc = 1
+        for key, val in buglink.items():
+            if val == len(self.series.patches) - cc:
+                self.result(PASS, "consistent BugLink: " + key)
+                rc = 0
+
+        if rc:
+            self.result(FAIL, "inconsistent BugLinks")
+            return rc
+
         return 0
 
 
@@ -581,7 +662,7 @@ class Patch():
         """
         Check patch
         """
-        LOG.info("File: %s", self.file)
+        LOG.info("File check: %s", self.file)
 
         checks = [
             CheckPatchTarget(self, ks=get_kernel_series_yaml(ksfile)),
@@ -626,98 +707,37 @@ class PatchSeries():
             patch.scount = len(self.patches)
             patch.parse()
 
-    def check_type(self):
-        """
-        Check patch series type
-        """
-        LOG.info("Check patch series type:")
-
-        ps_type = self.patches[0].type
-
-        if ps_type not in ("PATCH", "PULL"):
-            log_result("fail", ps_type, reason="invalid series type")
-            return 1
-
-        if ps_type == "PULL" and len(self.patches) > 1:
-            log_result("fail", ps_type, reason="pull-request consists of " +
-                       "more than one file")
-            return 1
-
-        log_result("pass", ps_type)
-        return 0
-
-    def check_sob(self):
-        """
-        Check for identical SOB tags
-        """
-        rc = 0
-        first = True
-        sob = None
-        for patch in self.patches:
-            if patch.cover_letter:
-                continue
-            if first:
-                first = False
-                sob = patch.sob
-                continue
-            if sob and sob != patch.sob:
-                rc += 1
-        if not sob:
-            rc = 1
-
-        if rc:
-            log_result("fail", "Signed-off-by: <various>",
-                       reason="signed-off-by tags are different")
-            return rc
-
-        log_result("pass", "Signed-off-by: " + sob)
-        return 0
-
-    def check_buglink(self):
-        """
-        Check for identical buglinks
-        """
-        cc = 0
-        buglink = {}
-        for patch in self.patches:
-            if patch.cover_letter:
-                cc = 1
-                continue
-            for bl in patch.buglinks:
-                buglink[bl[0]] = buglink.get(bl[0], 0) + 1
-
-        buglinks = []
-        for key, val in buglink.items():
-            if val == len(self.patches) - cc:
-                buglinks.append(key)
-
-        if not buglinks:
-            log_result("fail", "BugLink: <various>", reason="buglink tags " +
-                       "are different")
-            return 1
-
-        log_result("pass", "BugLink: " + ", ".join(buglinks))
-        return 0
-
     def check(self, ksfile=None):
         """
         Check the patch series
         """
-        rc = self.check_type()
+        # Check the series type
+        LOG.info("Base Check")
+        check = CheckSeriesType(self)
+        rc = check.run()
+        check.log()
         if rc:
             return rc
 
+        # Check the individual patches
         for patch in self.patches:
             LOG.info("")
             rc += patch.check(ksfile=ksfile)
 
         # Check consistency across all patches
         LOG.info("")
-        LOG.info("Check patch series consistency:")
-        rc += self.check_sob()
-        rc += self.check_buglink()
-        # TODO: check monotonic increase of patch number
+        LOG.info("Consistency check")
 
+        checks = [
+            CheckSeriesSOB(self),
+            CheckSeriesBugLink(self),
+        ]
+
+        for i, check in enumerate(checks):
+            rc += check.run()
+            check.log(i + 1)
+
+        # TODO: check monotonic increase of patch number
         return rc
 
 
