@@ -9,7 +9,10 @@ import logging
 import os
 import re
 import sys
+import time
 import yaml
+
+import requests
 
 from launchpadlib.launchpad import Launchpad
 
@@ -38,9 +41,22 @@ def get_kernel_series():
     if KS:
         return KS
 
+    ks_file = os.path.expanduser(KS_FILE)
+
+    age = sys.maxsize
+    if os.path.exists(ks_file):
+        age = time.time() - os.stat(ks_file).st_mtime
+
+    if age > (24 * 60 * 60):  # Older than 24 hours
+        LOG.debug("Download kernel-series.yaml")
+        r = requests.get("https://git.launchpad.net/~canonical-kernel/+git/" +
+                         "kteam-tools/plain/info/kernel-series.yaml")
+        with open(ks_file, "wt", encoding="utf-8") as fh:
+            fh.write(r.text)
+
     LOG.debug("Read %s", KS_FILE)
 
-    with open(os.path.expanduser(KS_FILE), encoding="utf=8") as fh:
+    with open(ks_file, encoding="utf-8") as fh:
         ks = yaml.safe_load(fh)
 
     for _, series_data in ks.items():
@@ -740,6 +756,7 @@ class PatchSeries():
             check.log(i + 1)
 
         # TODO: check monotonic increase of patch number
+        # TODO: check series/source target tags consistency
         return rc
 
 
