@@ -274,12 +274,12 @@ class CheckBugLinkCVE(Check):
         self.name = "buglink_cve"
 
         if not self.patch.buglinks and not self.patch.cves:
-            self.result(FAIL, "missing BugLink/CVE")
+            self.result(FAIL, "missing BugLink/CVE tag")
             return 1
 
         for cve in self.patch.cves:
             # TODO: Check CVE tag format
-            self.result(PASS, "valid CVE: " + cve)
+            self.result(PASS, "valid CVE tag: " + cve)
 
         rc = 0
 
@@ -308,21 +308,21 @@ class CheckBugLinkCVE(Check):
 
 class CheckCherrypickBackport(Check):
     """
-    Check cherrypick and backport lines
+    Check cherrypick and backport tags
     """
     def run(self):
         self.name = "cherrypick_backport"
 
         if not self.patch.cherrypick and not self.patch.backport:
             if self.patch.subject.startswith("UBUNTU: "):
-                self.result(PASS, "missing cherrypick/backport line but " +
+                self.result(PASS, "missing cherrypick/backport tag but " +
                             "patch is an UBUNTU patch")
                 return 0
-            self.result(FAIL, "missing cherrypick/backport line")
+            self.result(FAIL, "missing cherrypick/backport tag")
             return 1
 
         if self.patch.cherrypick and self.patch.backport:
-            self.result(FAIL, "cherrypick and backport lines present")
+            self.result(FAIL, "cherrypick and backport tags present")
             return 1
 
         if self.patch.cherrypick:
