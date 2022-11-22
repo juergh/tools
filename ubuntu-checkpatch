@@ -18,6 +18,8 @@ RE_TAG_TYPE = re.compile(r"^(PATCH|PULL)\s*(v\d+)?\s*(\d+/\d+)?$")
 RE_TAG_TARGET = re.compile(r"^([a-zA-Z0-9-.]+/?)+$")
 RE_TAG_FROM_COMMIT = re.compile(r"^\((cherry picked|backported) from commit ([0-9a-f]{40})\s*(.*)?\)$")
 
+KS_FILE = "~/.cache/kernel-series.yaml"
+
 # Check results
 SKIP = "skip"
 PASS = "pass"
@@ -29,16 +31,16 @@ KS = {}
 LP = None
 
 
-def get_kernel_series_yaml(ksfile):
+def get_kernel_series():
     """
     Read kernel-series.yaml and return supported series/sources
     """
     if KS:
         return KS
 
-    LOG.debug("Read %s", ksfile)
+    LOG.debug("Read %s", KS_FILE)
 
-    with open(os.path.expanduser(ksfile), encoding="utf=8") as fh:
+    with open(os.path.expanduser(KS_FILE), encoding="utf=8") as fh:
         ks = yaml.safe_load(fh)
 
     for _, series_data in ks.items():
@@ -264,7 +266,7 @@ class CheckPatchCountTotal(Check):
 
 class CheckBugLinkCVE(Check):
     """
-    Check BugLinks and/or CVEs
+    Check BugLinks and/or CVE tags
     """
     def __init__(self, patch, lp):
         super().__init__(patch)
@@ -658,21 +660,21 @@ class Patch():
         LOG.debug("           Changes comment: %s", self.comments)
         LOG.debug("Original commit provenance: %s", self.provenance)
 
-    def check(self, ksfile=None):
+    def check(self):
         """
         Check patch
         """
         LOG.info("File check: %s", self.file)
 
         checks = [
-            CheckPatchTarget(self, ks=get_kernel_series_yaml(ksfile)),
+            CheckPatchTarget(self, get_kernel_series()),
             CheckPatchVersion(self),
             CheckPatchCountTotal(self),
         ]
 
         if not self.cover_letter:
             checks += [
-                CheckBugLinkCVE(self, lp=get_launchpad()),
+                CheckBugLinkCVE(self, get_launchpad()),
                 CheckCherrypickBackport(self),
                 CheckSignerComment(self),
                 CheckSOB(self),
@@ -707,7 +709,7 @@ class PatchSeries():
             patch.scount = len(self.patches)
             patch.parse()
 
-    def check(self, ksfile=None):
+    def check(self):
         """
         Check the patch series
         """
@@ -722,7 +724,7 @@ class PatchSeries():
         # Check the individual patches
         for patch in self.patches:
             LOG.info("")
-            rc += patch.check(ksfile=ksfile)
+            rc += patch.check()
 
         # Check consistency across all patches
         LOG.info("")
@@ -749,7 +751,7 @@ def main(args):
 
     # Parse and check the patch series
     ps.parse()
-    rc = ps.check(ksfile="~/.cache/kernel-series.yaml")
+    rc = ps.check()
 
     return rc
 
