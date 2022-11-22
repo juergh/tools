@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Patch class
+# Check a patch or a patch series against Ubuntu patch submission rules
 #
 
 import argparse
