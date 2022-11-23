@@ -96,28 +96,6 @@ def get_launchpad():
     return LP
 
 
-def log_result(result, text, reason=""):
-    if result in ("fail"):
-        log_res = LOG.error
-        col = "31"  # red
-    elif result in ("pass"):
-        log_res = LOG.info
-        col = "32"  # green
-    elif result == "warn":
-        log_res = LOG.warning
-        col = "33"  # yellow
-    else:
-        log_res = LOG.info
-        col = "34"  # blue
-
-    col_result = "\033[{}m[{}]\033[0m".format(col, result)
-#    col_reason = "\033[{}m[reason: {}]\033[0m".format(col, reason)
-    col_reason = "\033[{}m[{}]\033[0m".format(col, reason)
-
-    log_res("    %-15s  %s%s%s", col_result, text, "  " if text and reason
-            else "", col_reason if reason else "")
-
-
 class Check():
     """
     Base check class
