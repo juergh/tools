@@ -53,7 +53,14 @@ checkout_opt_args=(
 
 function do_checkout()
 {
-	run cranky-checkout -u
+	local args
+
+	args=()
+	if [ "${REBASE}" -eq 1 ] ; then
+		args+=("--rebase")
+	fi
+
+	run cranky-checkout -u "${args[@]}"
 }
 
 # fix -------------------------------------------------------------------------
@@ -108,7 +115,7 @@ function do_link()
 
 	args=()
 	if [ "${RERUN}" -eq 1 ] ; then
-		args+=("-re-run")
+		args+=("--re-run")
 	fi
 	if [ -n "${SRU_CYCLE}" ] ; then
 		args+=("--sru-cycle" "${SRU_CYCLE}")
@@ -295,7 +302,14 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			SRU_CYCLE=${1}
 			;;
-		-r|--rerun)
+		-r)
+			REBASE=1
+			RERUN=1
+			;;
+		--rebase)
+			REBASE=1
+			;;
+		--rerun)
 			RERUN=1
 			;;
 		--)
