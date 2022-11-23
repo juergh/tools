@@ -79,6 +79,9 @@ def get_kernel_series():
                 KS[codename] = {}
             KS[codename][source] = 1
 
+    # Add unstable/linux-unstable
+    KS["unstable"] = {"linux-unstable": 1}
+
     return KS
 
 
@@ -179,6 +182,7 @@ class CheckPatchTarget(Check):
         for target in self.patch.target_tags:
             series = []
             source = []
+            unstable = False
             for val in target.split("/"):
                 val = val.lower()
 
@@ -198,6 +202,8 @@ class CheckPatchTarget(Check):
 
                 # Full series name
                 if val in self.ks:
+                    if val == "unstable":
+                        unstable = True
                     series.append(val)
                     continue
 
@@ -208,10 +214,16 @@ class CheckPatchTarget(Check):
 
             # No source specified, so default to "linux"
             if not source:
-                source = ["linux"]
+                source = ["linux-unstable"] if unstable else ["linux"]
 
             LOG.debug("Series: %s", series)
             LOG.debug("Source: %s", source)
+
+            # Log an error if no series could be determined
+            if not series:
+                self.result(FAIL, "invalid series/source target: " + target)
+                rc += 1
+                continue
 
             # Verify that all series/source combinations are valid
             for ser in series:
