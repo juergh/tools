@@ -24,7 +24,6 @@ RE_TAG_FROM_COMMIT = re.compile(r"^\((cherry picked|backported) from commit ([0-
 KS_FILE = "~/.cache/kernel-series.yaml"
 
 # Check results
-SKIP = "skip"
 PASS = "pass"
 FAIL = "fail"
 WARN = "warn"
@@ -248,7 +247,7 @@ class CheckPatchVersion(Check):
         self.name = "patch_version"
 
         if self.patch.version is None:
-            self.result(SKIP, "no version specified")
+            self.result(PASS, "no version specified")
             return 0
 
         ver = self.patch.version
@@ -273,7 +272,7 @@ class CheckPatchCountTotal(Check):
         self.name = "patch_count_total"
 
         if self.patch.count is None:
-            self.result(SKIP, "no count/total specified")
+            self.result(PASS, "no count/total specified")
             return 0
 
         cnt_tot = "{}/{}".format(self.patch.count, self.patch.total)
