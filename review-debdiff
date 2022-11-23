@@ -94,7 +94,7 @@ sed -n 's/^# HEADER //p' "${debdiff}"
 echo
 echo -e "\e[96m*** lsdiff -s ${debdiff} ***\e[0m"
 echo
-sed '/^# HEADER /d' "${debdiff}" | lsdiff -s | do_colordiff
+sed '/^# HEADER /d' "${debdiff}" | lsdiff -s | uniq | do_colordiff
 
 # filterdiff debdiff
 echo
