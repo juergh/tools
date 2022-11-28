@@ -660,7 +660,7 @@ class Patch():
         self.msg_from = msg["From"]
         if msg["Subject"]:
             self.msg_subject = msg["Subject"].replace("\n", "")
-        self.msg_body = msg.get_payload()
+        self.msg_body = msg.get_payload(decode=True).decode()
 
         if not (self.msg_from and self.msg_subject and self.msg_body):
             LOG.error("Unable to parse patch file: %s", self.file)
