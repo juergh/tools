@@ -145,7 +145,7 @@ class CheckDeprecatedTag(Check):
         self.name = "deprecated_tag"
 
         if self.patch.deprecated_tags:
-            self.result(WARN, "deprecated tag(s): " +
+            self.result(WARN, "deprecated tag: " +
                         ", ".join(self.patch.deprecated_tags))
             return 1 << 8
 
@@ -417,7 +417,7 @@ class CheckPullRemote(Check):
         if rc:
             return rc
 
-        cache_dir = os.patch.expanduser(CACHE_DIR)
+        cache_dir = os.path.expanduser(CACHE_DIR)
         if not os.path.exists(cache_dir):
             os.mkdir(cache_dir)
 
