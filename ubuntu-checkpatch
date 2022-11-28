@@ -384,6 +384,11 @@ class CheckSOB(Check):
             self.result(FAIL, "missing Signed-off-by tag")
             return 1
 
+        if self.patch.msg_from and self.patch.msg_from != self.patch.sob:
+            self.result(FAIL, "different signer/submitter: {} != {}".format(
+                self.patch.sob, self.patch.msg_from))
+            return 1
+
         # TODO: Check SOB format
         self.result(PASS, "valid Signed-off-by tag: " + self.patch.sob)
         return 0
