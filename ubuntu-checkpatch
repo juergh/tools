@@ -398,6 +398,37 @@ class CheckSOB(Check):
         return 0
 
 
+class CheckPullRemote(Check):
+    """
+    Check pull-request remote
+    """
+    def run(self):
+        self.name = "pull_remote"
+
+        rc = 0
+
+        if not self.patch.pr_url:
+            self.result(FAIL, "Missing PR URL")
+            rc += 1
+
+        if not self.patch.pr_from:
+            self.result(FAIL, "Missing PR from commit")
+            rc += 1
+
+        if not self.patch.pr_to:
+            self.result(FAIL, "Missing PR upto commit")
+            rc += 1
+
+        if rc:
+            return rc
+
+        cache_dir = os.patch.expanduser(CACHE_DIR)
+        if not os.path.exists(cache_dir):
+            os.mkdir(cache_dir)
+
+        return rc
+
+
 class CheckSeriesType(Check):
     """
     Check series type
@@ -696,7 +727,12 @@ class Patch():
             CheckPatchCountTotal(self),
         ]
 
-        if not self.cover_letter:
+        if self.type == "PULL":
+            checks += [
+                CheckPullRemote(self),
+            ]
+
+        if self.type == "PATCH" and not self.cover_letter:
             checks += [
                 CheckBugLinkCVE(self, get_launchpad()),
                 CheckCherrypickBackport(self),
