@@ -34,8 +34,7 @@ LP = None
 
 
 def get_kernel_series():
-    """
-    Read kernel-series.yaml and return supported series/sources
+    """ Read kernel-series.yaml and return supported series/sources
     """
     if KS:
         return KS
@@ -88,8 +87,7 @@ def get_kernel_series():
 
 
 def get_launchpad():
-    """
-    Log into Launchpad
+    """ Log into Launchpad
     """
     global LP
 
@@ -100,8 +98,7 @@ def get_launchpad():
 
 
 class Check():
-    """
-    Base check class
+    """ Base check class
     """
     def __init__(self, patch_or_series):
         self.patch = patch_or_series
@@ -157,9 +154,9 @@ class CheckDeprecatedTag(Check):
 
 
 class CheckPatchTarget(Check):
-    """
-    Check the target tags (series/source) and verify that all combinations
-    are valid by looking them up in the provided kernel-series.yaml
+    """ Check the target tags (series/source) and verify that all
+    combinations are valid by looking them up in the provided
+    kernel-series.yaml
     """
     def __init__(self, patch, ks):
         super().__init__(patch)
@@ -236,8 +233,7 @@ class CheckPatchTarget(Check):
 
 
 class CheckPatchVersion(Check):
-    """
-    Check patch version
+    """ Check patch version
     """
     def run(self):
         self.name = "patch_version"
@@ -261,8 +257,7 @@ class CheckPatchVersion(Check):
 
 
 class CheckPatchCountTotal(Check):
-    """
-    Check patch count and total number
+    """ Check patch count and total number
     """
     def run(self):
         self.name = "patch_count_total"
@@ -288,8 +283,7 @@ class CheckPatchCountTotal(Check):
 
 
 class CheckBugLinkCVE(Check):
-    """
-    Check BugLinks and/or CVE tags
+    """ Check BugLinks and/or CVE tags
     """
     def __init__(self, patch, lp):
         super().__init__(patch)
@@ -332,8 +326,7 @@ class CheckBugLinkCVE(Check):
 
 
 class CheckCherrypickBackport(Check):
-    """
-    Check cherrypick and backport tags
+    """ Check cherrypick and backport tags
     """
     def run(self):
         self.name = "cherrypick_backport"
@@ -363,8 +356,7 @@ class CheckCherrypickBackport(Check):
 
 
 class CheckSignerComment(Check):
-    """
-    Check signer comment
+    """ Check signer comment
     """
     def run(self):
         self.name = "signer_comment"
@@ -383,8 +375,7 @@ class CheckSignerComment(Check):
 
 
 class CheckSOB(Check):
-    """
-    Check SOB tag
+    """ Check SOB tag
     """
     def run(self):
         self.name = "sob"
@@ -399,8 +390,7 @@ class CheckSOB(Check):
 
 
 class CheckPullRemote(Check):
-    """
-    Check pull-request remote
+    """ Check pull-request remote
     """
     def run(self):
         self.name = "pull_remote"
@@ -430,8 +420,7 @@ class CheckPullRemote(Check):
 
 
 class CheckSeriesType(Check):
-    """
-    Check series type
+    """ Check series type
     """
     def run(self):
         self.name = "series_type"
@@ -451,8 +440,7 @@ class CheckSeriesType(Check):
 
 
 class CheckSeriesSOB(Check):
-    """
-    Check identical SOB tags
+    """ Check identical SOB tags
     """
     def run(self):
         self.name = "series_sob"
@@ -481,8 +469,7 @@ class CheckSeriesSOB(Check):
 
 
 class CheckSeriesBugLink(Check):
-    """
-    Check identical buglinks
+    """ Check identical buglinks
     """
     def run(self):
         self.name = "series_buglink"
@@ -510,8 +497,7 @@ class CheckSeriesBugLink(Check):
 
 
 class Patch():
-    """
-    Patch class
+    """ Patch class
     """
     def __init__(self, infile):
         self.file = infile         # Patch file name
@@ -549,8 +535,7 @@ class Patch():
         self.provenance = None     # Original commit provenance
 
     def _parse_msg_subject(self):
-        """
-        Parse the mail subject line
+        """ Parse the mail subject line
         """
         LOG.debug("Parse mail subject: %s", self.msg_subject)
 
@@ -606,8 +591,7 @@ class Patch():
             self.invalid_tags.append(tag)
 
     def _parse_msg_body(self):
-        """
-        Parse the mail body
+        """ Parse the mail body
         """
         LOG.debug("Parse mail body")
 
@@ -656,8 +640,7 @@ class Patch():
                 break
 
     def parse(self):
-        """
-        Parse a patch (or pull-request) file
+        """ Parse a patch (or pull-request) file
         """
         if not os.path.exists(self.file):
             LOG.error("File not found: %s", self.file)
@@ -715,8 +698,7 @@ class Patch():
         LOG.debug("Original commit provenance: %s", self.provenance)
 
     def check(self):
-        """
-        Check patch
+        """ Check patch
         """
         LOG.info("File check: %s", self.file)
 
@@ -749,29 +731,25 @@ class Patch():
 
 
 class PatchSeries():
-    """
-    Patch series class
+    """ Patch series class
     """
     def __init__(self):
         self.patches = []
 
     def append(self, infile):
-        """
-        Append a patch to the series
+        """ Append a patch to the series
         """
         self.patches.append(Patch(infile))
 
     def parse(self):
-        """
-        Parse the patch series
+        """ Parse the patch series
         """
         for patch in self.patches:
             patch.scount = len(self.patches)
             patch.parse()
 
     def check(self):
-        """
-        Check the patch series
+        """ Check the patch series
         """
         # Check the series type
         LOG.info("Base Check")
