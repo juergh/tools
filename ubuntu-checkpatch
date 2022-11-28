@@ -141,6 +141,21 @@ class Check():
 #        pass
 
 
+class CheckDeprecatedTag(Check):
+    """ Check deprecated tags
+    """
+    def run(self):
+        self.name = "deprecated_tag"
+
+        if self.patch.deprecated_tags:
+            self.result(WARN, "deprecated tag(s): " +
+                        ", ".join(self.patch.deprecated_tags))
+            return 1 << 8
+
+        self.result(PASS, "no deprecated tag specified")
+        return 0
+
+
 class CheckPatchTarget(Check):
     """
     Check the target tags (series/source) and verify that all combinations
@@ -675,6 +690,7 @@ class Patch():
         LOG.info("File check: %s", self.file)
 
         checks = [
+            CheckDeprecatedTag(self),
             CheckPatchTarget(self, get_kernel_series()),
             CheckPatchVersion(self),
             CheckPatchCountTotal(self),
