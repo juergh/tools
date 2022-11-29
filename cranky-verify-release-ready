@@ -3,6 +3,24 @@
 # Run verify-release-ready against a set of kernel packages
 #
 
+function check_cycle()
+{
+	if ! [ -e debian/debian.env ] ; then
+		return
+	fi
+
+	. debian/debian.env
+	master=$(sed 's,.* ,,' debian.master/tracking-bug)
+	deriv=$(sed 's,.* ,,' "${DEBIAN}"/tracking-bug)
+
+	printf "%60s: " "matching SRU cycle (${deriv})"
+	if [ "${deriv}" = "${master}" ] ; then
+		echo -e "\033[32mpass\033[0m"
+	else
+		echo -e "\033[31mfail\033[0m"
+	fi
+}
+
 function check_emails()
 {
 	local ae sob
@@ -58,12 +76,14 @@ while [ ${#} -gt 0 ] ; do
 done
 
 if [ ${current} -eq 1 ] ; then
+	check_cycle
 	check_emails
 	"${KTEAM_TOOLS}"/maintscripts/verify-release-ready
 else
 	while IFS= read -r path ; do
 		echo "${path}"
 		cd "${path}"
+		check_cycle
 		check_emails
 		"${KTEAM_TOOLS}"/maintscripts/verify-release-ready || true
 		echo
