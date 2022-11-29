@@ -194,7 +194,7 @@ function do_build()
 # review ----------------------------------------------------------------------
 
 # shellcheck disable=SC2034
-build_pos_args=(
+review_pos_args=(
 	"POCKET|POCKET|Pocket containing the previous source package."
 )
 
@@ -349,8 +349,9 @@ for cmd in "${cmds[@]}" ; do
 	POS_ARGS+=("${args[@]}")
 done
 
-# Sort the optional arguments and weed out duplicates
+# Sort the arguments and weed out duplicates
 readarray -t OPT_ARGS < <(printf "%s\n" "${OPT_ARGS[@]}" | sort -u)
+readarray -t POS_ARGS < <(printf "%s\n" "${POS_ARGS[@]}" | sort -u)
 
 # Process the positional arguments
 for arg in "${POS_ARGS[@]}" ; do
