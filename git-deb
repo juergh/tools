@@ -71,6 +71,9 @@ function set_globals()
 	if [ "${repo_name}" = kteam-tools ] ; then
 		REPO="kteam-tools"
 		RELEASE="kteam-tools"
+	elif [ "${repo_name}" = ckct ] ; then
+		REPO="ckct"
+		RELEASE="ckct"
 	elif [ -e debian/debian.env ] ; then
 		REPO="ubuntu-kernel-main"
 		# shellcheck disable=SC1091
