@@ -183,24 +183,22 @@ function do_verify()
 
 # shellcheck disable=SC2034
 build_pos_args=(
-	"POCKET || POCKET || Pocket containing the previous source package."
+	"POCKET|OFFSET || POCKET|OFFSET || Pocket containing the previous source package or changelog entry offset (1 == previous entry)."
 )
 
 function do_build()
 {
-	run cranky-build-sources -f "${POCKET}"
+	run cranky-build-sources -f "${POCKET_OFFSET}"
 }
 
 # review ----------------------------------------------------------------------
 
 # shellcheck disable=SC2034
-review_pos_args=(
-	"POCKET || POCKET || Pocket containing the previous source package."
-)
+review_pos_args=("${build_pos_args[@]}")
 
 function do_review()
 {
-	run cranky-review-sources "${POCKET}"
+	run cranky-review-sources "${POCKET_OFFSET}"
 	run cranky-reduce-debdiff
 
 	run cranky-review-sources | less
@@ -356,12 +354,12 @@ readarray -t POS_ARGS < <(printf "%s\n" "${POS_ARGS[@]}" | sort -u)
 # Process the positional arguments
 for arg in "${POS_ARGS[@]}" ; do
 	case "${arg%% || *}" in
-		POCKET)
+		"POCKET|OFFSET")
 			if [ ${#} -eq 0 ] ; then
 				usage
 				exit 2
 			fi
-			POCKET=${1}
+			POCKET_OFFSET=${1}
 			;;
 		PPA)
 			if [ ${#} -eq 0 ] ; then
