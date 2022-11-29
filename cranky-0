@@ -48,7 +48,7 @@ function source_debian_env()
 
 # shellcheck disable=SC2034
 checkout_opt_args=(
-	"[-r]|-r, --rebase|Rebase onto the latest tag if HEAD is untagged."
+	"[-r] || -r, --rebase || Rebase onto the latest tag if HEAD is untagged."
 )
 
 function do_checkout()
@@ -105,8 +105,8 @@ function do_configs()
 
 # shellcheck disable=SC2034
 link_opt_args=(
-	"[-r]|-r, --rerun|Rerun the commands."
-	"[-s SRU_CYCLE]|-s, --sru-cycle SRU_CYCLE|SRU cycle name (2022.05.30-1, d2022.10.12-2, ...)."
+	"[-r] || -r, --rerun || Rerun the commands."
+	"[-s SRU_CYCLE] || -s, --sru-cycle SRU_CYCLE || SRU cycle name (2022.05.30-1, d2022.10.12-2, ...)."
 )
 
 function do_link()
@@ -137,7 +137,7 @@ function do_dkms()
 
 # shellcheck disable=SC2034
 close_opt_args=(
-	"[-r]|-r, --rerun|Rerun the commands."
+	"[-r] || -r, --rerun || Rerun the commands."
 )
 
 function do_close()
@@ -157,7 +157,7 @@ function do_close()
 
 # shellcheck disable=SC2034
 dependents_opt_args=(
-	"[-r]|-r, --rerun|Rerun the commands."
+	"[-r] || -r, --rerun || Rerun the commands."
 )
 
 function do_dependents()
@@ -183,7 +183,7 @@ function do_verify()
 
 # shellcheck disable=SC2034
 build_pos_args=(
-	"POCKET|POCKET|Pocket containing the previous source package."
+	"POCKET || POCKET || Pocket containing the previous source package."
 )
 
 function do_build()
@@ -195,7 +195,7 @@ function do_build()
 
 # shellcheck disable=SC2034
 review_pos_args=(
-	"POCKET|POCKET|Pocket containing the previous source package."
+	"POCKET || POCKET || Pocket containing the previous source package."
 )
 
 function do_review()
@@ -211,7 +211,7 @@ function do_review()
 
 # shellcheck disable=SC2034
 cbd_pos_args=(
-	"[-- CBD_ARGS...]|CBD_ARGS|Additional CBD arguments, e.g., -o amd64 -o generic."
+	"[-- CBD_ARGS...] || CBD_ARGS || Additional CBD arguments, e.g., -o amd64 -o generic."
 )
 
 function do_cbd()
@@ -239,7 +239,7 @@ function do_push()
 
 # shellcheck disable=SC2034
 dput_pos_args=(
-	"PPA|PPA|Build PPA."
+	"PPA || PPA || Build PPA."
 )
 
 function do_dput()
@@ -254,10 +254,10 @@ function usage()
 {
 	echo -n "Usage: $(basename "${0}")"
 	for arg in "${OPT_ARGS[@]}" ; do
-		echo -n " ${arg%%|*}"
+		echo -n " ${arg%% || *}"
 	done
 	for arg in "${POS_ARGS[@]}" ; do
-		echo -n " ${arg%%|*}"
+		echo -n " ${arg%% || *}"
 	done
 	echo
 
@@ -269,16 +269,16 @@ function usage()
 	if [ ${#POS_ARGS[@]} -ne 0 ] ; then
 		echo "Positional arguments:"
 		for arg in "${POS_ARGS[@]}" ; do
-			arg=${arg#*|}
-			printf "  %-26s %s\n" "${arg%%|*}" "${arg#*|}"
+			arg=${arg#* || }
+			printf "  %-26s %s\n" "${arg%% || *}" "${arg#* || }"
 		done
 		echo
 	fi
 
 	echo "Optional arguments:"
 	for arg in "${OPT_ARGS[@]}" ; do
-		arg=${arg#*|}
-		printf "  %-26s %s\n" "${arg%%|*}" "${arg#*|}"
+		arg=${arg#* || }
+		printf "  %-26s %s\n" "${arg%% || *}" "${arg#* || }"
 	done
 }
 
@@ -332,8 +332,8 @@ done
 readarray -t cmds < <(echo "${0##*--}" | tr "-" "\n")
 
 OPT_ARGS=(
-	"[-d]|-d, --dry-run|"
-	"[-h]|-h, --help|Show this help text and exit."
+	"[-d] || -d, --dry-run || "
+	"[-h] || -h, --help || Show this help text and exit."
 )
 
 POS_ARGS=()
@@ -355,7 +355,7 @@ readarray -t POS_ARGS < <(printf "%s\n" "${POS_ARGS[@]}" | sort -u)
 
 # Process the positional arguments
 for arg in "${POS_ARGS[@]}" ; do
-	case "${arg%%|*}" in
+	case "${arg%% || *}" in
 		POCKET)
 			if [ ${#} -eq 0 ] ; then
 				usage
