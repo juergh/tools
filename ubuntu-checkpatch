@@ -18,7 +18,7 @@ from launchpadlib.launchpad import Launchpad
 
 
 RE_TAG_TYPE = re.compile(r"^(PATCH|PULL)\s*(v\d+)?\s*(\d+/\d+)?$")
-RE_TAG_TARGET = re.compile(r"^([a-zA-Z0-9-.]+/?)+$")
+RE_TAG_TARGET = re.compile(r"^[a-zA-Z0-9-./:]+$")
 RE_TAG_FROM_COMMIT = re.compile(r"^\((cherry picked|backported) from commit ([0-9a-f]{40})\s*(.*)?\)$")
 
 CACHE_DIR = "~/.cache/ubuntu-checkpatch"
@@ -175,14 +175,23 @@ class CheckPatchTarget(Check):
             series = []
             source = []
             unstable = False
-            for val in target.split("/"):
+
+            # Split the tag into series and sources
+            series_source = target.split(":")
+            if len(series_source) > 2:
+                self.result(FAIL, "invalid series/source target: " + target)
+                rc += 1
+                continue
+
+            # Process the series
+            for val in series_source[0].split("/"):
                 val = val.lower()
 
                 # Single letter series name, find the full series name
                 if len(val) == 1:
                     full_name = None
                     for name in self.ks:
-                        if name.startswith(val):
+                        if name != "unstable" and name.startswith(val):
                             full_name = name
                             break
                     if not full_name:
@@ -199,23 +208,20 @@ class CheckPatchTarget(Check):
                     series.append(val)
                     continue
 
-                # Must be a source name then
-                if not val.startswith("linux"):
-                    val = "linux-" + val
-                source.append(val)
+                self.result(FAIL, "invalid series: " + val)
+                rc += 1
 
-            # No source specified, so default to "linux"
-            if not source:
+            # Process the source (if any)
+            if len(series_source) == 2:
+                for val in series_source[1].split("/"):
+                    if not val.startswith("linux"):
+                        val = "linux-" + val
+                    source.append(val)
+            else:
                 source = ["linux-unstable"] if unstable else ["linux"]
 
             LOG.debug("Series: %s", series)
             LOG.debug("Source: %s", source)
-
-            # Log an error if no series could be determined
-            if not series:
-                self.result(FAIL, "invalid series/source target: " + target)
-                rc += 1
-                continue
 
             # Verify that all series/source combinations are valid
             for ser in series:
