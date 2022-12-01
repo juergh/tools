@@ -348,8 +348,12 @@ for cmd in "${cmds[@]}" ; do
 done
 
 # Sort the arguments and weed out duplicates
-readarray -t OPT_ARGS < <(printf "%s\n" "${OPT_ARGS[@]}" | sort -u)
-readarray -t POS_ARGS < <(printf "%s\n" "${POS_ARGS[@]}" | sort -u)
+if [ ${#OPT_ARGS[@]} -gt 0 ] ; then
+	readarray -t OPT_ARGS < <(printf "%s\n" "${OPT_ARGS[@]}" | sort -u)
+fi
+if [ ${#POS_ARGS[@]} -gt 0 ] ; then
+	readarray -t POS_ARGS < <(printf "%s\n" "${POS_ARGS[@]}" | sort -u)
+fi
 
 # Process the positional arguments
 for arg in "${POS_ARGS[@]}" ; do
