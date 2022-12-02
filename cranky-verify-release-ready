@@ -3,12 +3,45 @@
 # Run verify-release-ready against a set of kernel packages
 #
 
+function get_abi()
+{
+	local DEBIAN v
+
+	DEBIAN=debian
+	if [ -e debian/debian.env ] ; then
+		# shellcheck disable=SC1091
+		. debian/debian.env
+	fi
+
+	readarray -t v < <(dpkg-parsechangelog -l"${DEBIAN}"/changelog \
+										   -SVersion | tr ".-" "\n")
+	echo "${v[0]}.${v[1]}.${v[2]}-${v[3]}"
+}
+
+function check_abi()
+{
+	local abi=${1}
+	local this_abi
+
+	this_abi=$(get_abi)
+
+	printf "%60s: " "matching ABIs (${this_abi})"
+	if [ "${this_abi}" = "${abi}" ] ; then
+		echo -e "\033[32mpass\033[0m"
+	else
+		echo -e "\033[31mfail\033[0m"
+	fi
+}
+
 function check_cycle()
 {
+	local master deriv
+
 	if ! [ -e debian/debian.env ] ; then
 		return
 	fi
 
+	# shellcheck disable=SC1091
 	. debian/debian.env
 	master=$(sed 's,.* ,,' debian.master/tracking-bug)
 	deriv=$(sed 's,.* ,,' "${DEBIAN}"/tracking-bug)
@@ -80,9 +113,14 @@ if [ ${current} -eq 1 ] ; then
 	check_emails
 	"${KTEAM_TOOLS}"/maintscripts/verify-release-ready
 else
+	abi=
 	while IFS= read -r path ; do
 		echo "${path}"
 		cd "${path}"
+		if [ -z "${abi}" ] ; then
+			abi=$(get_abi)
+		fi
+		check_abi "${abi}"
 		check_cycle
 		check_emails
 		"${KTEAM_TOOLS}"/maintscripts/verify-release-ready || true
