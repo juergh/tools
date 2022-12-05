@@ -75,7 +75,9 @@ while IFS= read -r path ; do
 		echo "${path}"
 		cd "${path}"
 
-        tag=$(git describe --exact-match HEAD 2>/dev/null || true)
+		git fetch --tags
+
+		tag=$(git describe --exact-match HEAD 2>/dev/null || true)
 		if [ -n "${tag}" ] ; then
 			echo "HEAD tag:   ${tag}"
 			rebase_tag=
