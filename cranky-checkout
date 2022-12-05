@@ -111,7 +111,9 @@ while IFS= read -r path ; do
 		fi
 		echo "Latest tag: ${latest_tag}"
 
-		if [ "${tag}" != "${latest_tag}" ] ; then
+		if [ "${tag}" = "${latest_tag}" ] ; then
+			git log --format='HEAD is now at %h %s' HEAD -1
+		else
 			# Update the current branch to the latest tag
 			if [ -e debian/debian.env ] ; then
 				if [ -n "${rebase_tag}" ] ; then
