@@ -65,8 +65,11 @@ while IFS= read -r path ; do
 
 	tag=$(git describe --exact-match HEAD 2>/dev/null || echo)
 	if [ -z "${tag}" ] ; then
-		echo "Current HEAD is untagged" >&2
-		exit 1
+		tag=$(git cat-file -p HEAD | grep -m1 '^ tag Ubuntu-' | cut -c 6-)
+		if [ -z "${tag}" ] ; then
+			echo "Current HEAD is untagged and not a merged tag" >&2
+			exit 1
+		fi
 	fi
 
 	git fetch --tags
