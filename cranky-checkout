@@ -82,19 +82,25 @@ while IFS= read -r path ; do
 			echo "HEAD tag:   ${tag}"
 			rebase_tag=
 		else
-			echo "HEAD is untagged"
-			if [ ${rebase} -eq 0 ] ; then
-				exit
-			fi
-			while IFS= read -r commit ; do
-				tag=$(git describe --exact-match "${commit}" 2>/dev/null || \
-						  true)
-				if [ -n "${tag}" ] ; then
-					break
+			tag=$(git cat-file -p HEAD | grep -m1 '^ tag Ubuntu-' | cut -c 6-)
+			if [ -n "${tag}" ] ; then
+				echo "Merged tag: ${tag}"
+				rebase_tag=
+			else
+				echo "HEAD is untagged"
+				if [ ${rebase} -eq 0 ] ; then
+					exit
 				fi
-			done < <(git log --format=%h)
-			echo "Branch tag: ${tag}"
-			rebase_tag=${tag}
+				while IFS= read -r commit ; do
+					tag=$(git describe --exact-match "${commit}" 2>/dev/null || \
+							  true)
+					if [ -n "${tag}" ] ; then
+						break
+					fi
+				done < <(git log --format=%h)
+				echo "Branch tag: ${tag}"
+				rebase_tag=${tag}
+			fi
 		fi
 
 		base_tag=$(echo "${tag}" | grep -oP '^.*?-\d+\.\d+\.\d+')
