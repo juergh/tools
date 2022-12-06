@@ -19,7 +19,7 @@ from launchpadlib.launchpad import Launchpad
 
 RE_TAG_TYPE = re.compile(r"^(PATCH|PULL)\s*(v\d+)?\s*(\d+/\d+)?$")
 RE_TAG_TARGET = re.compile(r"^[a-zA-Z0-9-./:]+$")
-RE_TAG_FROM_COMMIT = re.compile(r"^\((cherry picked|backported) from commit ([0-9a-f]{40})\s*(.*)?\)$")
+RE_TAG_FROM_COMMIT = re.compile(r"^\((cherry picked|backported) from commit ([0-9a-f]{40})\s*(.*)*\)$")
 
 CACHE_DIR = "~/.cache/ubuntu-checkpatch"
 
@@ -609,6 +609,7 @@ class Patch():
         body = self.msg_body.split("\n")
 
         # Parse the commit message
+        # TODO: Verify that SOB is last line of patch comment
         sob = 0
         for i, line in enumerate(body):
             if line.startswith("diff --git "):
@@ -631,6 +632,9 @@ class Patch():
             # Walk backwards from the last SOB and parse the "trailer"
             is_comment = False
             for line in list(reversed(body[:sob])):
+                if not line:
+                    break
+
                 # Modification comment
                 if line.startswith("[") or line.endswith("]") or is_comment:
                     self.comments.insert(0, line)
@@ -646,9 +650,6 @@ class Patch():
                         self.backport = m.group(2)
                     self.provenance = m.group(3)
                     continue
-
-                # End of mail "trailer"
-                break
 
     def parse(self):
         """ Parse a patch (or pull-request) file
