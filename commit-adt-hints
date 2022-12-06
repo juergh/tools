@@ -54,7 +54,7 @@ while IFS= read -r line ; do
 done < <(git diff "${conf}" | grep '^+result')
 
 pkgs=${pkgs:1}
-subject="${series}/${source}: hint ${pkgs} for ${version}"
+subject="${series::1}/${source}: hint ${pkgs} for ${version}"
 
 git add "${conf}"
 git commit -s -m "${subject}"
