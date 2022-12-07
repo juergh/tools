@@ -425,6 +425,25 @@ class CheckSOB(Check):
         self.result(PASS, "valid Signed-off-by tag: " + self.patch.sob)
         return 0
 
+class CheckPatchComments(Check):
+    """ Check patch comments block
+        - SOB must be last line of block
+    """
+    def run(self):
+        self.name = "patch_comments"
+        rc = 0
+
+        if not self.patch.patch_comments:
+            self.result(FAIL, "no patch comments block found")
+            rc += 1
+        elif self.patch.sob not in self.patch.patch_comments[-1]:
+            self.result(FAIL, "Signed-off-by must be last line of patch comments block")
+            rc += 1
+
+        if rc == 0:
+            self.result(PASS, "patch comments block is well formed")
+
+        return rc
 
 class CheckPullRemote(Check):
     """ Check pull-request remote
@@ -591,6 +610,7 @@ class Patch():
         self.backport = None       # Backported commit hash
         self.comments = []         # Modification comment
         self.provenance = None     # Original commit provenance
+        self.patch_comments = []   # All lines from provenance section
 
     def _parse_msg_subject(self):
         """ Parse the mail subject line
@@ -656,7 +676,6 @@ class Patch():
         body = self.msg_body.split("\n")
 
         # Parse the commit message
-        # TODO: Verify that SOB is last line of patch comment
         sob = 0
         for i, line in enumerate(body):
             if line.startswith("diff --git "):
@@ -678,7 +697,7 @@ class Patch():
         if sob:
             # Walk backwards from the last SOB and parse the "trailer"
             is_comment = False
-            for line in list(reversed(body[:sob])):
+            for line in list(reversed(body[:sob + 1])):
                 if not line:
                     break
 
@@ -697,6 +716,17 @@ class Patch():
                         self.backport = m.group(2)
                     self.provenance = m.group(3)
                     continue
+
+        # Capture all patch comments on non-coverletter patches
+        if self.type == "PATCH" and not self.cover_letter:
+            empty = 0
+            for i, line in enumerate(body):
+                if not line:
+                    empty = i
+                    continue
+                if empty and line == "---":
+                    self.patch_comments = body[empty + 1:i]
+                    break
 
     def parse(self):
         """ Parse a patch (or pull-request) file
@@ -779,6 +809,7 @@ class Patch():
                 CheckCherrypickBackport(self),
                 CheckSignerComment(self),
                 CheckSOB(self),
+                CheckPatchComments(self)
             ]
 
         rc = 0
