@@ -506,6 +506,26 @@ class CheckSeriesBugLink(Check):
 
         return 0
 
+class CheckSeriesMonotonicNumbers(Check):
+    """ Check patch numbering is monotonic increase
+    """
+
+    def run(self):
+        self.name = "monotonic_increase"
+        rc = 0
+
+        numbers = [p.count for p in self.series.patches]
+        for i in range(1, len(numbers)):
+            a = numbers[i-1]
+            b = numbers[i]
+            if b - a != 1:
+                self.result(FAIL, "missing patch #{}".format(i))
+                rc += 1
+
+        if rc == 0:
+            self.result(PASS, "patch order is monotonic increasing")
+
+        return rc
 
 class Patch():
     """ Patch class
@@ -783,13 +803,13 @@ class PatchSeries():
         checks = [
             CheckSeriesSOB(self),
             CheckSeriesBugLink(self),
+            CheckSeriesMonotonicNumbers(self)
         ]
 
         for i, check in enumerate(checks):
             rc += check.run()
             check.log(i + 1)
 
-        # TODO: check monotonic increase of patch number
         # TODO: check series/source target tags consistency
         return rc
 
