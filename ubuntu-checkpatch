@@ -439,7 +439,7 @@ class CheckSeriesType(Check):
         stype = self.series.patches[0].type
 
         if stype not in ("PATCH", "PULL"):
-            self.result(FAIL, "invalid series type: " + stype)
+            self.result(FAIL, "invalid series type: {}".format(stype))
             return 1
 
         if stype == "PULL" and len(self.series.patches) > 1:
