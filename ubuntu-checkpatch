@@ -514,10 +514,10 @@ class CheckSeriesBugLink(Check):
 
         return 0
 
+
 class CheckSeriesMonotonicNumbers(Check):
     """ Check patch numbering is monotonic increase
     """
-
     def run(self):
         self.name = "monotonic_increase"
         rc = 0
@@ -534,6 +534,7 @@ class CheckSeriesMonotonicNumbers(Check):
             self.result(PASS, "patch order is monotonic increasing")
 
         return rc
+
 
 class Patch():
     """ Patch class
