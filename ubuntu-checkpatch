@@ -20,6 +20,7 @@ from launchpadlib.launchpad import Launchpad
 RE_TAG_TYPE = re.compile(r"^(PATCH|PULL)\s*(v\d+)?\s*(\d+/\d+)?$")
 RE_TAG_TARGET = re.compile(r"^[a-zA-Z0-9-./:]+$")
 RE_TAG_FROM_COMMIT = re.compile(r"^\((cherry picked|backported) from commit ([0-9a-f]{40})\s*(.*)*\)$")
+RE_SOB = re.compile(r"^[\w][\w\s]+<([^\s]+)@([^\s]+)>$", re.IGNORECASE)
 
 CACHE_DIR = "~/.cache/ubuntu-checkpatch"
 
@@ -390,12 +391,15 @@ class CheckSOB(Check):
             self.result(FAIL, "missing Signed-off-by tag")
             return 1
 
+        if not re.match(RE_SOB, self.patch.sob):
+            self.result(FAIL, "invalid Signed-off-by tag: " + self.patch.sob)
+            return 1
+
         if self.patch.msg_from and self.patch.msg_from != self.patch.sob:
             self.result(FAIL, "different signer/submitter: {} != {}".format(
                 self.patch.sob, self.patch.msg_from))
             return 1
 
-        # TODO: Check SOB format
         self.result(PASS, "valid Signed-off-by tag: " + self.patch.sob)
         return 0
 
