@@ -22,6 +22,8 @@ RE_TAG_TARGET = re.compile(r"^[a-zA-Z0-9-./:]+$")
 RE_TAG_FROM_COMMIT = re.compile(r"^\((cherry picked|backported) from commit ([0-9a-f]{40})\s*(.*)*\)$")
 RE_SOB = re.compile(r"^[\w][\w\s]+<([^\s]+)@([^\s]+)>$", re.IGNORECASE)
 
+RE_CVE = re.compile(r"CVE-[0-9]{4}-[0-9]{4,}")
+
 CACHE_DIR = "~/.cache/ubuntu-checkpatch"
 
 # Check results
@@ -299,15 +301,17 @@ class CheckBugLinkCVE(Check):
     def run(self):
         self.name = "buglink_cve"
 
+        rc = 0
         if not self.patch.buglinks and not self.patch.cves:
             self.result(FAIL, "missing BugLink/CVE tag")
             return 1
 
         for cve in self.patch.cves:
-            # TODO: Check CVE tag format
-            self.result(PASS, "valid CVE tag: " + cve)
-
-        rc = 0
+            if not re.match(RE_CVE, cve):
+                self.result(FAIL, "invalid CVE tag: " + cve)
+                rc += 1
+            else:
+                self.result(PASS, "valid CVE tag: " + cve)
 
         for link in self.patch.buglinks:
             if len(link) > 1:
