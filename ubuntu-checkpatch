@@ -8,7 +8,6 @@ import email
 import logging
 import os
 import re
-import requests
 import sys
 import time
 import yaml
@@ -378,7 +377,7 @@ class CheckCherrypickBackport(Check):
                 self.result(FAIL, "declared provenance does not contain referenced commit")
                 rc = 1
             else:
-                self.result(FAIL, "unable to check upstream for commit: " + 
+                self.result(FAIL, "unable to check upstream for commit: " +
                                   "{} returned HTTP_STATUS={}".format(upstream, r.status_code))
                 rc = 1
 
@@ -543,7 +542,7 @@ class CheckSeriesMonotonicNumbers(Check):
 
         numbers = [p.count for p in self.series.patches]
         for i in range(1, len(numbers)):
-            a = numbers[i-1]
+            a = numbers[i - 1]
             b = numbers[i]
             if b - a != 1:
                 self.result(FAIL, "missing patch #{}".format(i))
