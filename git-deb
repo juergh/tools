@@ -47,7 +47,7 @@ function do_colordiff()
 
 function set_globals()
 {
-	local remote repo_name distro
+	local remote repo_name series
 
 	if ! [ -d .git ] ; then
 		pr_error "Not a git repo"
@@ -64,16 +64,16 @@ function set_globals()
 	SOURCE=
 	DERIVATIVE=
 	SRU=0
-	RELEASE=
+	TARGET=()
 	TOKEN=()
 
 	# Figure out what type of repo this is
 	if [ "${repo_name}" = kteam-tools ] ; then
 		REPO="kteam-tools"
-		RELEASE="kteam-tools"
+		TARGET=("kteam-tools")
 	elif [ "${repo_name}" = ckct ] ; then
 		REPO="ckct"
-		RELEASE="ckct"
+		TARGET=("ckct")
 	elif [ -e debian/debian.env ] ; then
 		REPO="ubuntu-kernel-main"
 		# shellcheck disable=SC1091
@@ -101,7 +101,6 @@ function set_globals()
 			*)
 				# shellcheck disable=SC2034
 				REPO="debian-generic"
-				RELEASE="none"
 				;;
 		esac
 	fi
@@ -110,26 +109,27 @@ function set_globals()
 	if [ "${DERIVATIVE}" = "unstable" ] ; then
 		DERIVATIVE=
 		SRU=0
-		RELEASE=Unstable
+		TARGET=("Unstable")
 	fi
 
-	# Determine the distro
-	DISTRO=
+	# Determine the series
+	SERIES=
 	if [ -n "${CHANGELOG}" ] ; then
-		DISTRO=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Distribution)
-		if [ "${DISTRO}" = "UNRELEASED" ] ; then
-			DISTRO=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Distribution \
+		SERIES=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Distribution)
+		if [ "${SERIES}" = "UNRELEASED" ] ; then
+			SERIES=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Distribution \
 				  -o 1 -c 1)
 		fi
 	fi
 
-	# Set the release
-	if [ -z "${RELEASE}" ] && [ -n "${DISTRO}" ] ; then
-		distro=${DISTRO:0:1}
-		distro=${distro^^}
-		RELEASE=${distro}
+	# Set the target
+	if [ ${#TARGET[@]} -eq 0 ] && [ -n "${SERIES}" ] ; then
+		series=${SERIES:0:1}
+		series=${series^^}
 		if [ -n "${DERIVATIVE}" ] ; then
-			RELEASE="${RELEASE}:${DERIVATIVE}"
+			TARGET=("${series}:${DERIVATIVE}")
+		else
+			TARGET=("${series}")
 		fi
 	fi
 }
@@ -138,9 +138,15 @@ function print_globals()
 {
 	local var
 
-	for var in REPO CHANGELOG SOURCE DERIVATIVE SRU RELEASE DISTRO \
-					COVER_LETTER DRY_RUN IN_REPLY_TO ORIG SUBJECT_PREFIX; do
-		printf "%-14s : %s\n" "${var}" "${!var}" >&2
+	for var in REPO CHANGELOG SERIES SOURCE DERIVATIVE SRU COVER_LETTER \
+					DRY_RUN IN_REPLY_TO ORIG a_TARGET a_TOKEN \
+					SUBJECT_PREFIX ; do
+		if [ "${var#a_}" != "${var}" ] ; then
+			declare -n vars=${var#a_}
+			printf "%-14s : %s\n" "${var#a_}" "${vars[*]}" >&2
+		else
+			printf "%-14s : %s\n" "${var}" "${!var}" >&2
+		fi
 	done
 }
 
@@ -379,7 +385,7 @@ do_build_source()
 function usage()
 {
 	cat <<EOF
-Usage: git-deb [-c] [-d] [-h] [-i MSG_ID] [-r RELEASE] [-s] [-t TOKEN] [-ns]
+Usage: git-deb [-c] [-d] [-h] [-i MSG_ID] [-r TARGET] [-s] [-t TOKEN] [-ns]
                [-v NUM] COMMAND [OPTS]
 
 Helper script for managing Ubuntu package git repos.
@@ -399,7 +405,8 @@ Optional arguments:
   -h, --help                Show this help text.
   -i, --in-reply-to MSG_ID  Reply to the given MSG_ID.
   -o, --orig                Include the original source tarball.
-  -r, --release RELEASE     The release to include in the subject prefix.
+  -r, --target TARGET       The target (series[:source]) to include in the
+                            subject prefix. Can be provided multiple times.
   -s, --resend              Add RESEND to the subject prefix.
   -t, --token TEXT          Add an additional token [TEXT] to the subject
                             prefix. Can be provided multiple times.
@@ -442,9 +449,9 @@ while [ ${#} -gt 0 ] ; do
 		-o|--orig)
 			ORIG=1
 			;;
-		-r|--release)
+		-r|--target)
 			shift
-			RELEASE=${1}
+			TARGET+=("${1}")
 			;;
 		-s|--resend)
 			resend=1
@@ -483,9 +490,9 @@ SUBJECT_PREFIX=
 if [ "${SRU}" -eq 1 ] ; then
 	SUBJECT_PREFIX="${SUBJECT_PREFIX}][SRU"
 fi
-if [ -n "${RELEASE}" ] && [ "${RELEASE}" != "none" ] ; then
-	SUBJECT_PREFIX="${SUBJECT_PREFIX}][${RELEASE}"
-fi
+for target in "${TARGET[@]}" ; do
+	SUBJECT_PREFIX="${SUBJECT_PREFIX}][${target}"
+done
 for token in "${TOKEN[@]}" ; do
 	SUBJECT_PREFIX="${SUBJECT_PREFIX}][${token}"
 done
