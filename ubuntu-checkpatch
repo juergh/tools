@@ -368,10 +368,10 @@ class CheckCherrypickBackport(Check):
         if commit and self.patch.provenance in ("", "linux-next", "linux-stable"):
             linux_base = "https://git.kernel.org/pub/scm/linux/kernel/git"
             upstream = {
-                "": f"{linux_base}/torvalds/linux.git/commit/?id={commit}",
-                "linux-next": f"{linux_base}/stable/linux.git/commit/?id={commit}",
-                "linux-stable": f"{linux_base}/next/linux-next.git/commit/?id={commit}",
-            }[self.patch.provenance]
+                "": "{linux_base}/torvalds/linux.git/commit/?id={commit}",
+                "linux-next": "{linux_base}/stable/linux.git/commit/?id={commit}",
+                "linux-stable": "{linux_base}/next/linux-next.git/commit/?id={commit}",
+            }[self.patch.provenance].format(linux_base=linux_base, commit=commit)
             r = requests.get(upstream)
             if r.status_code == 200:
                 self.result(PASS, "declared provenance contains referenced commit")
@@ -379,7 +379,8 @@ class CheckCherrypickBackport(Check):
                 self.result(FAIL, "declared provenance does not contain referenced commit")
                 rc = 1
             else:
-                self.result(WARN, f"unable to check upstream for commit: {upstream} returned HTTP_STATUS={r.status_code}")
+                self.result(WARN, "unable to check upstream for commit: " + 
+                                  "{} returned HTTP_STATUS={}".format(upstream, r.status_code))
                 rc = 1
 
         return rc
