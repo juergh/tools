@@ -20,8 +20,7 @@ from launchpadlib.launchpad import Launchpad
 RE_TAG_TYPE = re.compile(r"^(PATCH|PULL)\s*(v\d+)?\s*(\d+/\d+)?$")
 RE_TAG_TARGET = re.compile(r"^[a-zA-Z0-9-./:]+$")
 RE_TAG_FROM_COMMIT = re.compile(r"^\((cherry picked|backported) from commit ([0-9a-f]{40})\s*(.*)\)$")
-RE_SOB = re.compile(r"^[\w][\w\s]+<([^\s]+)@([^\s]+)>$", re.IGNORECASE)
-
+RE_SOB = re.compile(r"^.+\s<[^\s]+@[^\s]+>$")
 RE_CVE = re.compile(r"^CVE-[0-9]{4}-[0-9]{4,}$")
 
 CACHE_DIR = "~/.cache/ubuntu-checkpatch"
