@@ -129,7 +129,7 @@ function set_globals()
 		distro=${distro^^}
 		RELEASE=${distro}
 		if [ -n "${DERIVATIVE}" ] ; then
-			RELEASE=${RELEASE}/${DERIVATIVE}
+			RELEASE="${RELEASE}:${DERIVATIVE}"
 		fi
 	fi
 }
