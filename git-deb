@@ -376,41 +376,6 @@ do_build_source()
 	dpkg-buildpackage "${opts[@]}"
 }
 
-function do_debdiff()
-{
-	local prev_version=${1:-}
-	local version prev_dsc dsc
-
-	version=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Version)
-	prev_dsc=${SOURCE}_${prev_version}.dsc
-	dsc=${SOURCE}_${version}.dsc
-	debdiff=${SOURCE}_${version}.debdiff
-	changes=${SOURCE}_${version}_source.changes
-
-	if [ -n "${prev_version}" ] ; then
-		echo "Generating ../${dsc} ..."
-		debdiff ../"${prev_dsc}" ../"${dsc}" > ../"${debdiff}"
-	else
-		# lsdiff .debdiff
-        echo
-        echo -e "\e[96m*** lsdiff ${debdiff} ***\e[0m"
-        echo
-        lsdiff -s ../"${debdiff}" | do_colordiff
-
-        # filterdiff .debdiff
-        echo
-        echo -e "\e[96m*** filterdiff ${debdiff} ***\e[0m"
-        echo
-        filterdiff ../"${debdiff}" | do_colordiff
-
-        # Content of .changes
-        echo
-        echo -e "\e[96m*** cat ${changes} ***\e[0m"
-        echo
-        cat ../"${changes}"
-	fi
-}
-
 function usage()
 {
 	cat <<EOF
@@ -495,7 +460,7 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			version=${1}
 			;;
-		build-source|info|format-patch|send-patch|request-pull|debdiff)
+		build-source|info|format-patch|send-patch|request-pull)
 			cmd=${1//-/_}
 			shift
 			break
