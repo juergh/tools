@@ -75,7 +75,7 @@ function set_globals()
 		REPO="ckct"
 		TARGET=("ckct")
 	elif [ -e debian/debian.env ] ; then
-		REPO="ubuntu-kernel-main"
+		REPO="ubuntu-kernel (main)"
 		# shellcheck disable=SC1091
 		. debian/debian.env
 		CHANGELOG=${DEBIAN}/changelog
@@ -88,7 +88,7 @@ function set_globals()
 		SOURCE=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Source)
 		case "${SOURCE}" in
 			linux-meta*|linux-signed*|linux-restricted-modules*)
-				REPO="ubuntu-kernel-dependent"
+				REPO="ubuntu-kernel (dependent)"
 				DERIVATIVE=${SOURCE#linux}
 				DERIVATIVE=${DERIVATIVE#-}
 				SRU=1
