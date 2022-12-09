@@ -8,6 +8,7 @@ import email
 import logging
 import os
 import re
+import requests
 import sys
 import time
 import yaml
@@ -353,6 +354,8 @@ class CheckCherrypickBackport(Check):
             self.result(FAIL, "cherrypick and backport tags present")
             return 1
 
+        rc = 0
+        commit = None
         if self.patch.cherrypick:
             commit = self.patch.cherrypick
             self.result(PASS, "valid cherrypick from commit: " + commit)
@@ -361,8 +364,25 @@ class CheckCherrypickBackport(Check):
             commit = self.patch.backport
             self.result(PASS, "valid backport from commit: " + commit)
 
-        # TODO: Check provenance and upstream commit existence
-        return 0
+        if commit and self.patch.provenance in ("", "linux-next", "linux-stable"):
+            linux_base = "https://git.kernel.org/pub/scm/linux/kernel/git"
+            upstream = {
+                "": "{linux_base}/torvalds/linux.git/commit/?id={commit}",
+                "linux-next": "{linux_base}/stable/linux.git/commit/?id={commit}",
+                "linux-stable": "{linux_base}/next/linux-next.git/commit/?id={commit}",
+            }[self.patch.provenance].format(linux_base=linux_base, commit=commit)
+            r = requests.get(upstream)
+            if r.status_code == 200:
+                self.result(PASS, "declared provenance contains referenced commit")
+            elif r.status_code == 404:
+                self.result(FAIL, "declared provenance does not contain referenced commit")
+                rc = 1
+            else:
+                self.result(FAIL, "unable to check upstream for commit: " + 
+                                  "{} returned HTTP_STATUS={}".format(upstream, r.status_code))
+                rc = 1
+
+        return rc
 
 
 class CheckSignerComment(Check):
