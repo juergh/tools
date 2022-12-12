@@ -34,11 +34,16 @@ for f in files:
     if regex.match(f):
         continue
 
+    dt = None
     exif = get_exif(f)
     if exif:
-        dt = exif['DateTimeOriginal'].replace(':', '').replace(' ', '_')
-    else:
-        ctime = os.stat(f).st_ctime
+        if 'DateTimeOriginal' in exif:
+            dt = exif['DateTimeOriginal'].replace(':', '').replace(' ', '_')
+        elif 'DateTimeDigitized' in exif:
+            dt = exif['DateTimeDigitized'].replace('/', '').replace(':', '').replace(' ', '_')
+
+    if not dt:
+        ctime = os.stat(f).st_mtime
         dt = datetime.fromtimestamp(ctime).strftime("%Y%m%d_%H%M%S")
 
     new = "IMG_{}.jpg".format(dt)
