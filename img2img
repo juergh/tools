@@ -20,20 +20,28 @@ def get_exif(fn):
         ret[decoded] = value
     return ret
 
-parser = argparse.ArgumentParser()
-parser.add_argument("-f", "--force", action="store_true", default=False)
+parser = argparse.ArgumentParser(description="Rename image files using EXIF " +
+                                 "date/time information.")
+parser.add_argument("-f", "--force", help="Do the actual rename.",
+                    action="store_true", default=False)
 parser.add_argument("-m", "--mtime", help="Use mtime to determine date/time " +
                     "if no EXIF data is found", action="store_true",
                     default=False)
+parser.add_argument("images", nargs="*", help="List of image files to " +
+                    "rename. If not provided, renames all .jpg files in the " +
+                    "current directory.")
 args = parser.parse_args()
 
-files = [f for f in os.listdir('.') if (os.path.isfile(f) and
-                                        f.lower().endswith('.jpg'))]
+if args.images:
+    args.images = [f for f in args.images if f.lower().endswith('.jpg')]
+else:
+    args.images = [f for f in os.listdir('.') if (os.path.isfile(f) and
+                                                  f.lower().endswith('.jpg'))]
 
 regex = re.compile(r'IMG_[0-9]{8}_[0-9]{6}(_[0-9]+)?.jpg')
 
 found = False
-for f in files:
+for f in args.images:
     if regex.match(f):
         continue
 
