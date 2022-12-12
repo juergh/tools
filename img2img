@@ -14,7 +14,7 @@ def get_exif(fn):
     i = Image.open(fn)
     info = i._getexif()
     if info is None:
-        return
+        return None
     for tag, value in info.items():
         decoded = TAGS.get(tag, tag)
         ret[decoded] = value
@@ -22,6 +22,9 @@ def get_exif(fn):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-f", "--force", action="store_true", default=False)
+parser.add_argument("-m", "--mtime", help="Use mtime to determine date/time " +
+                    "if no EXIF data is found", action="store_true",
+                    default=False)
 args = parser.parse_args()
 
 files = [f for f in os.listdir('.') if (os.path.isfile(f) and
@@ -43,14 +46,17 @@ for f in files:
             dt = exif['DateTimeDigitized'].replace('/', '').replace(':', '').replace(' ', '_')
 
     if not dt:
-        ctime = os.stat(f).st_mtime
-        dt = datetime.fromtimestamp(ctime).strftime("%Y%m%d_%H%M%S")
+        if args.mtime:
+            ctime = os.stat(f).st_mtime
+            dt = datetime.fromtimestamp(ctime).strftime("%Y%m%d_%H%M%S")
+        else:
+            continue
 
     new = "IMG_{}.jpg".format(dt)
 
     if os.path.exists(new):
         for num in range(1, 100):
-            new =  "IMG_{}_{}.jpg".format(dt, num)
+            new = "IMG_{}_{}.jpg".format(dt, num)
             if not os.path.exists(new):
                 break
 
