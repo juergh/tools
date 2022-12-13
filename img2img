@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser(description="Rename image files using EXIF " +
                                  "date/time information.")
 parser.add_argument("-f", "--force", help="Do the actual rename.",
                     action="store_true", default=False)
-parser.add_argument("-m", "--mtime", help="Use mtime to determine date/time " +
+parser.add_argument("-s", "--stat", help="Use file stat to determine date/time " +
                     "if no EXIF data is found", action="store_true",
                     default=False)
 parser.add_argument("images", nargs="*", help="List of image files to " +
@@ -45,6 +45,7 @@ for f in args.images:
     if regex.match(f):
         continue
 
+    warn = ''
     dt = None
     exif = get_exif(f)
     if exif:
@@ -54,9 +55,12 @@ for f in args.images:
             dt = exif['DateTimeDigitized'].replace('/', '').replace(':', '').replace(' ', '_')
 
     if not dt:
-        if args.mtime:
-            ctime = os.stat(f).st_mtime
-            dt = datetime.fromtimestamp(ctime).strftime("%Y%m%d_%H%M%S")
+        if args.stat:
+            warn = ' (date/time from file stat)'
+            stime = min(os.stat(f).st_atime,
+                        os.stat(f).st_ctime,
+                        os.stat(f).st_mtime)
+            dt = datetime.fromtimestamp(stime).strftime("%Y%m%d_%H%M%S")
         else:
             continue
 
@@ -73,7 +77,7 @@ for f in args.images:
         continue
 
     found = True
-    print("{} -> {}".format(f, new))
+    print("{} -> {}{}".format(f, new, warn))
     if args.force:
         os.rename(f, new)
 
