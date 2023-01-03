@@ -1,0 +1,51 @@
+#!/bin/bash -eu
+
+os=${1}
+series=${2}
+arch=${3:-amd64}
+
+case "${os}" in
+	ss)
+		# ScalingStack
+		. ~/scalingstack_bos01.novarc
+		# flavor=autopkgtest
+		flavor=cpu4-ram8-disk20
+		network=net_kernel-automated-tests
+		security_group=allow-ping-and-ssh
+		;;
+	cs)
+		# CanoniStack
+		. ~/.sesame/canonistack.rc
+		flavor=cpu4-ram8-disk20
+		network=net_external
+		security_group=default
+		;;
+	*)
+		echo "-- Invalid OpenStack instance: ${os}" >&2
+		exit 1
+		;;
+esac
+
+image=$(openstack image list -f value -c ID -c Name --status active | \
+            grep "ubuntu-${series}-daily-${arch}" | tail -1)
+if [ -z "${image}" ] ; then
+	echo "-- No image found for: ${series} (${arch})"
+	exit 1
+fi
+
+image_name=${image#* }
+image_uuid=${image%% *}
+
+echo "-- Use image ${image_name} (${image_uuid})"
+
+key_name=${USER}
+name=${USER}-${series}-${arch}
+
+echo "-- Create server ${name}"
+openstack server create \
+		  --image "${image_uuid}" \
+		  --flavor "${flavor}" \
+		  --key-name "${key_name}" \
+		  --network "${network}" \
+		  --security-group "${security_group}" \
+		  "${name}"
