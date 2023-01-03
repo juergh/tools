@@ -396,6 +396,7 @@ set_globals
 COVER_LETTER=0
 DRY_RUN=0
 IN_REPLY_TO=
+OPT_TARGET=()
 resend=0
 version=0
 cmd=
@@ -418,7 +419,7 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-r|--target)
 			shift
-			TARGET+=("${1}")
+			OPT_TARGET+=("${1}")
 			;;
 		-s|--resend)
 			resend=1
@@ -450,6 +451,11 @@ done
 if [ -z "${cmd}" ] ; then
 	usage
 	exit 2
+fi
+
+# Options that override globals
+if [ ${#OPT_TARGET[@]} -gt 0 ] ; then
+	TARGET=("${OPT_TARGET[@]}")
 fi
 
 # Set the default email subject prefix
