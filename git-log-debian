@@ -67,17 +67,14 @@ function log_debian()
 			continue
 		fi
 
+		tag=
+		tag_type=
+
 		# Check if this is a release commit
 		if [ "${subject#UBUNTU: Ubuntu-}" != "${subject}" ] ; then
 			tag=${subject#UBUNTU: }
 			tag=${tag//~/_}
-			if git rev-parse "${tag}" >/dev/null 2>&1 ; then
-				# Follow the tag
-				pr_info "-- Follow release tag ${tag}"
-				log_debian "${tag}"
-				return
-			fi
-			pr_info "-- Release tag not found: ${tag}"
+			tag_type="release"
 
 		# Check if the package name/version/release changed
 		elif [ "${subject}" != "UBUNTU: Start new release" ] ; then
@@ -87,26 +84,24 @@ function log_debian()
 			# No previous entry: Probably an initial import
 			if [ -z "${n2}${v2}${r2}" ] && [ -n "${n1}${v1}${r1}" ] ; then
 				tag=$(tag_name "${n1}" "${v1}")
-				if git rev-parse "${tag}" >/dev/null 2>&1 ; then
-					# Follow the tag
-					pr_info "-- Follow import tag ${tag}"
-					log_debian "${tag}"
-					return
-				fi
-				pr_info "-- Import tag not found: ${tag}"
+				tag_type="import"
 
 			# Previous entry != current entry: Probably a rename or rebase of
 			# some sort
 			elif [ "${n1}${v1}${r1}" != "${n2}${v2}${r2}" ] ; then
 				tag=$(tag_name "${n2}" "${v2}")
-				if git rev-parse "${tag}" >/dev/null 2>&1 ; then
-					# Follow the tag
-					pr_info "-- Follow rename tag ${tag}"
-					log_debian "${tag}"
-					return
-				fi
-				pr_info "-- Rename tag not found: ${tag}"
+				tag_type="rename"
 			fi
+		fi
+
+		if [ -n "${tag}" ] ; then
+			if git rev-parse "${tag}" >/dev/null 2>&1 ; then
+				# Follow the tag
+				pr_info "-- Follow ${tag_type} tag ${tag}"
+				log_debian "${tag}"
+				return
+			fi
+			pr_info "-- ${tag_type^} tag not found: ${tag}"
 		fi
 
 		echo "${line}"
