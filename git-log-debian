@@ -110,7 +110,7 @@ function log_debian()
 		fi
 
 		echo "${line}"
-	done < <(git log --oneline "${start}" -- debian debian.*)
+	done < <(git log --oneline --no-merges "${start}" -- debian debian.*)
 }
 
 function usage()
