@@ -59,9 +59,9 @@ function log_debian()
 	local first line commit subject tag n1 v1 r1 n2 v2 r2
 
 	first=1
-	while IFS= read -r line ; do
-		commit=${line%% *}
-		subject=${line#* }
+	while IFS= read -r commit ; do
+		subject=$(git log --format=%B "${commit}" -1 | head -1)
+		line="${commit} ${subject}"
 
 		if [ ${first} -eq 1 ] ; then
 			echo "${line}"
@@ -111,7 +111,7 @@ function log_debian()
 		fi
 
 		echo "${line}"
-	done < <(git log --oneline --no-merges "${start}" -- debian debian.*)
+	done < <(git log --format=%h --no-merges "${start}" -- debian debian.*)
 }
 
 function usage()
