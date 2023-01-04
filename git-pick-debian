@@ -3,52 +3,48 @@
 # Pick debian{,.*} changes from a git commit
 #
 
+function git_add()
+{
+	local f
+
+	for f in "${@}" ; do
+		if [ -e "${f}" ] ; then
+			git add "${f}"
+		fi
+	done
+}
+
 function do_pick()
 {
 	local commit=${1}
-	local d
 
 	# Pick debian changes
 	git diff "${commit}"~1.."${commit}" -- debian debian.\* | git apply -
-	for d in debian debian.* ; do
-		if [ -d "${d}" ] ; then
-			git add "${d}"
-		fi
-	done
+	git_add debian debian.*
 	git commit -C "${commit}"
 }
 
 function do_resync()
 {
 	local commit=${1}
-	local d
 
 	echo "-- Resync debian changes from commit ${commit}"
 
 	# Resync debian changes
 	git diff "${commit}" -- debian debian.\* | git apply -R -
-	for d in debian debian.* ; do
-		if [ -d "${d}" ] ; then
-			git add "${d}"
-		fi
-	done
+	git_add debian debian.*
 	git commit --amend --no-edit
 }
 
 function do_import()
 {
 	local commit=${1}
-	local d
 
 	echo "-- Import debian changes from commit ${commit}"
 
 	# Import debian changes
 	git diff "${commit}" -- debian debian.\* | git apply -R -
-	for d in debian debian.* ; do
-		if [ -d "${d}" ] ; then
-			git add "${d}"
-		fi
-	done
+	git_add debian debian.*
 	git commit -C "${commit}"
 }
 
