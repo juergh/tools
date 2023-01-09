@@ -7,6 +7,8 @@ function git_add()
 {
 	local f
 
+	git add --update
+
 	for f in "${@}" ; do
 		if [ -e "${f}" ] ; then
 			git add "${f}"
