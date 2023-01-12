@@ -119,6 +119,10 @@ fi
 if [ -n "${offset}" ] ; then
 	# Use the package version from the changelog
 	while IFS= read -r path ; do
+		if [ ${current} -eq 1 ] && [ "${path}" != "$(realpath .)" ] ; then
+			continue
+		fi
+
 		DEBIAN=debian
 		if [ -e "${path}"/debian/debian.env ] ; then
 			. "${path}"/debian/debian.env
