@@ -119,9 +119,14 @@ fi
 if [ -n "${offset}" ] ; then
 	# Use the package version from the changelog
 	while IFS= read -r path ; do
-		package=$(dpkg-parsechangelog -l "${path}"/debian/changelog \
+		DEBIAN=debian
+		if [ -e "${path}"/debian/debian.env ] ; then
+			. "${path}"/debian/debian.env
+		fi
+
+		package=$(dpkg-parsechangelog -l "${path}"/"${DEBIAN}"/changelog \
 									  -o "${offset}" -c 1 -S source)
-		version=$(dpkg-parsechangelog -l "${path}"/debian/changelog \
+		version=$(dpkg-parsechangelog -l "${path}"/"${DEBIAN}"/changelog \
 									  -o "${offset}" -c 1 -S version)
 		case "${package}" in
 			linux-meta*)
