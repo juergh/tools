@@ -314,7 +314,10 @@ function do_request_pull()
 	buglink=$(git log --format=%b -2 | grep -m1 '^BugLink: ' || true)
 	buglink=${buglink#BugLink: }
 	url=${buglink%% *}
-	if [ "${url}" = "${buglink}" ] ; then
+	if [ -z "${url}" ] ; then
+		subject="FIXME"
+		blurb="FIXME"
+	elif [ "${url}" = "${buglink}" ] ; then
 		# Try to query launchpad
 		bug=${buglink##*/}
 		subject="$(_query_lp_bug "${bug}" title) (LP: #${bug})"
@@ -323,7 +326,7 @@ function do_request_pull()
 		# Buglink contains a subject, so must be a private bug
 		subject=${buglink#* }
 		subject=${subject:1:-1}
-		blurb=
+		blurb="FIXME"
 	fi
 
 	name=$(git config user.name)
