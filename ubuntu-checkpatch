@@ -30,6 +30,15 @@ PASS = "pass"
 FAIL = "fail"
 WARN = "warn"
 
+# Upstream git URLs for provenance checks
+KERNEL_ORG_BASE_GIT_URL = "https://git.kernel.org/pub/scm/linux/kernel/git/"
+UPSTREAM_GIT_URL = {
+    "": KERNEL_ORG_BASE_GIT_URL + "torvalds/linux.git/commit/?id={commit}",
+    "linux-next": KERNEL_ORG_BASE_GIT_URL + "/stable/linux.git/commit/?id={commit}",
+    "linux-stable": KERNEL_ORG_BASE_GIT_URL + "/next/linux-next.git/commit/?id={commit}",
+    "linux-firmware": KERNEL_ORG_BASE_GIT_URL + "/firmware/linux-firmware.git/commit/?id={commit}",
+}
+
 # Global ugliness...
 KS = {}
 LP = None
@@ -225,11 +234,18 @@ class CheckPatchTarget(Check):
             LOG.debug("Series: %s", series)
             LOG.debug("Source: %s", source)
 
+            # Check if this is linux-firmware (only)
+            self.patch.linux_firmware = True
+            for src in source:
+                if src != "linux-firmware":
+                    self.patch.linux_firmware = False
+
             # Verify that all series/source combinations are valid
             for ser in series:
                 for src in source:
                     ser_src = "{}/{}".format(ser, src)
-                    if src in self.ks[ser]:
+                    if ((src in self.ks[ser] or
+                         (self.patch.linux_firmware and "linux" in self.ks[ser]))):
                         self.result(PASS, "valid series/source target: " +
                                     ser_src)
                     else:
@@ -363,22 +379,29 @@ class CheckCherrypickBackport(Check):
             commit = self.patch.backport
             self.result(PASS, "valid backport from commit: " + commit)
 
-        if commit and self.patch.provenance in ("", "linux-next", "linux-stable"):
-            linux_base = "https://git.kernel.org/pub/scm/linux/kernel/git"
-            upstream = {
-                "": "{linux_base}/torvalds/linux.git/commit/?id={commit}",
-                "linux-next": "{linux_base}/stable/linux.git/commit/?id={commit}",
-                "linux-stable": "{linux_base}/next/linux-next.git/commit/?id={commit}",
-            }[self.patch.provenance].format(linux_base=linux_base, commit=commit)
-            r = requests.get(upstream)
-            if r.status_code == 200:
-                self.result(PASS, "declared provenance contains referenced commit")
-            elif r.status_code == 404:
-                self.result(FAIL, "declared provenance does not contain referenced commit")
-                rc = 1
+        if commit:
+            # Figure out which upstream git repo to use
+            if self.patch.linux_firmware:
+                prov = "linux-firmware"
             else:
-                self.result(FAIL, "unable to check upstream for commit: " +
-                                  "{} returned HTTP_STATUS={}".format(upstream, r.status_code))
+                prov = self.patch.provenance
+            prov_url = UPSTREAM_GIT_URL.get(prov)
+
+            if prov_url:
+                # Query the upstream git repo
+                upstream = prov_url.format(commit=commit)
+                r = requests.get(upstream)
+                if r.status_code == 200:
+                    self.result(PASS, "declared provenance contains referenced commit")
+                elif r.status_code == 404:
+                    self.result(FAIL, "declared provenance does not contain referenced commit")
+                    rc = 1
+                else:
+                    self.result(FAIL, "unable to check upstream for commit: " +
+                                "{} returned HTTP_STATUS={}".format(upstream, r.status_code))
+                    rc = 1
+            else:
+                self.result(FAIL, "unsupported provenance: " + prov)
                 rc = 1
 
         return rc
@@ -565,32 +588,34 @@ class Patch():
         self.cover_letter = False  # Is this a cover letter patch
 
         # Message header data
-        self.msg_from = None       # Mail message sender/author
-        self.msg_subject = None    # Mail message subject
-        self.msg_body = None       # Mail message body
+        self.msg_from = None         # Mail message sender/author
+        self.msg_subject = None      # Mail message subject
+        self.msg_body = None         # Mail message body
 
         # Message subject data
-        self.tags = []             # All tags
-        self.deprecated_tags = []  # Deprecated tags
-        self.invalid_tags = []     # Invalid tags
-        self.target_tags = []      # Target series/source tags
-        self.subject = None        # Patch subject
-        self.type = None           # Patch type (PATCH or PULL)
-        self.version = None        # Patch submission version
-        self.count = None          # Patch count
-        self.total = None          # Total number of patches in series
+        self.tags = []               # All tags
+        self.deprecated_tags = []    # Deprecated tags
+        self.invalid_tags = []       # Invalid tags
+        self.target_tags = []        # Target series/source tags
+        self.subject = None          # Patch subject
+        self.type = None             # Patch type (PATCH or PULL)
+        self.version = None          # Patch submission version
+        self.count = None            # Patch count
+        self.total = None            # Total number of patches in series
 
         # Message body data
-        self.buglinks = []         # Buglinks
-        self.cves = []             # CVE tags
-        self.sob = None            # Last signed-off-by signer
-        self.pr_url = None         # Pull request URL (and branch/tag)
-        self.pr_from = None        # Pull request from commit hash
-        self.pr_to = None          # Pull request to commit hash
-        self.cherrypick = None     # Cherry picked commit hash
-        self.backport = None       # Backported commit hash
-        self.comments = []         # Modification comment
-        self.provenance = None     # Original commit provenance
+        self.buglinks = []           # Buglinks
+        self.cves = []               # CVE tags
+        self.sob = None              # Last signed-off-by signer
+        self.pr_url = None           # Pull request URL (and branch/tag)
+        self.pr_from = None          # Pull request from commit hash
+        self.pr_to = None            # Pull request to commit hash
+        self.cherrypick = None       # Cherry picked commit hash
+        self.backport = None         # Backported commit hash
+        self.comments = []           # Modification comment
+        self.provenance = None       # Original commit provenance
+
+        self.linux_firmware = False  # Source == linux-firmware
 
     def _parse_msg_subject(self):
         """ Parse the mail subject line
