@@ -76,6 +76,18 @@ function check_emails()
 	fi
 }
 
+function verify_current()
+{
+	local abi=${1}
+
+	if [ -n "${abi}" ] ; then
+		check_abi "${abi}"
+	fi
+	check_cycle
+	check_emails
+	"${KTEAM_TOOLS}"/maintscripts/verify-release-ready || true
+}
+
 function usage()
 {
     cat <<EOF
@@ -109,9 +121,7 @@ while [ ${#} -gt 0 ] ; do
 done
 
 if [ ${current} -eq 1 ] ; then
-	check_cycle
-	check_emails
-	"${KTEAM_TOOLS}"/maintscripts/verify-release-ready
+	verify_current ""
 else
 	abi=
 	while IFS= read -r path ; do
@@ -120,10 +130,7 @@ else
 		if [ -z "${abi}" ] ; then
 			abi=$(get_abi)
 		fi
-		check_abi "${abi}"
-		check_cycle
-		check_emails
-		"${KTEAM_TOOLS}"/maintscripts/verify-release-ready || true
+		verify_current "${abi}"
 		echo
 	done < <(cranky shell-helper source-packages-path)
 fi
