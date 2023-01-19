@@ -118,13 +118,11 @@ fi
 while IFS= read -r path ; do
 	echo
 	echo "${path}"
-	(
-		cd "${path}"
-		key=$(cranky shell-helper tree-type)
-		val=${FETCH["${key}"]}
-		echo "-- git fetch --no-tags ${val% *} tag ${val#* }"
-		if [ ${dry_run} -eq 0 ] ; then
-			git fetch --no-tags "${val% *}" tag "${val#* }"
-		fi
-	)
+	cd "${path}"
+	key=$(cranky shell-helper tree-type)
+	val=${FETCH["${key}"]}
+	echo "-- git fetch --no-tags ${val% *} tag ${val#* }"
+	if [ ${dry_run} -eq 0 ] ; then
+		git fetch --no-tags "${val% *}" tag "${val#* }"
+	fi
 done < <(cranky shell-helper source-packages-path "${handle}")
