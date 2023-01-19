@@ -78,8 +78,29 @@ function check_emails()
 
 function verify_current()
 {
-	local abi=${1}
+	local abi=${1} log=${2}
+	local opts
 
+	echo
+	echo "------------------------------------------------------------------"
+	realpath .
+
+	if [ "${log}" -ne 0 ] ; then
+		echo "------------------------------------------------------------------"
+		prev=$(git log --oneline HEAD | \
+				   grep -m2 -P "[0-9a-f]{12} UBUNTU: Ubuntu.*-${abi%-*}" | \
+				   tail -1)
+		opts=()
+		if [ "${log}" -eq 1 ] ; then
+			opts=("--oneline")
+		fi
+		git --no-pager log --decorate --color=always "${opts[@]}" "${prev%% *}"^..
+		if [ "${log}" -eq 2 ] ; then
+			echo
+		fi
+	fi
+
+	echo "------------------------------------------------------------------"
 	if [ -n "${abi}" ] ; then
 		check_abi "${abi}"
 	fi
@@ -91,27 +112,36 @@ function verify_current()
 function usage()
 {
     cat <<EOF
-Usage: cranky-verify-release-ready [-c] [-h]
+Usage: cranky-verify-release-ready [-c] [-h] [-l] [-o]
 
 Run verify-release-ready and check commit author and SOB email addresses.
 
 Optional arguments:
-  -c, --current  Run verify-release-ready only in the current directory.
-  -h, --help     Show the current help text and exit.
+  -c, --current      Run verify-release-ready only in the current directory.
+  -h, --help         Show the current help text and exit.
+  -l, --log          Shwo git log.
+  -o, --log-oneline  Show git log --oneline.
 EOF
 }
 
 current=0
+log=0
 
 while [ ${#} -gt 0 ] ; do
     case "${1}" in
 		-c|--current)
 			current=1
 			;;
-        -h|--help)
-            usage
-            exit
-            ;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-l|--log)
+			log=2
+			;;
+		-o|--log-oneline)
+			log=1
+			;;
 		*)
 			echo "Invalid argument: ${1}" >&2
 			exit 2
@@ -120,17 +150,13 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
+abi=$(get_abi)
+
 if [ ${current} -eq 1 ] ; then
-	verify_current ""
+	verify_current "${abi}" "${log}"
 else
-	abi=
 	while IFS= read -r path ; do
-		echo "${path}"
 		cd "${path}"
-		if [ -z "${abi}" ] ; then
-			abi=$(get_abi)
-		fi
-		verify_current "${abi}"
-		echo
+		verify_current "${abi}" "${log}"
 	done < <(cranky shell-helper source-packages-path)
 fi
