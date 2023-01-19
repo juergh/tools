@@ -1,0 +1,130 @@
+#!/bin/bash -eu
+#
+# Fetch Ubuntu kernel repo for a peer review
+#
+
+function query_jira()
+{
+	local issue=${1}
+
+	python3 -c "
+import re
+from jira import JIRA
+
+jira = JIRA('https://warthogs.atlassian.net')
+issue = jira.issue('${issue}', fields='summary,comment')
+
+summary = issue.fields.summary
+print('summary ' + summary)
+
+found = False
+for comment in reversed(issue.fields.comment.comments):
+    for line in comment.body.split('\n'):
+        m = re.search(r'(git\+ssh://[^ }]+).*(Ubuntu-[a-z0-9-._+]+)', line)
+        if m:
+            found = True
+            print('fetch ' + m.group(1) + ' ' + m.group(2))
+    if found:
+        break
+"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-d] [-h] ISSUE
+
+Parse the provided Jira <ISSUE> and fetch the referenced repos.
+
+Optional arguments:
+  -d, --dry-run  Don't fetch tags.
+  -h, --help     Show this help text and exit.
+EOF
+}
+
+dry_run=0
+issue=
+
+while [ ${#} -gt 0 ] ; do
+    case "${1}" in
+        -d|--dry-run)
+            dry_run=1
+            ;;
+        -h|--help)
+            usage
+            exit
+            ;;
+        *)
+            if [ -n "${issue}" ] ; then
+                echo "Invalid argument: ${1}" >&2
+                exit 2
+            fi
+            issue=${1}
+            ;;
+    esac
+    shift
+done
+
+if [ -z "${issue}" ] ; then
+	usage
+	exit 2
+fi
+
+declare -A FETCH
+
+while IFS= read -r line ; do
+	key=${line%% *}
+	val=${line#* }
+	case "${key}" in
+		summary)
+			echo "summary: ${val}"
+			handle=${val#* }
+			handle=${handle%% *}
+			echo "handle:  ${handle}"
+			;;
+		fetch)
+			case "${val}" in
+				*linux-meta*)
+					echo "meta:    ${val}"
+					FETCH[meta]="${val}"
+					;;
+				*linux-signed*)
+					echo "signed:  ${val}"
+					FETCH[signed]="${val}"
+					;;
+				*linux-lrm*|*linux-restricted-modules*)
+					echo "lrm:     ${val}"
+					FETCH[lrm]="${val}"
+					;;
+				*)
+					if [ -n "${FETCH[main]:-}" ] ; then
+						echo "FETCH[main] already set: ${FETCH[main]}" >&2
+						exit 1
+					fi
+					echo "main:    ${val}"
+					FETCH[main]="${val}"
+					;;
+			esac
+			;;
+	esac
+done < <(query_jira "${issue}")
+
+echo
+echo "-- cranky-checkout -u ${handle}"
+if [ ${dry_run} -eq 0 ] ; then
+	cranky-checkout -u "${handle}"
+fi
+
+while IFS= read -r path ; do
+	echo
+	echo "${path}"
+	(
+		cd "${path}"
+		key=$(cranky shell-helper tree-type)
+		val=${FETCH["${key}"]}
+		echo "-- git fetch --no-tags ${val% *} tag ${val#* }"
+		if [ ${dry_run} -eq 0 ] ; then
+			git fetch --no-tags "${val% *}" tag "${val#* }"
+		fi
+	)
+done < <(cranky shell-helper source-packages-path "${handle}")
