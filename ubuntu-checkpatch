@@ -604,32 +604,32 @@ class Patch():
         self.cover_letter = False  # Is this a cover letter patch
 
         # Message header data
-        self.msg_from = None         # Mail message sender/author
-        self.msg_subject = None      # Mail message subject
-        self.msg_body = None         # Mail message body
+        self.msg_from = None       # Mail message sender/author
+        self.msg_subject = None    # Mail message subject
+        self.msg_body = None       # Mail message body
 
         # Message subject data
-        self.tags = []               # All tags
-        self.deprecated_tags = []    # Deprecated tags
-        self.invalid_tags = []       # Invalid tags
-        self.target_tags = []        # Target series/source tags
-        self.subject = None          # Patch subject
-        self.type = None             # Patch type (PATCH or PULL)
-        self.version = None          # Patch submission version
-        self.count = None            # Patch count
-        self.total = None            # Total number of patches in series
+        self.tags = []             # All tags
+        self.deprecated_tags = []  # Deprecated tags
+        self.invalid_tags = []     # Invalid tags
+        self.target_tags = []      # Target series/source tags
+        self.subject = None        # Patch subject
+        self.type = None           # Patch type (PATCH or PULL)
+        self.version = None        # Patch submission version
+        self.count = None          # Patch count
+        self.total = None          # Total number of patches in series
 
         # Message body data
-        self.buglinks = []           # Buglinks
-        self.cves = []               # CVE tags
-        self.sob = None              # Last signed-off-by signer
-        self.pr_url = None           # Pull request URL (and branch/tag)
-        self.pr_from = None          # Pull request from commit hash
-        self.pr_to = None            # Pull request to commit hash
-        self.cherrypick = None       # Cherry picked commit hash
-        self.backport = None         # Backported commit hash
-        self.comments = []           # Modification comment
-        self.provenance = None       # Original commit provenance
+        self.buglinks = []         # Buglinks
+        self.cves = []             # CVE tags
+        self.sob = None            # Last signed-off-by signer
+        self.pr_url = None         # Pull request URL (and branch/tag)
+        self.pr_from = None        # Pull request from commit hash
+        self.pr_to = None          # Pull request to commit hash
+        self.cherrypick = None     # Cherry picked commit hash
+        self.backport = None       # Backported commit hash
+        self.comments = []         # Modification comment
+        self.provenance = None     # Original commit provenance
 
         self.linux_firmware = False  # Source == linux-firmware
 
