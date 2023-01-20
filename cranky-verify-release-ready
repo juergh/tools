@@ -79,11 +79,11 @@ function check_emails()
 function verify_current()
 {
 	local abi=${1} log=${2}
-	local opts
+	local path opts
 
 	echo
-	echo "------------------------------------------------------------------"
-	realpath .
+	path="$(realpath .)$(printf "%66s")"
+	echo -e "\033[48;5;160m${path::66}\033[0m"
 
 	if [ "${log}" -ne 0 ] ; then
 		echo "------------------------------------------------------------------"
