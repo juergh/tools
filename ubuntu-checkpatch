@@ -5,6 +5,7 @@
 
 import argparse
 import email
+from email import policy
 import logging
 import os
 import re
@@ -733,13 +734,13 @@ class Patch():
         LOG.debug("Parse patch file: %s", self.file)
 
         with open(self.file, encoding="utf-8") as fh:
-            msg = email.message_from_file(fh)
+            msg = email.message_from_file(fh, policy=policy.default)
 
-        # Parse the message header
+        # Parse the message header and get the message body
         self.msg_from = msg["From"]
         if msg["Subject"]:
             self.msg_subject = msg["Subject"].replace("\n", "")
-        self.msg_body = msg.get_payload(decode=True).decode()
+        self.msg_body = msg.get_body(("plain",)).get_content()
 
         if not (self.msg_from and self.msg_subject and self.msg_body):
             LOG.error("Unable to parse patch file: %s", self.file)
