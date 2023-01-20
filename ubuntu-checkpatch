@@ -150,6 +150,21 @@ class Check():
 #        pass
 
 
+class CheckInvalidTag(Check):
+    """ Check invalid tags
+    """
+    def run(self):
+        self.name = "invalid_tag"
+
+        if self.patch.invalid_tags:
+            self.result(FAIL, "invalid tag: " +
+                        ", ".join(self.patch.invalid_tags))
+            return 1
+
+        self.result(PASS, "no invalid tag specified")
+        return 0
+
+
 class CheckDeprecatedTag(Check):
     """ Check deprecated tags
     """
@@ -788,6 +803,7 @@ class Patch():
         LOG.info("File check: %s", self.file)
 
         checks = [
+            CheckInvalidTag(self),
             CheckDeprecatedTag(self),
             CheckPatchTarget(self, get_kernel_series()),
             CheckPatchVersion(self),
@@ -836,11 +852,17 @@ class PatchSeries():
     def check(self):
         """ Check the patch series
         """
-        # Check the series type
+        rc = 0
+
+        # Check any invalid tags and the series type
         LOG.info("Base Check")
-        check = CheckSeriesType(self)
-        rc = check.run()
-        check.log()
+        checks = [
+            CheckInvalidTag(self.patches[0]),
+            CheckSeriesType(self)
+        ]
+        for i, check in enumerate(checks):
+            rc += check.run()
+            check.log(i + 1)
         if rc:
             return rc
 
