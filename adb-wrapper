@@ -242,6 +242,7 @@ while [ ${#} -gt 0 ] ; do
 			exit
 			;;
 		-s|--serial)
+			shift
 			SERIAL=${1}
 			;;
 		pull-all|pull-backup|pull-camera|pull-download|pull-pictures|scrcpy|unlock)
