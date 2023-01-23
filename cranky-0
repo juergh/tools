@@ -245,6 +245,23 @@ function do_dput()
 	run cranky dput-sources "${PPA}"
 }
 
+# promote snaps --------------------------------------------------------------
+
+function do_promosnaps()
+{
+	while IFS= read -r line ; do
+		series=${line%% linux*}
+		series=${series##* }
+		source=${line#* "${series}" }
+		source=${source%% *}
+		note=Pending${line##* Pending}
+
+		echo "${series}/${source} -- ${note}"
+		run cranky promote-snap "${series}"/"${source}"
+	done < <("${KTEAM_TOOLS}"/stable/swm-ls --limit-owner "${USER}" | \
+				 grep "snap .* not in expected channel" | tr -s " ")
+}
+
 # ----------------------------------------------------------------------------
 # Usage
 
