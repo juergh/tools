@@ -11,12 +11,16 @@ function out()
 		rm -rf "${TMP_DIR}"
 	fi
 
+	if [ -n "${CBD_BRANCH}" ] ; then
+		git branch -D "${CBD_BRANCH}" >/dev/null
+	fi
+
 	exit "${rc}"
 }
 
 function cbd_build()
 {
-	local logfile
+	local opts logfile
 
 	if [ -z "${SERIES}" ] ; then
 		echo "-- Not an Ubuntu kernel repository" >&2
@@ -27,11 +31,24 @@ function cbd_build()
 		mkdir "${HOME}"/.cache/cbd
 	fi
 
-	echo "-- Push to cbd:${SERIES}.git (options: ${*})"
- 
+	# Assemble git push options
+	opts=("cbd:${SERIES}.git")
+	if [ "$(git cat-file -t "${1:-}" 2>/dev/null)" = "commit" ] ; then
+		# Create a temporary branch to push if the first argument is a
+		# commitish
+		commit=${1}
+		shift
+		CBD_BRANCH=cbd-${commit}
+		git branch "${CBD_BRANCH}" "${commit}"
+		opts+=("${CBD_BRANCH}")
+	fi
+	opts+=("${@}" "-o" "vars")
+
+	echo "-- Push ${opts[*]}"
+
 	# Kick off the build
 	logfile=${HOME}/.cache/cbd/${SERIES}--${SOURCE}.log
-	git push cbd:"${SERIES}".git -o vars "${@}" 2>&1 | tee "${logfile}"
+	git push "${opts[@]}" 2>&1 | tee "${logfile}"
 
 	# Source the CBD variables
 	eval "$(sed -n 's/^remote: CBD/CBD/p' "${logfile}")"
@@ -100,7 +117,7 @@ function cbd_help()
 function usage()
 {
 	cat <<EOF
-Usage: cbd-cli [-h] [-d DIR] build [CBD_OPTS]
+Usage: cbd-cli [-h] [-d DIR] build [COMMIT] [CBD_OPTS]
        cbd-cli [-h] [-d DIR] download CBD_JOB
        cbd-cli [-h] help
 
@@ -140,6 +157,7 @@ if [ -z "${cmd}" ] ; then
 	exit 2
 fi
 
+CBD_BRANCH=
 TMP_DIR=
 trap out EXIT INT TERM HUP
 
