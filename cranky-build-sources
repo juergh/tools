@@ -34,6 +34,8 @@ Optional arguments:
 EOF
 }
 
+cranky=${CRANKY:-cranky}
+
 current=0
 force=0
 pocket=
@@ -108,7 +110,7 @@ if [ "${force}" -eq 0 ] ; then
 				echo "${path}: Repo is unclean" >&2
 				clean=0
 			fi
-		done < <(cranky shell-helper source-packages-path)
+		done < <("${cranky}" shell-helper source-packages-path)
 	fi
 	if [ "${clean}" -eq 0 ] ; then
 		echo "Use -f, --force to auto-clean before the build" >&2
@@ -125,6 +127,7 @@ if [ -n "${offset}" ] ; then
 
 		DEBIAN=debian
 		if [ -e "${path}"/debian/debian.env ] ; then
+			# shellcheck disable=SC1091
 			. "${path}"/debian/debian.env
 		fi
 
@@ -149,7 +152,7 @@ if [ -n "${offset}" ] ; then
 				echo "Unsupported package: ${package}" >&2
 				exit 1
 		esac
-	done < <(cranky shell-helper source-packages-path)
+	done < <("${cranky}" shell-helper source-packages-path)
 
 else
 	# Get the previous versions from the provided pocket
@@ -173,7 +176,7 @@ else
 				echo "Unsupported package: ${package}" >&2
 				exit 1
 		esac
-	done < <(cranky rmadison -s -p "${pocket}")
+	done < <("${cranky}" rmadison -s -p "${pocket}")
 	if [ ${found} -eq 0 ] ; then
 		echo "Invalid pocket: ${pocket}" >&2
 		exit 1
@@ -193,5 +196,5 @@ if [ ${#bo_main[@]} -ne 0 ] ; then
 	build_opts+=("--build-opts" "main:${bo_main[*]}")
 fi
 
-echo -e "\e[33mcranky build-sources ${build_opts[*]}\e[0m"
-cranky build-sources "${build_opts[@]}"
+echo -e "\e[33m${cranky} build-sources ${build_opts[*]}\e[0m"
+"${cranky}" build-sources "${build_opts[@]}"
