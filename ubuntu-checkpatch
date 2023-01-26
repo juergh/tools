@@ -748,8 +748,14 @@ class Patch():
 
         LOG.debug("Parse patch file: %s", self.file)
 
+        data = ""
         with open(self.file, encoding="utf-8") as fh:
-            msg = email.message_from_file(fh, policy=policy.default)
+            try:
+                for line in fh:
+                    data += line
+            except:
+                pass
+        msg = email.message_from_string(data, policy=policy.default)
 
         # Parse the message header and get the message body
         self.msg_from = msg["From"]
