@@ -86,9 +86,9 @@ if [ -d "${in}" ] ; then
 	# Compression method (command arguments shamelessly stolen from
 	# /usr/sbin/mkinitramfs)
 	case "${compress}" in
-		""|gzip)         cmd=("gzip") ;;
-		lz4)             cmd=("lz4" "-9" "-l") ;;
-		zstd)            cmd=("zstd" "-q" "-19" "-T0");;
+		""|gzip)         cmd=("gzip -n") ;;
+		lz4)             cmd=("lz4" "-2" "-l") ;;
+		zstd)            cmd=("zstd" "-q" "-1" "-T0");;
 		xz)              cmd=("xz" "--check=crc32") ;;
 		bzip2|lzma|lzop) cmd=("compress") ;;
 		*)
