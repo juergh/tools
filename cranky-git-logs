@@ -39,5 +39,5 @@ done
 while IFS= read -r path ; do
 	echo
 	pr_banner "${path}"
-	git -C "${path}" --no-pager log --color=always "${@}"
+	git -C "${path}" --no-pager log --color=always --decorate=short "${@}"
 done < <(cranky shell-helper source-packages-path) | less
