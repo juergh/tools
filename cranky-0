@@ -300,6 +300,15 @@ function usage()
 # ----------------------------------------------------------------------------
 # Main entry point
 
+if [ "${0##*/}" = "cranky-0" ] ; then
+	# Direct invocation: First argument is the command
+	cmds=("${1}")
+	shift
+else
+	# Collect the commands from the link name
+	readarray -t cmds < <(echo "${0##*--}" | tr "-" "\n")
+fi
+
 DRY_RUN=0
 help=0
 SRU_CYCLE=
@@ -333,7 +342,7 @@ while [ ${#} -gt 0 ] ; do
 			break
 			;;
 		-*)
-			echo "Invalid argumennt: ${1}" >&2
+			echo "Invalid argument: ${1}" >&2
 			exit 2
 			;;
 		*)
@@ -342,9 +351,6 @@ while [ ${#} -gt 0 ] ; do
 	esac
 	shift
 done
-
-# Collect the commands from the link name
-readarray -t cmds < <(echo "${0##*--}" | tr "-" "\n")
 
 OPT_ARGS=(
 	"[-d] || -d, --dry-run || "
