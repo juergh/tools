@@ -1,6 +1,38 @@
 #!/bin/bash -eu
 
-host=${1}
+function usage()
+{
+	cat <<EOF
+Usage: cranky-scp-sources [-h] HOST
+
+Optional arguments:
+  -h, --help  Show this help message and exit.
+EOF
+}
+
+host=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${host}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			host=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${host}" ] ; then
+	usage
+	exit 2
+fi
 
 readarray -t paths < <(cranky shell-helper source-packages-path)
 
@@ -18,8 +50,9 @@ for path in "${paths[@]}" ; do
 	version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Version)
 
 	files=(
-		../${name}_${version}_source.changes
-		../${name}_${version}.dsc
+		../"${name}"_"${version}"_source.buildinfo
+		../"${name}"_"${version}"_source.changes
+		../"${name}"_"${version}".dsc
 	)
 
 	if ! gpg --verify-files "${files[@]}" 2>/dev/null ; then
@@ -37,6 +70,7 @@ for path in "${paths[@]}" ; do
 			exit 1
 		fi
 		echo "Create ${host}:review/${user}"
+		# shellcheck disable=SC2029
 		ssh "${host}" "mkdir -p review/${user}"
 	fi
 	scp "${files[@]}" "${host}":review/"${user}"
