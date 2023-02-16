@@ -68,8 +68,13 @@ while [ ${#} -gt 0 ] ; do
 done
 
 if [ -z "${debdiff}" ] ; then
-	name=$(dpkg-parsechangelog -S Source)
-	version=$(dpkg-parsechangelog -S Version)
+	DEBIAN=debian
+	if [ -e debian/debian.env ] ; then
+		# shellcheck disable=SC1091
+		. debian/debian.env
+	fi
+	name=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+	version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Version)
 	if [ ${reduced} -eq 1 ] ; then
 		debdiff=../${name}_${version}.reduced.debdiff
 	else
