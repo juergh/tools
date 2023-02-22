@@ -9,10 +9,6 @@
 
 # The base DEB packages
 DEB_INCLUDE=(
-	build-essential
-	debhelper
-	devscripts
-	dpkg-dev
 	fakeroot
 	less
 	perl-openssl-defaults  # [arm64] required due to dependency problems
@@ -28,8 +24,12 @@ DEB_PACKAGES=(
 	bc
 	binutils-dev
 	bison
+	build-essential
+	debhelper
+	devscripts
 	dh-systemd
 	docbook-utils
+	dpkg-dev
 	flex
 	gawk
 	gcc-aarch64-linux-gnu
