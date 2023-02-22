@@ -433,6 +433,11 @@ case "${DIST}" in
 		;;
 esac
 
+if [ "${BASE_DIST}" = "debian" ] ; then
+	echo "Deprecated for Debian/Ubuntu! Use 'run-chroot'."
+	exit 1
+fi
+
 RELEASE=${DIST#*-}
 
 if [ -z "${ARCH}" ] ; then
