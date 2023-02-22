@@ -177,7 +177,7 @@ function print_vars()
 
 function debian_create_chroot()
 {
-	local components opts package sudoer tz
+	local components opts tz package
 
 	case "${VENDOR}" in
 		ubuntu)
@@ -189,7 +189,7 @@ function debian_create_chroot()
 	esac
 
 	if [ "${NO_CHECK_GPG}" -eq 1 ] ; then
-		opts="--no-check-gpg"
+		opts=("--no-check-gpg")
 	fi
 
 	if [ "${RELEASE}" = "precise" ] ; then
@@ -199,8 +199,8 @@ function debian_create_chroot()
 	fi
 
 	# Create the base chroot
-	qemu-debootstrap \
-		${opts:-} \
+	debootstrap \
+		"${opts[@]}" \
 		--include="$(IFS=, ; echo "${DEB_INCLUDE[*]}")" \
 		--components="${components}" \
 		--arch="${ARCH}" \
