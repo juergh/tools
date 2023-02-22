@@ -35,6 +35,61 @@ function hostarch()
 	esac
 }
 
+function create_chroot()
+{
+	local chroot=${1}
+
+	pr_info "Create new chroot ${chroot}"
+
+	mk-sbuild --arch="${chroot#*-}" "${chroot%-*}"
+	if ! grep -s '^/home' '/etc/schroot/sbuild/fstab' >/dev/null; then
+		cat <<EOF | sudo tee --append '/etc/schroot/sbuild/fstab' >/dev/null
+# Allow use of /home for run-chroot
+/home           /home           none    rw,bind         0       0
+EOF
+	fi
+}
+
+function create_session()
+{
+	local session=${1} chroot=${2}
+
+	pr_info "Create new session ${session}"
+
+	schroot -b -n "${session}" -c "${chroot}"
+
+	# Fixup session:
+	#   - upgrade packages
+	#   - add sudoer
+	#   - create /etc/hosts
+	cat << EOF | schroot -u root -r -c "${session}" -- bash -
+if sh -c 'command -v apt-get' &> /dev/null ; then
+    apt-get update
+    apt-get -y dist-upgrade
+    apt-get -y install sudo
+fi
+
+echo "${USER} ALL = NOPASSWD: ALL" > /etc/sudoers.d/"${USER}"
+chmod 644 /etc/sudoers.d/"${USER}"
+
+if ! [ -e /etc/hosts ] ; then
+    cat << __EOF__ > /etc/hosts
+127.0.0.1 localhost
+127.0.1.1 $(hostname)
+__EOF__
+fi
+EOF
+}
+
+function destroy_session()
+{
+	local session=${1}
+
+	pr_info "Destroy existing session ${session}"
+
+	schroot -e -c "${session}"
+}
+
 function usage()
 {
 	local release arch
@@ -152,48 +207,18 @@ chroot=${session#*-}
 
 # Destroy an existing session if -d, --destroy is provided
 if [ "${destroy}" -eq 1 ] ; then
-	if ! session_exists "${session}" ; then
-		pr_error "No such session: ${session}"
-		exit 1
+	if session_exists "${session}" ; then
+		destroy_session "${session}"
 	fi
-	pr_info "Destroy existing session ${session}"
-	schroot -e -c "${session}"
 	exit
 fi
 
 # Create the session if it doesn't exist
 if ! session_exists "${session}" ; then
 	if ! chroot_exists "${chroot}" ; then
-		pr_info "Create new chroot ${chroot}"
-		mk-sbuild --arch="${chroot#*-}" "${chroot%-*}"
-		if ! grep -s '^/home' '/etc/schroot/sbuild/fstab' >/dev/null; then
-			cat <<EOF | sudo tee --append '/etc/schroot/sbuild/fstab' >/dev/null
-# Allow use of /home for run-chroot
-/home           /home           none    rw,bind         0       0
-EOF
-		fi
+		create_chroot "${chroot}"
 	fi
-	pr_info "Create new session ${session}"
-	schroot -b -n "${session}" -c "${chroot}"
-
-	# Upgrade packages
-	cat << EOF | schroot -u root -r -c "${session}" -- bash -
-if sh -c 'command -v apt-get' &> /dev/null ; then
-    apt-get update
-    apt-get -y dist-upgrade
-    apt-get -y install sudo
-fi
-
-echo "${USER} ALL = NOPASSWD: ALL" > /etc/sudoers.d/"${USER}"
-chmod 644 /etc/sudoers.d/"${USER}"
-
-if ! [ -e /etc/hosts ] ; then
-    cat << __EOF__ > /etc/hosts
-127.0.0.1 localhost
-127.0.1.1 $(hostname)
-__EOF__
-fi
-EOF
+	create_session "${session}" "${chroot}"
 fi
 
 # Assemble the PS1 prefix
