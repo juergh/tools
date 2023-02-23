@@ -1,0 +1,157 @@
+#!/bin/bash -eu
+#
+# Build a kernel snap (without snapcraft)
+#
+
+KEEP=0
+
+function out()
+{
+	local rc=$?
+
+	if [ -d "${CACHEDIR}"/chroot ] ; then
+		sudo umount "${CACHEDIR}"/chroot/proc || true
+		sudo umount "${CACHEDIR}"/chroot/sys || true
+	fi
+
+	if [ -d "${CACHEDIR}" ] ; then
+		if [ ${KEEP} -eq 1 ] ; then
+			echo "Keep cache directory: ${CACHEDIR}"
+		else
+			echo "Remove cache directory: ${CACHEDIR}"
+			sudo rm -rf "${CACHEDIR}"
+		fi
+	fi
+
+	exit "${rc}"
+}
+
+function parse_snapcraft_yaml()
+{
+    cat <<EOF | python3 -
+import yaml
+
+with open("snapcraft.yaml") as fh:
+	 data = yaml.safe_load(fh)
+
+# Make environment variables
+
+version = data["version"]
+print(f"SNAPCRAFT_PROJECT_VERSION {version}")
+
+for p in data["parts"]["kernel"]["make-parameters"]:
+	var, val = p.split("=", 1)
+	val = val.replace('"', "").replace("'", "")
+	print(f"{var} {val}")
+
+# Misc variables
+
+name = data["name"]
+print(f'NAME {name}')
+
+git_url = data["parts"]["kernel"]["source"]
+print(f'GIT_URL {git_url}')
+
+build_pkgs = " ".join(data["parts"]["kernel"]["build-packages"])
+print(f'BUILD_PKGS {build_pkgs}')
+EOF
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] ARCH
+
+Postional arguments:
+  ARCH        Kernel snap architecture
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+  -k, --keep  Keep the temporary build/cache directory.
+EOF
+}
+
+arch=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-k|--keep)
+			KEEP=1
+			;;
+		*)
+			if [ -n "${arch}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			arch=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${arch}" ] ; then
+	usage
+	exit 2
+fi
+
+if ! [ -e snapcraft.yaml ] ; then
+	echo "No such file: snapcraft.yaml" >&2
+	exit 1
+fi
+
+# Process snapcraft.yaml
+name=
+git_url=
+build_pkgs=
+make_opts=
+while IFS=" " read -r var val ; do
+	case "${var}" in
+		NAME)       name=${val} ;;
+		GIT_URL)    git_url=${val} ;;
+		BUILD_PKGS) build_pkgs=${val} ;;
+		*)          make_opts="${make_opts} ${var}='${val}'" ;;
+	esac
+done < <(parse_snapcraft_yaml)
+
+if [ -z "${git_url}" ] ; then
+	echo "git URL not found in snapcraft.yaml" >&2
+	exit 1
+fi
+
+version=${SNAPCRAFT_PROJECT_VERSION}
+builddir=/build
+destdir=/build/${name}/parts/kernel/install
+cwd=$(pwd)
+
+CACHEDIR=${HOME}/.cache/build-kernel-snap-$$
+
+trap out EXIT INT TERM HUP
+
+git clone --depth=1 "${git_url}" "${CACHEDIR}"
+cd "${CACHEDIR}"
+
+set -x
+cat <<EOF | run-chroot jammy-"${arch}" -- sudo /bin/sh -eux -
+if [ -n "${build_pkgs}" ] ; then
+    apt install --yes ${build_pkgs}
+fi
+apt install --yes squashfs-tools
+
+rm -rf ${builddir}
+
+make -j $(getconf _NPROCESSORS_ONLN) ${make_opts}
+
+mkdir -p ${destdir}
+make -j $(getconf _NPROCESSORS_ONLN) ${make_opts} DESTDIR=${destdir} install
+
+mkdir -p ${destdir}/snap
+cp ${cwd}/snapcraft.yaml ${destdir}/snap/
+
+mksquashfs ${destdir} ${cwd}/${name}_${version}_${arch}.snap -noappend -comp xz -all-root -no-xattrs -no-fragments
+
+rm -rf ${builddir}
+EOF
