@@ -272,7 +272,7 @@ function do_send_patch()
 
 function do_request_pull()
 {
-	local start=${1:-}
+	local start=${1:-} end=${2:-HEAD}
 	local refs_heads commit branch remotes remote buglink
 	local url bug subject blurb name email
 
@@ -293,8 +293,8 @@ function do_request_pull()
 	fi
 
 	# Get the remote where we pushed this branch to
-	commit=$(git rev-parse HEAD)
-	branch=$(git rev-parse --abbrev-ref HEAD)
+	commit=$(git rev-parse "${end}")
+	branch=$(git rev-parse --abbrev-ref "${end}")
 	readarray -t remotes < <(git for-each-ref refs/remotes | \
 								 grep "^${commit}.*/${branch}$" || true)
 	if [ ${#remotes[@]} -eq 0 ] ; then
@@ -311,7 +311,7 @@ function do_request_pull()
 	remote_branch=${remotes[0]#*refs/remotes/*/}
 
 	# Determine the subject for this pull request
-	buglink=$(git log --format=%b -2 | grep -m1 '^BugLink: ' || true)
+	buglink=$(git log --format=%b "${end}" -2 | grep -m1 '^BugLink: ' || true)
 	buglink=${buglink#BugLink: }
 	url=${buglink%% *}
 	if [ -z "${url}" ] ; then
@@ -341,7 +341,7 @@ Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
 EOF
-	git log --format=%b "${start}".. | grep '^BugLink: ' | sort -r -u
+	git log --format=%b "${start}".."${end}" | grep '^BugLink: ' | sort -r -u
 	if [ -n "${blurb}" ] ; then
 		echo
 		echo "${blurb}"
@@ -355,7 +355,7 @@ Signed-off-by: ${name} <${email}>
 EOF
 	git request-pull "${start}" "$(git config "remote.${remote}.url")" \
 		"${branch}":"${remote_branch}" | \
-		sed 's,git+ssh://.*git,https://git,'
+		sed 's,git+ssh://.*git\.,https://git.,'
 }
 
 function usage()
@@ -367,26 +367,26 @@ Usage: git-deb [-c] [-d] [-h] [-i MSG_ID] [-r TARGET] [-s] [-t TOKEN] [-ns]
 Helper script for managing Ubuntu package git repos.
 
 Supported commands:
-  info                      Show repo information.
-  format-patch [OPTS]       Create a patch (series). OPTS are additional
-                            options for 'git format-patch'.
-  send-patch [COMMIT]       Send the commit COMMIT as a patch email. If COMMIT
-                            is not provided, defaults to HEAD.
-  request-pull [COMMIT]     Create a pull request.
+  info                        Show repo information.
+  format-patch [OPTS]         Create a patch (series). OPTS are additional
+                              options for 'git format-patch'.
+  send-patch [COMMIT]         Send the commit COMMIT as a patch email. If
+                              COMMIT is not provided, defaults to HEAD.
+  request-pull [START] [END]  Create a pull request.
 
 Optional arguments:
-  -c, --cover-letter        Add a cover letter.
-  -d, --dry-run             Don't send the email.
-  -h, --help                Show this help text.
-  -i, --in-reply-to MSG_ID  Reply to the given MSG_ID.
-  -r, --target TARGET       The target (series[:source]) to include in the
-                            subject prefix. Can be provided multiple times.
-  -s, --resend              Add RESEND to the subject prefix.
-  -t, --token TEXT          Add an additional token [TEXT] to the subject
-                            prefix. Can be provided multiple times.
-  -ns, --no-sru             Don't include [SRU] in the subject prefix.
-  -v, --version NUM         The revision number of the patch to include in the
-                            subject prefix.
+  -c, --cover-letter          Add a cover letter.
+  -d, --dry-run               Don't send the email.
+  -h, --help                  Show this help text.
+  -i, --in-reply-to MSG_ID    Reply to the given MSG_ID.
+  -r, --target TARGET         The target (series[:source]) to include in the
+                              subject prefix. Can be provided multiple times.
+  -s, --resend                Add RESEND to the subject prefix.
+  -t, --token TEXT            Add an additional token [TEXT] to the subject
+                              prefix. Can be provided multiple times.
+  -ns, --no-sru               Don't include [SRU] in the subject prefix.
+  -v, --version NUM           The revision number of the patch to include in
+                              the subject prefix.
 EOF
 }
 
