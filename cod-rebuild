@@ -48,7 +48,7 @@ if [ -z "${tag}" ] ; then
 	exit 2
 fi
 
-if [ -z "${KTEAM_TOOLS}" ] ; then
+if [ -z "${KTEAM_TOOLS:-}" ] ; then
 	KTEAM_TOOLS=${HOME}/kteam-tools
 fi
 
