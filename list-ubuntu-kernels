@@ -38,6 +38,8 @@ for series, series_data in kernel_series.items():
             continue
 
         owner = source_data.get('owner', '') if args.owner else ''
+        if owner:
+            owner = ' (' + owner + ')'
 
         if args.series:
             if args.series == codename:
@@ -48,4 +50,4 @@ for series, series_data in kernel_series.items():
             first = False
             print()
             print(series + ' - ' + codename)
-        print('  ' + source)
+        print('  ' + source + owner)
