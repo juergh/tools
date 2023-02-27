@@ -336,7 +336,7 @@ function do_request_pull()
 From $(git log --format=%H -1) Mon Sep 17 00:00:00 2001
 From: ${name} <${email}>
 Date: $(date -R)
-Subject: [${SUBJECT_PREFIX/PATCH/PULL}] ${subject}
+Subject: [${SUBJECT_PREFIX}] ${subject}
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
@@ -456,6 +456,11 @@ if [ -z "${cmd}" ] ; then
 	exit 2
 fi
 
+patch_pull=PATCH
+if [ "${cmd}" = "request_pull" ] ; then
+	patch_pull=PULL
+fi
+
 # Options that override globals
 if [ ${#OPT_TARGET[@]} -gt 0 ] ; then
 	TARGET=("${OPT_TARGET[@]}")
@@ -472,7 +477,7 @@ done
 for token in "${TOKEN[@]}" ; do
 	SUBJECT_PREFIX="${SUBJECT_PREFIX}][${token}"
 done
-SUBJECT_PREFIX="${SUBJECT_PREFIX}][PATCH"
+SUBJECT_PREFIX="${SUBJECT_PREFIX}][${patch_pull}"
 if [ "${version}" -gt 0 ] ; then
 	SUBJECT_PREFIX="${SUBJECT_PREFIX} v${version}"
 fi
