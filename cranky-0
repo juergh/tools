@@ -1,5 +1,7 @@
 #!/bin/bash -eu
 
+CRANKY=${CRANKY:-cranky}
+
 function out()
 {
 	local rc=${?}
@@ -76,14 +78,14 @@ function do_fix()
 		exit 1
 	fi
 
-	run cranky fix
+	run "${CRANKY}" fix
 }
 
 # rebase ----------------------------------------------------------------------
 
 function do_rebase()
 {
-	run cranky rebase
+	run "${CRANKY}" rebase
 }
 
 # open ------------------------------------------------------------------------
@@ -91,14 +93,14 @@ function do_rebase()
 function do_open()
 {
 	run git clean -dxf
-	run cranky open
+	run "${CRANKY}" open
 }
 
 # configs ---------------------------------------------------------------------
 
 function do_configs()
 {
-	run cranky updateconfigs
+	run "${CRANKY}" updateconfigs
 }
 
 # link ------------------------------------------------------------------------
@@ -121,7 +123,7 @@ function do_link()
 		args+=("--sru-cycle" "${SRU_CYCLE}")
 	fi
 
-	run cranky link-tb "${args[@]}"
+	run "${CRANKY}" link-tb "${args[@]}"
 }
 
 # dkms ------------------------------------------------------------------------
@@ -149,8 +151,8 @@ function do_close()
 		args+=("--force")
 	fi
 
-	run cranky close
-	run cranky tag "${args[@]}"
+	run "${CRANKY}" close
+	run "${CRANKY}" tag "${args[@]}"
 }
 
 # dependents ------------------------------------------------------------------
@@ -242,7 +244,7 @@ dput_pos_args=(
 
 function do_dput()
 {
-	run cranky dput-sources "${PPA}"
+	run "${CRANKY}" dput-sources "${PPA}"
 }
 
 # promote snaps --------------------------------------------------------------
@@ -257,7 +259,7 @@ function do_promosnaps()
 		note=Pending${line##* Pending}
 
 		echo "${series}/${source} -- ${note}"
-		run cranky promote-snap "${series}"/"${source}"
+		run "${CRANKY}" promote-snap "${series}"/"${source}"
 	done < <("${KTEAM_TOOLS}"/stable/swm-ls --limit-owner "${USER}" | \
 				 grep "snap .* not in expected channel" | tr -s " ")
 }
