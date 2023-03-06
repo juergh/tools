@@ -6,12 +6,26 @@
 import argparse
 import yaml
 
+
+def print_source(source, **kwargs):
+    if kwargs.get('oneline'):
+        line = source['series']['codename'] + ' ' + source['source']
+    else:
+        line = '  ' + source['source']
+
+    if kwargs.get('owner'):
+        line += ' (' + source.get('owner', '') + ')'
+
+    print(line)
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('series', nargs='?')
 parser.add_argument('-i', '--infile',
                     help='input kernel-series.yaml file')
 parser.add_argument('-o', '--owner', action='store_true',
                     help='show kernel owners')
+parser.add_argument('--oneline', action='store_true')
 args = parser.parse_args()
 
 if not args.infile:
@@ -37,17 +51,19 @@ for series, series_data in kernel_series.items():
         if supported and not source_supported:
             continue
 
-        owner = source_data.get('owner', '') if args.owner else ''
-        if owner:
-            owner = ' (' + owner + ')'
+        # Extend the source data with additional information
+        source_data['source'] = source
+        source_data['series'] = {
+            'codename': codename,
+        }
 
         if args.series:
             if args.series == codename:
-                print(source)
+                print_source(source_data, **vars(args))
             continue
 
-        if first:
+        if first and not args.oneline:
             first = False
             print()
             print(series + ' - ' + codename)
-        print('  ' + source + owner)
+        print_source(source_data, **vars(args))
