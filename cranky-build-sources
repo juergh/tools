@@ -16,7 +16,7 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: cranky-build-sources [-c] [-f] [-h] [-n] [-o] POCKET|OFFSET
+Usage: cranky-build-sources [-c] [-f] [-h] [-n] [-o] POCKET|OFFSET|ABI
 
 Build a set of kernel packages.
 
@@ -24,6 +24,8 @@ Positional arguments:
   POCKET       Get the previous package versions from pocket POCKET.
   OFFSET       Get the previous package versions from the changelogs using
                changelog entry offset OFFSET (1 == previous changelog entry).
+  ABI          Get the previous package versions from the changelogs using
+               the newest changelog entry with abi number ABI.
 
 Optional arguments:
   -c, --current  Only build the source package for the current directory.
@@ -40,6 +42,7 @@ current=0
 force=0
 pocket=
 offset=
+abi=
 build_opts=()
 
 bo_meta=()
@@ -67,18 +70,25 @@ while [ "${#}" -gt 0 ] ; do
 			bo_main+=("-sa")
 			;;
 		updates|release|security|proposed)
-			if [ -n "${pocket}" ] ; then
+			if [ -n "${pocket}${offset}${abi}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
 			pocket=${1}
 			;;
 		[1-9])
-			if [ -n "${offset}" ] ; then
+			if [ -n "${pocket}${offset}${abi}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
 			offset=${1}
+			;;
+		[0-9]*.[0-9]*.[0-9]*-[0-9]*)
+			if [ -n "${pocket}${offset}${abi}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			abi=${1}
 			;;
 		*)
 			echo "Invalid argument: ${1}" >&2
@@ -88,7 +98,7 @@ while [ "${#}" -gt 0 ] ; do
 	shift
 done
 
-if [ -z "${pocket}" ] && [ -z "${offset}" ] ; then
+if [ -z "${pocket}${offset}${abi}" ] ; then
 	usage
 	exit 2
 fi
@@ -118,7 +128,7 @@ if [ "${force}" -eq 0 ] ; then
 	fi
 fi
 
-if [ -n "${offset}" ] ; then
+if [ -n "${offset}${abi}" ] ; then
 	# Use the package version from the changelog
 	while IFS= read -r path ; do
 		if [ ${current} -eq 1 ] && [ "${path}" != "$(realpath .)" ] ; then
@@ -131,10 +141,27 @@ if [ -n "${offset}" ] ; then
 			. "${path}"/debian/debian.env
 		fi
 
-		package=$(dpkg-parsechangelog -l "${path}"/"${DEBIAN}"/changelog \
-									  -o "${offset}" -c 1 -S source)
-		version=$(dpkg-parsechangelog -l "${path}"/"${DEBIAN}"/changelog \
-									  -o "${offset}" -c 1 -S version)
+		if [ -n "${offset}" ] ; then
+			# Use the provided offset
+			package=$(dpkg-parsechangelog -l "${path}"/"${DEBIAN}"/changelog \
+										  -o "${offset}" -c 1 -S source)
+			version=$(dpkg-parsechangelog -l "${path}"/"${DEBIAN}"/changelog \
+										  -o "${offset}" -c 1 -S version)
+		else
+			# Use the provided ABI
+			v=${abi%-*}
+			v=${v//./\\.}
+			u=${abi#*-}
+			match=$(grep -m1 "^linux.* (${v}[-.]${u}\." "${DEBIAN}"/changelog)
+			if [ -z "${match}" ] ; then
+				echo "Unable to find a changelog entry with ABI: ${abi}" >&2
+				exit 1
+			fi
+			package=${match%% *}
+			version=${match#* \(}
+			version=${version%\) *}
+		fi
+
 		case "${package}" in
 			linux-meta*)
 				bo_meta+=("-v${version}")
