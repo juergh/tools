@@ -13,6 +13,29 @@ function out()
 	exit "${rc}"
 }
 
+function set_pkg_build_opts()
+{
+	local package=${1} version=${2}
+
+	case "${package}" in
+		linux-meta*)
+			BO_META+=("-v${version}")
+			;;
+		linux-signed*)
+			BO_SIGNED+=("-v${version}")
+			;;
+		linux-restricted-modules*)
+			BO_LRM+=("-v${version}")
+			;;
+		linux*)
+			BO_MAIN+=("-v${version}")
+			;;
+		*)
+			echo "Unsupported package: ${package}" >&2
+			exit 1
+	esac
+}
+
 function usage()
 {
 	cat <<EOF
@@ -45,10 +68,10 @@ offset=
 abi=
 build_opts=()
 
-bo_meta=()
-bo_signed=()
-bo_lrm=()
-bo_main=()
+BO_META=()
+BO_SIGNED=()
+BO_LRM=()
+BO_MAIN=()
 
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
@@ -67,7 +90,7 @@ while [ "${#}" -gt 0 ] ; do
 			build_opts+=("--no-orig")
 			;;
 		-o|--orig)
-			bo_main+=("-sa")
+			BO_MAIN+=("-sa")
 			;;
 		updates|release|security|proposed)
 			if [ -n "${pocket}${offset}${abi}" ] ; then
@@ -144,15 +167,16 @@ if [ -n "${offset}${abi}" ] ; then
 		if [ -n "${offset}" ] ; then
 			# Use the provided offset
 			package=$(dpkg-parsechangelog -l "${path}"/"${DEBIAN}"/changelog \
-										  -o "${offset}" -c 1 -S source)
+			                              -o "${offset}" -c 1 -S source)
 			version=$(dpkg-parsechangelog -l "${path}"/"${DEBIAN}"/changelog \
-										  -o "${offset}" -c 1 -S version)
+			                              -o "${offset}" -c 1 -S version)
 		else
 			# Use the provided ABI
 			v=${abi%-*}
 			v=${v//./\\.}
 			u=${abi#*-}
-			match=$(grep -m1 "^linux.* (${v}[-.]${u}\." "${DEBIAN}"/changelog)
+			match=$(grep -m1 "^linux.* (${v}[-.]${u}\." \
+			        "${path}"/"${DEBIAN}"/changelog)
 			if [ -z "${match}" ] ; then
 				echo "Unable to find a changelog entry with ABI: ${abi}" >&2
 				exit 1
@@ -162,23 +186,7 @@ if [ -n "${offset}${abi}" ] ; then
 			version=${version%\) *}
 		fi
 
-		case "${package}" in
-			linux-meta*)
-				bo_meta+=("-v${version}")
-				;;
-			linux-signed*)
-				bo_signed+=("-v${version}")
-				;;
-			linux-restricted-modules*)
-				bo_lrm+=("-v${version}")
-				;;
-			linux*)
-				bo_main+=("-v${version}")
-				;;
-			*)
-				echo "Unsupported package: ${package}" >&2
-				exit 1
-		esac
+		set_pkg_build_opts "${package}" "${version}"
 	done < <("${cranky}" shell-helper source-packages-path)
 
 else
@@ -186,41 +194,26 @@ else
 	found=0
 	while IFS=' ' read -r package version rest ; do
 		found=1
-		case "${package}" in
-			linux-meta*)
-				bo_meta+=("-v${version}")
-				;;
-			linux-signed*)
-				bo_signed+=("-v${version}")
-				;;
-			linux-restricted-modules*)
-				bo_lrm+=("-v${version}")
-				;;
-			linux*)
-				bo_main+=("-v${version}")
-				;;
-			*)
-				echo "Unsupported package: ${package}" >&2
-				exit 1
-		esac
+		set_pkg_build_opts "${package}" "${version}"
 	done < <("${cranky}" rmadison -s -p "${pocket}")
+
 	if [ ${found} -eq 0 ] ; then
 		echo "Invalid pocket: ${pocket}" >&2
 		exit 1
 	fi
 fi
 
-if [ ${#bo_meta[@]} -ne 0 ] ; then
-	build_opts+=("--build-opts" "meta:${bo_meta[*]}")
+if [ ${#BO_META[@]} -ne 0 ] ; then
+	build_opts+=("--build-opts" "meta:${BO_META[*]}")
 fi
-if [ ${#bo_signed[@]} -ne 0 ] ; then
-	build_opts+=("--build-opts" "signed:${bo_signed[*]}")
+if [ ${#BO_SIGNED[@]} -ne 0 ] ; then
+	build_opts+=("--build-opts" "signed:${BO_SIGNED[*]}")
 fi
-if [ ${#bo_lrm[@]} -ne 0 ] ; then
-	build_opts+=("--build-opts" "lrm:${bo_lrm[*]}")
+if [ ${#BO_LRM[@]} -ne 0 ] ; then
+	build_opts+=("--build-opts" "lrm:${BO_LRM[*]}")
 fi
-if [ ${#bo_main[@]} -ne 0 ] ; then
-	build_opts+=("--build-opts" "main:${bo_main[*]}")
+if [ ${#BO_MAIN[@]} -ne 0 ] ; then
+	build_opts+=("--build-opts" "main:${BO_MAIN[*]}")
 fi
 
 echo -e "\e[33m${cranky} build-sources ${build_opts[*]}\e[0m"
