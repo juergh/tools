@@ -69,7 +69,7 @@ for path in "${paths[@]}" ; do
 			echo "Failed to determine username for ${ae}" >&2
 			exit 1
 		fi
-		echo "Create ${host}:review/${user}"
+		echo "Create ${host}:~${USER}/review/${user}"
 		# shellcheck disable=SC2029
 		ssh "${host}" "mkdir -p review/${user}"
 	fi
