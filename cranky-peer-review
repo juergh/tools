@@ -132,9 +132,10 @@ while IFS= read -r path ; do
 		abi=$(echo "${FETCH[main]}" | grep -oP '\d+\.\d+\.\d+-\d+')
 
 		echo
-		echo "-- scp ${rdir}/linux*_${abi//-/\{-,.\}}.* ${path}/../"
+		echo "-- scp ${rdir}/linux*_${abi//-/\[-.\]}.* ${path}/../"
 		if [ ${dry_run} -eq 0 ] ; then
-			scp "${rdir}/linux*_${abi//-\{-,.\}}.*" "${path}/../"
+			scp "${rdir}/linux*_${abi}.*" "${path}/../"
+			scp "${rdir}/linux*_${abi//-/.}.*" "${path}/../"
 		fi
 	fi
 
