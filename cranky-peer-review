@@ -24,6 +24,11 @@ for comment in reversed(issue.fields.comment.comments):
         if m:
             found = True
             print('fetch ' + m.group(1) + ' ' + m.group(2))
+            continue
+        m = re.search(r'\bpackages:\s*(.*)', line)
+        if m:
+            print('packages ' + m.group(1))
+            continue
     if found:
         break
 "
@@ -37,7 +42,7 @@ Usage: $(basename "${0}") [-d] [-h] ISSUE
 Parse the provided Jira <ISSUE> and fetch the referenced repos.
 
 Optional arguments:
-  -d, --dry-run  Don't fetch tags.
+  -d, --dry-run  Don't fetch anything.
   -h, --help     Show this help text and exit.
 EOF
 }
@@ -72,28 +77,29 @@ fi
 
 declare -A FETCH
 
+rdir=
 while IFS= read -r line ; do
 	key=${line%% *}
 	val=${line#* }
 	case "${key}" in
 		summary)
-			echo "summary: ${val}"
+			echo "summary:  ${val}"
 			handle=${val#* }
 			handle=${handle%% *}
-			echo "handle:  ${handle}"
+			echo "handle:   ${handle}"
 			;;
 		fetch)
 			case "${val% *}" in
 				*-meta-*|*-meta)
-					echo "meta:    ${val}"
+					echo "meta:     ${val}"
 					FETCH[meta]="${val}"
 					;;
 				*-signed-*|*-signed)
-					echo "signed:  ${val}"
+					echo "signed:   ${val}"
 					FETCH[signed]="${val}"
 					;;
 				*-lrm-*|*-lrm|*-restricted-modules-*|*-restricted-modules)
-					echo "lrm:     ${val}"
+					echo "lrm:      ${val}"
 					FETCH[lrm]="${val}"
 					;;
 				*)
@@ -101,10 +107,14 @@ while IFS= read -r line ; do
 						echo "FETCH[main] already set: ${FETCH[main]}" >&2
 						exit 1
 					fi
-					echo "main:    ${val}"
+					echo "main:     ${val}"
 					FETCH[main]="${val}"
 					;;
 			esac
+			;;
+		packages)
+			echo "packages: ${val}"
+			rdir=${val}
 			;;
 	esac
 done < <(query_jira "${issue}")
@@ -115,7 +125,19 @@ if [ ${dry_run} -eq 0 ] ; then
 	cranky-checkout -u "${handle}"
 fi
 
+first=1
 while IFS= read -r path ; do
+	if [ ${first} -eq 1 ] ; then
+		first=0
+		abi=$(echo "${FETCH[main]}" | grep -oP '\d+\.\d+\.\d+-\d+')
+
+		echo
+		echo "-- scp ${rdir}/linux*_${abi//-/\{-,.\}}.* ${path}/../"
+		if [ ${dry_run} -eq 0 ] ; then
+			scp "${rdir}/linux*_${abi//-\{-,.\}}.*" "${path}/../"
+		fi
+	fi
+
 	echo
 	echo "${path}"
 	cd "${path}"
