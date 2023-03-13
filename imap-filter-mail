@@ -79,7 +79,10 @@ print('')
 print('-- Mark gerrit mail: ${mark}')
 messages = account['${src}']:contain_body(' has submitted this change. ') * account['${src}']:is_unseen()
 for _, message in ipairs(messages) do
-   subject = message.fetch_field('subject')
+   mbox, uid = table.unpack(message)
+   subject = mbox[uid]:fetch_field('Subject')
+   subject = subject:sub(10)   -- Remove 'Subject: ' prefix
+   subject = subject:gsub('\r', ''):gsub('\n', '')   -- Remove line breaks
    msgs = account['${src}']:contain_subject(subject) * account['${src}']:is_unseen()
    msgs:${mark}
 end
