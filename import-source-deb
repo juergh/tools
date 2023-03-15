@@ -35,7 +35,8 @@ function import_source_deb()
 		fi
 	fi
 
-	pull-lp-source -d "${name}" "${version}"
+	pull-lp-source -d "${name}" "${version}" || \
+		pull-debian-source -d "${name}" "${version}"
 	dsc="${name}_${version}.dsc"
 
 	# Remove the temporary directory
