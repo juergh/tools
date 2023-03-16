@@ -1,0 +1,72 @@
+#!/bin/bash -eu
+#
+# Tag a Debian source package release
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: tag-release [-f] [-h]
+
+Tag a Debian source package release.
+
+Optional arguments:
+  -f, --force  Overwrite an already existing tag.
+  -h, --help   Show this help text and exit.
+EOF
+}
+
+force=0
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-f|--force)
+			force=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			echo "Invalid argument: ${1}" 2>/dev/null
+			exit 2
+			;;
+	esac
+	shift
+done
+
+# HEAD commit needs to modify debian/changelog
+if ! git show --format= --name-only | grep -qFx "debian/changelog" ; then
+	echo "Current HEAD does not modify debian/changelog" >&1
+	exit 1
+fi
+
+# Get the version from the changelog
+version=$(dpkg-parsechangelog -SVersion)
+
+# Check if this is an Ubuntu release commit
+ubuntu_version=$(git log --format='%s' -1 | sed -n 's/^UBUNTU: Ubuntu-//p')
+if [ -n "${ubuntu_version}" ] ; then
+    echo "Current HEAD is an Ubuntu release commit"
+	if [ "${ubuntu_version}" != "${version}" ] ; then
+		echo "Invalid Ubuntu release version: ${ubuntu_version}" >&2
+		exit 1
+	fi
+fi
+
+tag=${version}
+tag=${tag//\~/_}
+
+if [ -n "${ubuntu_version}" ] ; then
+	tag=Ubuntu-${tag}
+	msg="UBUNTU: ${tag}"
+else
+	msg="Release: ${tag}"
+fi
+
+if [ ${force} -eq 0 ] && git rev-parse "${tag}" >/dev/null 2>&1 ; then
+    echo "Tag exists already: ${tag}" >&2
+    exit 1
+fi
+
+git tag -f -s -m  "${msg}" "${tag}"
