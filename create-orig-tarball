@@ -1,0 +1,58 @@
+#!/bin/bash -eu
+#
+# Create an orig tarball for a Debian source package
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: create-orig-tarball [-h] COMMIT
+
+Create an orig tarball for a Debian source package.
+
+Positional arguments:
+  COMMIT      Commit to create the tarball from.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+commit=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${commit}" ] ; then
+				echo "Invalid argument: ${1}" 2>/dev/null
+				exit 2
+			fi
+			commit=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${commit}" ] ; then
+	usage
+	exit 2
+fi
+
+name=$(dpkg-parsechangelog -SSource)
+version=$(dpkg-parsechangelog -SVersion)
+upstream_version=${version%%-*}
+
+orig_tarball=../${name}_${upstream_version}.orig.tar.xz
+if [ -e "${orig_tarball}" ] ; then
+    echo "Orig tarball ${orig_tarball} exists already"
+    exit
+fi
+
+echo "-- Create orig tarball ${orig_tarball}"
+git archive --format=tar --prefix="${name}-${upstream_version}"/ "${commit}" | \
+    xz -z - > "${orig_tarball}"
+
