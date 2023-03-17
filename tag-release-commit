@@ -69,4 +69,5 @@ if [ ${force} -eq 0 ] && git rev-parse "${tag}" >/dev/null 2>&1 ; then
     exit 1
 fi
 
+set -x
 git tag -f -s -m  "${msg}" "${tag}"
