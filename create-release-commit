@@ -1,0 +1,110 @@
+#!/bin/bash -eu
+#
+# Create a Debian package release commit
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: create-release [-d] [-h] [-s SUFFIX] [-u] [PREV_REL_COMMIT]
+
+Create a Debian package release commit.
+
+Postional arguments:
+  PREV_REL_COMMIT      Previous release commit.
+
+Optional arguments:
+  -d, --dry-run        Show the new changelog entry without committing it.
+  -h, --help           Show this help text and exit.
+  -s, --suffix SUFFIX  Append SUFFIX to the current package version to generate
+                       the new version rather than bumping the upload number.
+  -u, --ubuntu
+EOF
+}
+
+dry_run=0
+suffix=
+ubuntu=0
+prev_release=
+
+while [ "${#}" -gt 0 ] ; do
+	case "${1}" in
+		-d|--dry-run)
+			dry_run=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-s|--suffix)
+			shift
+			suffix=${1}
+			;;
+		-u|--ubuntu)
+			ubuntu=1
+			;;
+		*)
+			if [ -n "${prev_release}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			prev_release=${1}
+			;;
+	esac
+	shift
+done
+
+version=$(dpkg-parsechangelog -S Version)
+if [ -z "${prev_release}" ] ; then
+	prev_release=$(git log --oneline -1000 | \
+	               grep -m1 -P "^[0-9a-f]{12,} UBUNTU: Ubuntu-${version}$" || \
+	               true)
+	prev_release=${prev_release%% *}
+fi
+if [ -z "${prev_release}" ] ; then
+	echo "Unable to find previous release commit" >&2
+	exit 1
+fi
+
+if [ -n "${suffix}" ] ; then
+	new_version=${version}${suffix}
+else
+	upload=$(echo "${version}" | grep -oP '[0-9]+$')
+	new_version=${version%"${upload}"}$((upload + 1))
+fi
+
+src=$(dpkg-parsechangelog -S Source)
+dist=$(dpkg-parsechangelog -S Distribution)
+urgency=$(dpkg-parsechangelog -S Urgency)
+
+TMP=$(mktemp)
+{
+	echo "${src} (${new_version}) ${dist}; urgency=${urgency}"
+	echo
+	if [ ${ubuntu} -eq 1 ] ; then
+		git log "${prev_release}".. | git-ubuntu-log
+	else
+		git log --format='  * %s' --reverse "${prev_release}"..
+	fi
+	echo
+	echo " -- ${DEBFULLNAME} <${DEBEMAIL}>  $(date -R)"
+	if [ "${dry_run}" -eq 0 ] ; then
+		echo
+		cat debian/changelog
+	fi
+} > "${TMP}"
+
+if [ "${dry_run}" -eq 1 ] ; then
+	cat "${TMP}"
+	exit
+fi
+
+mv "${TMP}" debian/changelog
+
+if [ ${ubuntu} -eq 1 ] ; then
+	set -x
+	git commit -s -m "UBUNTU: Ubuntu-${new_version}" -- debian/changelog
+else
+	set -x
+	git commit -s -m "Release: ${new_version}" -- debian/changelog
+fi
