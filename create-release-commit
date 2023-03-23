@@ -18,7 +18,7 @@ Optional arguments:
   -h, --help           Show this help text and exit.
   -s, --suffix SUFFIX  Append SUFFIX to the current package version to generate
                        the new version rather than bumping the upload number.
-  -u, --ubuntu
+  -u, --ubuntu         Force Ubuntu'ness.
 EOF
 }
 
@@ -54,11 +54,23 @@ while [ "${#}" -gt 0 ] ; do
 	shift
 done
 
-version=$(dpkg-parsechangelog -S Version)
+DEBIAN=debian
+if [ -e debian/debian.env ] ; then
+	ubuntu=1
+	# shellcheck disable=SC1091
+	. debian/debian.env
+fi
+changelog=${DEBIAN}/changelog
+
+version=$(dpkg-parsechangelog -l"${changelog}" -S Version)
+
+ubuntu_prefix=
 if [ -z "${prev_release}" ] ; then
 	prev_release=$(git log --oneline -1000 | \
-	               grep -m1 -P "^[0-9a-f]{12,} UBUNTU: Ubuntu-${version}$" || \
-	               true)
+	               grep -m1 -P "^[0-9a-f]{12,} UBUNTU: Ubuntu(-.*)?-${version}$" || \
+					   true)
+	ubuntu_prefix=${prev_release%-"${version}"}
+	ubuntu_prefix=${ubuntu_prefix#* Ubuntu}
 	prev_release=${prev_release%% *}
 fi
 if [ -z "${prev_release}" ] ; then
@@ -73,9 +85,9 @@ else
 	new_version=${version%"${upload}"}$((upload + 1))
 fi
 
-src=$(dpkg-parsechangelog -S Source)
-dist=$(dpkg-parsechangelog -S Distribution)
-urgency=$(dpkg-parsechangelog -S Urgency)
+src=$(dpkg-parsechangelog -l"${changelog}" -S Source)
+dist=$(dpkg-parsechangelog -l"${changelog}" -S Distribution)
+urgency=$(dpkg-parsechangelog -l"${changelog}" -S Urgency)
 
 TMP=$(mktemp)
 {
@@ -90,7 +102,7 @@ TMP=$(mktemp)
 	echo " -- ${DEBFULLNAME} <${DEBEMAIL}>  $(date -R)"
 	if [ "${dry_run}" -eq 0 ] ; then
 		echo
-		cat debian/changelog
+		cat "${changelog}"
 	fi
 } > "${TMP}"
 
@@ -99,11 +111,11 @@ if [ "${dry_run}" -eq 1 ] ; then
 	exit
 fi
 
-mv "${TMP}" debian/changelog
+mv "${TMP}" "${changelog}"
 
 if [ ${ubuntu} -eq 1 ] ; then
 	set -x
-	git commit -s -m "UBUNTU: Ubuntu-${new_version}" -- debian/changelog
+	git commit -s -m "UBUNTU: Ubuntu${ubuntu_prefix}-${new_version}" -- "${changelog}"
 else
 	set -x
 	git commit -s -m "Release: ${new_version}" -- debian/changelog
