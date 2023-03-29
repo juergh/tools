@@ -80,7 +80,7 @@ function set_IMAGE_PROPS()
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] [-k KEYNAME] IMAGE
+Usage: $(basename "${0}") [-a ARCH] [-h] [-k KEYNAME] [-r RELEASE] [-x] IMAGE
 
 Create a base Ubuntu ADT image in OpenStack from an existing Ubuntu OpenStack
 image.
@@ -89,14 +89,18 @@ Postional arguments:
   IMAGE                   OpenStack image name or ID.
 
 Optional arguments:
+  -a, --arch ARCH         Image OS architecture.
   -e, --keep              Keep server.
   -h, --help              Show this help text and exit.
   -k, --key-name KEYNAME  An existing OpenStack SSH keyname. If not provided,
                           uses the current username as the keyname.
+  -r, --release RELEASE   Image OS release.
+  -x, --debug             Enable debugging output.
 EOF
 }
 
 declare -A release_map=(
+	["23.04"]="lunar"
 	["22.10"]="kinetic"
 	["22.04"]="jammy"
 	["20.04"]="focal"
@@ -116,12 +120,19 @@ declare -A arch_map=(
 	["XXX"]=""
 )
 
+arch=
 keep=0
+debug=0
 key_name=${USER}
+release=
 image=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-a|--arch)
+			shift
+			arch=${1}
+			;;
 		-e|--keep)
 			keep=1
 			;;
@@ -132,6 +143,13 @@ while [ ${#} -gt 0 ] ; do
 		-k|--key-name)
 			shift
 			key_name=${1}
+			;;
+		-r|--release)
+			shift
+			release=${1}
+			;;
+		-x|--debug)
+			debug=1
 			;;
 		-*)
 			echo "-- Error: Invalid argument: ${1}" >&2
@@ -173,9 +191,28 @@ test -e "${setup_canonical}"
 declare -A IMAGE_PROPS
 set_IMAGE_PROPS "${image}"
 
-release_num=${IMAGE_PROPS["os_version"]:-XXX}
-release=${release_map[${release_num}]}
-arch=${arch_map[${IMAGE_PROPS["architecture"]:-XXX}]}
+if [ ${debug} -eq 1 ] ; then
+	echo "++ IMAGE_PROPS:"
+	for k in "${!IMAGE_PROPS[@]}" ; do
+		echo "   $k: ${IMAGE_PROPS[${k}]}"
+	done
+fi
+
+if [ -z "${release}" ] ; then
+	release_num=${IMAGE_PROPS["os_version"]:-XXX}
+	release=${release_map[${release_num}]}
+else
+	for num in "${!release_map[@]}" ; do
+		if [ "${release}" = "${release_map[${num}]}" ] ; then
+			release_num=${num}
+			break
+		fi
+	done
+fi
+
+if [ -z "${arch}" ] ; then
+	arch=${arch_map[${IMAGE_PROPS["architecture"]:-XXX}]}
+fi
 
 if [ -z "${release}" ] || [ -z "${arch}" ] ; then
 	echo "-- Error: Unable to determine image release and/or architecture" >&2
