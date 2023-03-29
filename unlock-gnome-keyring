@@ -1,0 +1,43 @@
+#!/bin/bash -eu
+#
+# Unlock the GNOME keyring
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h]
+
+Unlock the GNOME keyring.
+
+Environment variables:
+  PASSWORD    Password for the current user. If not set, prompt for it.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+password=${PASSWORD:-}
+if [ -z "${password}" ] ; then
+	IFS= read -r -s -p "Password for ${USER}: " password
+	echo
+fi
+
+killall -u "${USER}" gnome-keyring-daemon || true
+echo -n "${password}" | $(which gnome-keyring-daemon) --daemonize --login
+$(which gnome-keyring-daemon) --start
