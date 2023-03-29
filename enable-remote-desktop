@@ -8,8 +8,10 @@ function usage()
 	cat <<EOF
 Usage: $(basename "${0}") [-h]
 
-Enable GNOME remote desktop. Uses PASSWORD if set, otherwise prompts for the
-password.
+Enable GNOME remote desktop.
+
+Environment variables:
+  PASSWORD    Password for the current user. If not set, prompt for it.
 
 Optional arguments:
   -h, --help  Show this help text and exit.
@@ -30,32 +32,28 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
-# Network connection UUID
-uuid=$(nmcli conn | awk '$(NF-1) == "ethernet" { print $(NF-2) }')
-if [ -z "${uuid}" ] ; then
-	echo "Unable to determine UUID of network connection" >&2
-	exit 1
-fi
-
 password=${PASSWORD:-}
 if [ -z "${password}" ] ; then
-	read -s -p "Password: " password
+	read -r -s -p "Password for user ${USER}: " password
 	echo
 fi
 
-# Disable the automatic screen lock
-gsettings set org.gnome.desktop.screensaver lock-enabled false
-
-# Remote desktop configuration
-gsettings set org.gnome.desktop.remote-desktop.vnc auth-method 'password'
-gsettings set org.gnome.desktop.remote-desktop.vnc view-only false
-gsettings set org.gnome.settings-daemon.plugins.sharing.service:/org/gnome/settings-daemon/plugins/sharing/gnome-remote-desktop/ enabled-connections "['${uuid}']"
-
-# Unlock the keyring and set the remote desktop password
-killall gnome-keyring-daemon
+# Unlock the GNOME keyring
+killall -u "${USER}" gnome-keyring-daemon
 echo -n "${password}" | $(which gnome-keyring-daemon) --daemonize --login
-echo -n "${password}" | \
-	secret-tool store --label='GNOME Remote Desktop VNC password' xdg:schema org.gnome.RemoteDesktop.VncPassword
+$(which gnome-keyring-daemon) --start
+
+# Disable screen blank
+gsettings set org.gnome.desktop.session idle-delay "uint32 0"
+
+# Enable RDP
+gsettings set org.gnome.desktop.remote-desktop.rdp enable true
+gsettings set org.gnome.desktop.remote-desktop.rdp view-only false
+
+# Set the RDP password
+echo -n "{'username': <'${USER}'>, 'password': <'${password}'>}" |
+	secret-tool store --label="GNOME Remote Desktop RDP credentials" \
+	            "xdg:schema" "org.gnome.RemoteDesktop.RdpCredentials"
 
 # (Re-)start the service
 systemctl --user restart gnome-remote-desktop
