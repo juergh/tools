@@ -1,0 +1,22 @@
+Resolve libvirt hostnames
+-------------------------
+
+1) with systemd-resolvd
+
+$ cp config/systemd/dns-virbr0.service /etc/systemd/system/
+$ systemctl daemon-reload
+$ systemctl enable dns-virbr0.service
+
+
+2) with dnsmasq
+
+# Disable systemd-resolvd
+
+# Add /etc/NetworkManager/conf.d/localdns.conf
+[main]
+dns=dnsmasq
+
+# Add  /etc/NetworkManager/dnsmasq.d/libvirt.conf
+server=/virtdomain/192.168.122.1
+
+

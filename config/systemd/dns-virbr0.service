@@ -1,0 +1,12 @@
+[Unit]
+Description=Per-link DNS configuration for virbr0
+BindsTo=sys-subsystem-net-devices-virbr0.device
+After=sys-subsystem-net-devices-virbr0.device systemd-resolved.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/resolvectl dns virbr0 192.168.122.1
+ExecStart=/usr/bin/resolvectl domain virbr0 '~virtdomain'
+
+[Install]
+WantedBy=sys-subsystem-net-devices-virbr0.device
