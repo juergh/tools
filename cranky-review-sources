@@ -82,10 +82,10 @@ function review_src()
 		lsdiff -s ../"${debdiff}" | do_colordiff
 
 		# filterdiff .debdiff
-		echo
-		echo -e "\e[96m*** SOURCE ${src} *** filterdiff ${debdiff} ***\e[0m"
-		echo
-		filterdiff -x '*/abi/*' "../${debdiff}" | do_colordiff
+		#echo
+		#echo -e "\e[96m*** SOURCE ${src} *** filterdiff ${debdiff} ***\e[0m"
+		#echo
+		#filterdiff -x '*/abi/*' "../${debdiff}" | do_colordiff
 
 		# Content of .changes
 		echo
