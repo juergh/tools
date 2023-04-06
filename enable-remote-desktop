@@ -3,26 +3,46 @@
 # Enable remote desktop
 #
 
+function keyring_is_locked()
+{
+	python3 -c "
+import sys
+import secretstorage
+
+conn = secretstorage.dbus_init()
+coll = secretstorage.get_default_collection(conn)
+
+sys.exit(0 if coll.is_locked() else 1)
+"
+}
+
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h]
+Usage: $(basename "${0}") [-h] [-v]
 
 Enable GNOME remote desktop.
 
 Environment variables:
-  PASSWORD    Password for the current user. If not set, prompt for it.
+  PASSWORD       Password for the current user. If not set, prompt for it.
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -h, --help     Show this help text and exit.
+  -v, --virtual  Create a virtual monitor rather than mirroring the primary
+                 monitor.
 EOF
 }
+
+virtual=0
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
 		-h|--help)
 			usage
 			exit
+			;;
+		-v|--virtual)
+			virtual=1
 			;;
 		*)
 			echo "Invalid argument: ${1}" >&2
@@ -39,21 +59,58 @@ if [ -z "${password}" ] ; then
 fi
 
 # Unlock the GNOME keyring
-killall -u "${USER}" gnome-keyring-daemon
-echo -n "${password}" | $(which gnome-keyring-daemon) --daemonize --login
-$(which gnome-keyring-daemon) --start
+if keyring_is_locked ; then
+	echo "-- Unlock GNOME keyring"
+	killall -u "${USER}" gnome-keyring-daemon
+	echo -n "${password}" | $(which gnome-keyring-daemon) --daemonize --login
+	$(which gnome-keyring-daemon) --start
+fi
+
+# Set the RDP password
+echo "-- Set RDP credentials"
+echo -n "{'username': <'${USER}'>, 'password': <'${password}'>}" |
+	secret-tool store --label="GNOME Remote Desktop RDP credentials" \
+	            "xdg:schema" "org.gnome.RemoteDesktop.RdpCredentials"
+
+# Disable automatic suspend
+#gsettings set org.gnome.settings-daemon.plugins.power \
+#		  sleep-inactive-ac-type "nothing"
 
 # Disable screen blank
+echo "-- Disable screen blanking"
 gsettings set org.gnome.desktop.session idle-delay "uint32 0"
+
+echo "-- Enable and configure RDP"
 
 # Enable RDP
 gsettings set org.gnome.desktop.remote-desktop.rdp enable true
 gsettings set org.gnome.desktop.remote-desktop.rdp view-only false
 
-# Set the RDP password
-echo -n "{'username': <'${USER}'>, 'password': <'${password}'>}" |
-	secret-tool store --label="GNOME Remote Desktop RDP credentials" \
-	            "xdg:schema" "org.gnome.RemoteDesktop.RdpCredentials"
+if [ ${virtual} -eq 1 ] ; then
+	# Create a virtual monitor
+	gsettings set org.gnome.desktop.remote-desktop.rdp \
+			  screen-share-mode "extend"
+else
+	# FIXME: do we need 'loginctl unlock-sessions'
+	# Mirror the primary monitor (default)
+	gsettings set org.gnome.desktop.remote-desktop.rdp \
+			  screen-share-mode "mirror-primary"
+fi
 
-# (Re-)start the service
+# Generate RDP TLS certificate and key
+tls_crt=$(gsettings get org.gnome.desktop.remote-desktop.rdp tls-cert)
+if [ -z "${tls_crt}" ] || ! [ -e "${tls_crt}" ] ; then
+	echo "-- Generate RDP TLS certitificate and key"
+	d=${HOME}/.local/share/gnome-remote-desktop
+	tls_crt=${d}/rdp-tls.crt
+	tls_key=${d}/rdp-tls.key
+	mkdir -p "${d}"
+	openssl req -nodes -new -x509 -keyout "${tls_key}" -out "${tls_crt}" \
+			-days 1000 -subj "/CN=GNOME/C=US"
+	gsettings set org.gnome.desktop.remote-desktop.rdp tls-cert "${tls_crt}"
+	gsettings set org.gnome.desktop.remote-desktop.rdp tls-key "${tls_key}"
+fi
+
+# Restart the service
+echo "-- Restart RDP daemon"
 systemctl --user restart gnome-remote-desktop
