@@ -34,40 +34,106 @@ for comment in reversed(issue.fields.comment.comments):
 "
 }
 
+function do_checkout()
+{
+	echo
+	echo "-- cranky-checkout -u ${HANDLE}"
+	if [ "${DRY_RUN}" -eq 1 ] ; then
+		return
+	fi
+
+	cranky-checkout -u "${HANDLE}"
+}
+
+function do_download()
+{
+	local abi path
+
+	abi=$(echo "${FETCH[main]}" | grep -oP '\d+\.\d+\.\d+-\d+')
+	path=${PATHS[0]}
+
+	echo
+	echo "-- scp ${REMOTE_DIR}/linux*_${abi//-/\[-.\]}.* ${path}/../"
+	if [ "${DRY_RUN}" -eq 1 ] ; then
+		return
+	fi
+
+	scp "${REMOTE_DIR}/linux*_${abi}.*" "${path}/../"
+	scp "${REMOTE_DIR}/linux*_${abi//-/.}.*" "${path}/../"
+}
+
+function do_fetch()
+{
+	local path key val
+
+	for path in "${PATHS[@]}" ; do
+		echo
+		echo "${path}"
+		cd "${path}"
+		key=$(cranky shell-helper tree-type)
+		val=${FETCH["${key}"]}
+		echo "-- git fetch --no-tags ${val% *} tag ${val#* }"
+		if [ "${DRY_RUN}" -eq 1 ] ; then
+			continue
+		fi
+
+		git fetch --no-tags "${val% *}" tag "${val#* }"
+	done
+}
+
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-d] [-h] ISSUE
+Usage: $(basename "${0}") [-c] [-d] [-f] [-h] [-o] ISSUE
 
 Parse the provided Jira <ISSUE> and fetch the referenced repos.
 
 Optional arguments:
-  -d, --dry-run  Don't fetch anything.
-  -h, --help     Show this help text and exit.
+  -c, --checkout       Checkout the repos.
+  -d, --dry-run        Don't fetch anything.
+  -f, --fetch          Fetch repos.
+  -h, --help           Show this help text and exit.
+  -o, --download       Download the source packages.
 EOF
 }
 
-dry_run=0
+checkout=1
+DRY_RUN=0
+fetch=1
+download=1
 issue=
 
+c=0
+f=0
+d=0
+
 while [ ${#} -gt 0 ] ; do
-    case "${1}" in
-        -d|--dry-run)
-            dry_run=1
-            ;;
-        -h|--help)
-            usage
-            exit
-            ;;
-        *)
-            if [ -n "${issue}" ] ; then
-                echo "Invalid argument: ${1}" >&2
-                exit 2
-            fi
-            issue=${1}
-            ;;
-    esac
-    shift
+	case "${1}" in
+		-c|--checkout)
+			c=1
+			;;
+		-d|--dry-run)
+			DRY_RUN=1
+			;;
+		-f|--fetch)
+			f=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-o|--download)
+			d=1
+			;;
+		*)
+			if [ -n "${issue}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			issue=${1}
+			;;
+	esac
+	shift
 done
 
 if [ -z "${issue}" ] ; then
@@ -75,18 +141,25 @@ if [ -z "${issue}" ] ; then
 	exit 2
 fi
 
+if [ "${c}${f}${d}" != "000" ] ; then
+	checkout=${c}
+	fetch=${f}
+	download=${d}
+fi
+
+HANDLE=
+REMOTE_DIR=
 declare -A FETCH
 
-rdir=
 while IFS= read -r line ; do
 	key=${line%% *}
 	val=${line#* }
 	case "${key}" in
 		summary)
 			echo "summary:  ${val}"
-			handle=${val#* }
-			handle=${handle%% *}
-			echo "handle:   ${handle}"
+			HANDLE=${val#* }
+			HANDLE=${HANDLE%% *}
+			echo "handle:   ${HANDLE}"
 			;;
 		fetch)
 			case "${val% *}" in
@@ -114,38 +187,30 @@ while IFS= read -r line ; do
 			;;
 		packages)
 			echo "packages: ${val}"
-			rdir=${val/\~//home/}
+			REMOTE_DIR=${val/\~//home/}
 			;;
 	esac
 done < <(query_jira "${issue}")
 
-echo
-echo "-- cranky-checkout -u ${handle}"
-if [ ${dry_run} -eq 0 ] ; then
-	cranky-checkout -u "${handle}"
+if [ -z "${HANDLE}" ] ; then
+	echo "Failed to determine handle" >&2
+	exit 1
 fi
 
-first=1
-while IFS= read -r path ; do
-	if [ ${first} -eq 1 ] ; then
-		first=0
-		abi=$(echo "${FETCH[main]}" | grep -oP '\d+\.\d+\.\d+-\d+')
+if [ ${checkout} -eq 1 ] ; then
+	do_checkout
+fi
 
-		echo
-		echo "-- scp ${rdir}/linux*_${abi//-/\[-.\]}.* ${path}/../"
-		if [ ${dry_run} -eq 0 ] ; then
-			scp "${rdir}/linux*_${abi}.*" "${path}/../"
-			scp "${rdir}/linux*_${abi//-/.}.*" "${path}/../"
-		fi
-	fi
+if [ ${download} -eq 0 ] && [ ${fetch} -eq 0 ] ; then
+	exit
+fi
 
-	echo
-	echo "${path}"
-	cd "${path}"
-	key=$(cranky shell-helper tree-type)
-	val=${FETCH["${key}"]}
-	echo "-- git fetch --no-tags ${val% *} tag ${val#* }"
-	if [ ${dry_run} -eq 0 ] ; then
-		git fetch --no-tags "${val% *}" tag "${val#* }"
-	fi
-done < <(cranky shell-helper source-packages-path "${handle}")
+readarray -t PATHS < <(cranky shell-helper source-packages-path "${HANDLE}")
+
+if [ ${download} -eq 1 ] ; then
+	do_download
+fi
+
+if [ ${fetch} -eq 1 ] ; then
+	do_fetch
+fi
