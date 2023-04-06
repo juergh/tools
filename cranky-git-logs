@@ -14,20 +14,26 @@ function pr_banner()
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] [GIT_LOG_OPTIONS]
+Usage: $(basename "${0}") [-h] [-l] [GIT_LOG_OPTIONS]
 
 Show kernel source git repo logs.
 
 Optional arguments:
-  -h, --help  Show this help message and exit.
+  -h, --help   Show this help message and exit.
+  -l, --local  Show local changes.
 EOF
 }
+
+local=0
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
 		-h|--help)
 			usage
 			exit
+			;;
+		-l|--local)
+			local=1
 			;;
 		*)
 			break
@@ -39,5 +45,17 @@ done
 while IFS= read -r path ; do
 	echo
 	pr_banner "${path}"
-	git -C "${path}" --no-pager log --color=always --decorate=short "${@}"
+	cd "${path}"
+
+	rev_range=()
+	if [ ${local} -eq 1 ] ; then
+		rtb=$(git rev-parse --abbrev-ref --symbolic-full-name @{u})
+		subject=$(git log --format=%s "${rtb}" -1)
+		m=$(git log --format="%h ___%s___" -1000 | grep -m1 -F "___${subject}___" || true)
+		if [ -n "${m}" ] ; then
+			rev_range=("${m%% *}..")
+		fi
+	fi
+
+	git --no-pager log --color=always --decorate=short "${@}" "${rev_range[@]}"
 done < <(cranky shell-helper source-packages-path) | less
