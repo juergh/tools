@@ -172,8 +172,22 @@ if [ -z "${image}" ] ; then
 fi
 
 flavor=m1.small
-network=net_kernel-automated-tests
-security_group=allow-ping-and-ssh
+
+# FIXME
+case "${OS_AUTH_URL}" in
+	*.bos01.scalingstack*)
+		network=net_kernel-automated-tests
+		security_group=allow-ping-and-ssh
+		;;
+	*.bos02.scalingstack*)
+		network=net_prod_kernel-testing
+		security_group=allow-ssh
+		;;
+	*)
+		echo "Unsupported environment: ${OS_AUTH_URL}" >&2
+		exit 1
+		;;
+esac
 
 setup_testbed=${AUTOPKGTEST}/setup-commands/setup-testbed
 setup_canonical=${AUTOPKGTEST_CLOUD}/autopkgtest-cloud/worker-config-production/setup-canonical.sh
