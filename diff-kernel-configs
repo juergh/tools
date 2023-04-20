@@ -3,18 +3,6 @@
 # Diff two or more kernel config files
 #
 
-function usage()
-{
-	cat <<EOF
-Usage: diff-kernel-configs [-h] CONFIGFILE CONFIGFILE [CONFIGFILE...]
-
-Diff two or more kernel config files.
-
-Optional arguments:
-  -h, --help  Show this help text and exit.
-EOF
-}
-
 function read_configfile()
 {
 	local array=${1} configfile=${2}
@@ -40,10 +28,27 @@ function read_configfile()
 	done < <(cat "${configfile}")
 }
 
+function usage()
+{
+	cat <<EOF
+Usage: diff-kernel-configs [-d] [-h] CONFIGFILE CONFIGFILE [CONFIGFILE...]
+
+Diff two or more kernel config files.
+
+Optional arguments:
+  -d. --diff-only  Only show differences.
+  -h, --help       Show this help text and exit.
+EOF
+}
+
+diff_only=0
 files=()
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
+		-d|--diff-only)
+			diff_only=1
+			;;
 		-h|--help)
 			usage
 			exit
@@ -76,7 +81,7 @@ done
 
 # Print a header line
 printf "%-40s" "CONFIG"
-for f in ${files[@]} ; do
+for f in "${files[@]}" ; do
 	printf "%-40s" "${f::39}"
 done
 printf "\n"
@@ -91,17 +96,21 @@ while IFS= read -r line ; do
 	# first value (reference)
 	ref_val=${CONFIGS_0[${config}]}
 
-	printf "%-40s%-40s" "${config}" "${ref_val}"
+	diff=0
+	line=$(printf "%-40s%-40s" "${config}" "${ref_val}")
 	for i in $(seq 1 $((${#files[@]} - 1))) ; do
 		var=CONFIGS_${i}[${config}]
 		val="${!var:--}"
 		if [ "${val}" = "${ref_val}" ] ; then
 			color="\e[32m"  # green
 		else
+			diff=1
 			color="\e[93m"  # orange
 		fi
-		printf "%-49s" "$(echo -e "${color}${val}\e[0m")"
+		line=${line}$(printf "%-49s" "$(echo -e "${color}${val}\e[0m")")
 	done
-	printf "\n"
+	if [ ${diff_only} -eq 0 ] || [ ${diff} -eq 1 ]  ; then
+		echo "${line}"
+	fi
 
 done < <(grep -P '^(# )?CONFIG_' "${files[0]}")
