@@ -3,8 +3,8 @@
 # Find commits on the given branch that are not on the current branch
 #
 
-LINUX_REPO=/srv/git/linux.git
-STABLE_REPO=/srv/git/linux-stable.git
+LINUX_REPO=/data/git/linux.git
+STABLE_REPO=/data/git/linux-stable.git
 
 function do_patch_id()
 {

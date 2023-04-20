@@ -17,9 +17,9 @@ YELLOW = ("\033[33m", "\033[0m")
 NONE = ("", "")
 
 REPOS = (
-    ('/srv/git/linux.git', 'linux'),
-    ('/srv/git/linux-stable.git', 'linux-stable'),
-    ('/srv/git/linux-rpi.git', 'linux-rpi'),
+    ('/data/git/linux.git', 'linux'),
+    ('/data/git/linux-stable.git', 'linux-stable'),
+    ('/data/git/linux-rpi.git', 'linux-rpi'),
 )
 
 def run_cmd(cmd, stderr=None):

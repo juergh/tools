@@ -3,7 +3,7 @@
 # Find references to upstream commit hashes in commit messages
 #
 
-LINUX_REPO=/srv/git/linux.git
+LINUX_REPO=/data/git/linux.git
 
 PATTERN_LIST=(
         "commit [0-9a-f]* upstream"

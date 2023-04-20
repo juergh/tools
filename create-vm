@@ -765,7 +765,7 @@ if [ "${VENDOR}" = "opensuse" ] ; then
 fi
 
 # Image and config directories
-IMAGES_DIR=/srv/images/cloud
+IMAGES_DIR=/data/images/cloud
 if ! [ -d "${IMAGES_DIR}" ] ; then
 	IMAGES_DIR=~/.cache/images/cloud
 	if ! [ -d "${IMAGES_DIR}" ] ; then

@@ -74,7 +74,7 @@ declare -A STATUS_MAP=(
 )
 
 # so-trello binary
-SO_TRELLO_BIN=${SO_TRELLO_BIN:-/srv/git/so-trello/bin/so-trello}
+SO_TRELLO_BIN=${SO_TRELLO_BIN:-/data/git/so-trello/bin/so-trello}
 
 # Cycle through the board lists and cards
 while IFS= read -r list ; do

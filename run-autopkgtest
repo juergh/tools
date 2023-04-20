@@ -102,7 +102,7 @@ if ! [ -e "${dsc}" ] ; then
 	exit 1
 fi
 
-image=/srv/autopkgtest/autopkgtest-${distro}-amd64.img
+image=/data/autopkgtest/autopkgtest-${distro}-amd64.img
 
 if ! [ -e "${image}" ] ; then
 	echo "Error: No such image file: ${image}" >&2

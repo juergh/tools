@@ -41,7 +41,7 @@ function list_kernels()
 	python3 -c "
 import yaml
 
-with open('/srv/git/kteam-tools/info/kernel-series.yaml') as fh:
+with open('/data/git/kteam-tools/info/kernel-series.yaml') as fh:
     kernel_series = yaml.safe_load(fh)
 
 for series in kernel_series:

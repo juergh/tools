@@ -3,7 +3,7 @@
 # Check the commits in the provided commit range for upstream 'Fixes' commits
 #
 
-LINUX_REPO=/srv/git/linux.git
+LINUX_REPO=/data/git/linux.git
 
 PATTERN_LIST=(
 	"commit [0-9a-f]* upstream"
