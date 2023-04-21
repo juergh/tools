@@ -46,14 +46,14 @@ function push_all()
 	push_tag=(git push "${REMOTE}" "${tag}")
 	push_branch=(git push "${REMOTE}" "${push_branch_opts[@]}")
 
-	echo "${push_tag[@]}"
-	if [ "${DRY_RUN}" -eq 0 ] ; then
-		"${push_tag[@]}" || true
-	fi
-
 	echo "${push_branch[@]}"
 	if [ "${DRY_RUN}" -eq 0 ] ; then
 		"${push_branch[@]}" || true
+	fi
+
+	echo "${push_tag[@]}"
+	if [ "${DRY_RUN}" -eq 0 ] ; then
+		"${push_tag[@]}" || true
 	fi
 
 	echo
