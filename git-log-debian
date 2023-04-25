@@ -90,7 +90,7 @@ function log_debian()
 
 			# Previous entry != current entry: Probably a rename or rebase of
 			# some sort
-			elif [ "${n1}${v1}${r1}" != "${n2}${v2}${r2}" ] ; then
+			elif [ "${n1}${v1}" != "${n2}${v2}" ] ; then
 				tag=$(tag_name "${n2}" "${v2}")
 				tag_type="rename"
 			fi
