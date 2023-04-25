@@ -99,14 +99,13 @@ function log_debian()
 		if [ -n "${tag}" ] ; then
 			if [ -n "${TAGS[${tag}]:-}" ] ; then
 				pr_info "-- Ignore already processed ${tag_type} tag ${tag}"
-			elif git rev-parse "${tag}" >/dev/null 2>&1 ; then
-				TAGS[${tag}]=1
-				pr_info "-- Follow ${tag_type} tag ${tag}"
-				log_debian "${tag}"
-				return
+			elif ! git rev-parse "${tag}" >/dev/null 2>&1 ; then
+				pr_info "-- ${tag_type^} tag ${tag} not found"
 			else
 				TAGS[${tag}]=1
-				pr_info "-- ${tag_type^} tag not found: ${tag}"
+				pr_info "-- Follow ${tag_type} tag ${tag} instead of ${commit} (\"${subject}\")"
+				log_debian "${tag}"
+				return
 			fi
 		fi
 
