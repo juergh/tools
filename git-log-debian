@@ -23,19 +23,28 @@ function pr_info()
 	fi
 }
 
-function parse_changelog()
+function debian_dir()
 {
 	local commit=${1}
 	local debian
 
-	debian=$(git show "${commit}":debian/debian.env 2>/dev/null | \
-				 sed -e 's/DEBIAN=//')
-	if [ -z "${debian}" ] ; then
-		debian=debian.master
+	debian=$(git show "${commit}":debian/debian.env 2>/dev/null |
+	         sed -n 's/DEBIAN=//p')
+	if [ -n "${debian}" ] ; then
+		echo "${debian}"
+	else
+		echo debian
 	fi
+}
+
+function parse_changelog()
+{
+	local commit=${1}
+	local changelog
 
 	# Print 'source version release'
-	{ git show "${commit}":"${debian}"/changelog 2>/dev/null || echo ; } | \
+	changelog=$(debian_dir "${commit}")/changelog
+	{ git show "${commit}":"${changelog}" 2>/dev/null || echo ; } | \
 		head -1 | sed -e 's/;.*//' -e 's/[()]//g'
 }
 
