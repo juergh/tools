@@ -23,7 +23,70 @@ function pr_info()
 	fi
 }
 
-function debian_dir()
+function pkg_name()
+{
+	local entry=${1}
+
+	echo "${entry%% *}"
+}
+
+function pkg_version()
+{
+	local entry=${1}
+	local version
+
+	version=${entry#*\(}
+	version=${version%\)*}
+
+	echo "${version}"
+}
+
+declare -A TAGS
+
+function verify_tag()
+{
+	local tag=${1} entry=${2:-}
+
+	# Ignore already processed tags
+	if [ -n "${TAGS[${tag}]:-}" ] ; then
+		return 1
+	fi
+
+	# Verify that the tag exists
+	if ! git rev-parse "${tag}" >/dev/null 2>&1 ; then
+		pr_info "-- Tag ${tag} not found"
+		return 1
+	fi
+
+	# Verify that the tag entry matches the provided entry
+	if [ -n "${entry}" ] ; then
+		changelog=$(get_debian_dir "${tag}")/changelog
+		tag_entry=$(git show "${tag}":"${changelog}" | head -1)
+		if [ "${tag_entry}" != "${entry}" ] ; then
+			pr_info "-- Ignore invalid tag ${tag}"
+			return 1
+		fi
+	fi
+
+	TAGS[${tag}]=1
+}
+
+function tag_name()
+{
+	local entry=${1}
+	local name version tag
+
+	name=$(pkg_name "${entry}")
+	version=$(pkg_version "${entry}")
+
+	tag=${name#linux}
+	tag=Ubuntu${tag}-${version}
+	tag=${tag//~/_}
+
+	echo "${tag}"
+}
+
+function get_debian_dir()
 {
 	local commit=${1}
 	local debian
@@ -37,88 +100,81 @@ function debian_dir()
 	fi
 }
 
-function parse_changelog()
+function get_subject()
 {
 	local commit=${1}
-	local changelog
 
-	# Print 'source version release'
-	changelog=$(debian_dir "${commit}")/changelog
-	{ git show "${commit}":"${changelog}" 2>/dev/null || echo ; } | \
-		head -1 | sed -e 's/;.*//' -e 's/[()]//g'
+	git log --format=%B "${commit}" -1 | head -1
 }
-
-function tag_name()
-{
-	local name=${1} version=${2}
-	local tag
-
-	tag=${name#linux}
-	tag=Ubuntu${tag}-${version}
-	tag=${tag//~/_}
-
-	echo "${tag}"
-}
-
-declare -A TAGS
 
 function log_debian()
 {
 	local start=${1}
-	local first line commit subject tag n1 v1 r1 n2 v2 r2
+	local first commit subject line tag changelog entries found entry \
+	      tag_subject
 
 	first=1
 	while IFS= read -r commit ; do
-		subject=$(git log --format=%B "${commit}" -1 | head -1)
+		subject=$(get_subject "${commit}")
 		line="${commit} ${subject}"
 
 		if [ ${first} -eq 1 ] ; then
-			echo "${line}"
 			first=0
+			echo "${line}"
 			continue
 		fi
 
-		tag=
-		tag_type=
-
-		# Check if this is a release commit
+		# Check if this is a release commit based on the commit subject
 		if [ "${subject#UBUNTU: Ubuntu-}" != "${subject}" ] ; then
 			tag=${subject#UBUNTU: }
 			tag=${tag//~/_}
-			tag_type="release"
-
-		# Check if the package name/version/release changed
-		elif [ "${subject}" != "UBUNTU: Start new release" ] ; then
-			IFS=" " read -r n1 v1 r1 < <(parse_changelog "${commit}")
-			IFS=" " read -r n2 v2 r2 < <(parse_changelog "${commit}"~1)
-
-			# No previous entry: Probably an initial import
-			if [ -z "${n2}${v2}${r2}" ] && [ -n "${n1}${v1}${r1}" ] ; then
-				tag=$(tag_name "${n1}" "${v1}")
-				tag_type="import"
-
-			# Previous entry != current entry: Probably a rename or rebase of
-			# some sort
-			elif [ "${n1}${v1}" != "${n2}${v2}" ] ; then
-				tag=$(tag_name "${n2}" "${v2}")
-				tag_type="rename"
-			fi
-		fi
-
-		if [ -n "${tag}" ] ; then
-			if [ -n "${TAGS[${tag}]:-}" ] ; then
-				pr_info "-- Ignore already processed ${tag_type} tag ${tag}"
-			elif ! git rev-parse "${tag}" >/dev/null 2>&1 ; then
-				pr_info "-- ${tag_type^} tag ${tag} not found"
-			else
-				TAGS[${tag}]=1
-				pr_info "-- Follow ${tag_type} tag ${tag} instead of ${commit} (\"${subject}\")"
+			if verify_tag "${tag}" ; then
+				pr_info "-- Follow release tag ${tag}"
 				log_debian "${tag}"
 				return
 			fi
 		fi
 
-		echo "${line}"
+		# Figure out if we need to follow a different commit based on
+		# newly added debian<.foo>/changelog entries
+		changelog=$(get_debian_dir "${commit}")/changelog
+		readarray -t entries < <(git show --format= "${commit}" -- \
+		                         "${changelog}" | sed -n 's/^+linux/linux/p')
+
+		# No new entries, so continue
+		if [ ${#entries[@]} -eq 0 ] ; then
+			echo "${line}"
+			continue
+		fi
+
+		# Walk the new entries and try to find a tagged one
+		found=0
+		for entry in "${entries[@]}" ; do
+			tag=$(tag_name "${entry}")
+			if verify_tag "${tag}" "${entry}" ; then
+				found=1
+				break
+			fi
+		done
+
+		# None of the new entries is tagged, so continue
+		if [ ${found} -eq 0 ] ; then
+			echo "${line}"
+			continue
+		fi
+
+		# Also process the current commit if its subject differs from the
+		# subject of the tag that we're about to follow
+		tag_subject=$(get_subject "${tag}")
+		if [ "${tag_subject}" != "${subject}" ] ; then
+			echo "${line}"
+		fi
+
+		# Finally follow the identified tag
+		pr_info "-- Follow tag ${tag}"
+		log_debian "${tag}"
+		return
+
 	done < <(git log --format=%h --no-merges "${start}" -- debian debian.*)
 }
 
@@ -174,4 +230,5 @@ if ! git rev-parse --quiet --verify "${commit}" >/dev/null ; then
 	exit 1
 fi
 
+ulimit -n $((16 * 1024))
 log_debian "${commit}"
