@@ -54,7 +54,7 @@ function verify_tag()
 
 	# Verify that the tag exists
 	if ! git rev-parse "${tag}" >/dev/null 2>&1 ; then
-		pr_info "-- Tag ${tag} not found"
+		pr_info "-- Tag not found: ${tag}"
 		return 1
 	fi
 
@@ -63,7 +63,7 @@ function verify_tag()
 		changelog=$(get_debian_dir "${tag}")/changelog
 		tag_entry=$(git show "${tag}":"${changelog}" | head -1)
 		if [ "${tag_entry}" != "${entry}" ] ; then
-			pr_info "-- Ignore invalid tag ${tag}"
+			pr_info "-- Ignore invalid tag: ${tag}"
 			return 1
 		fi
 	fi
@@ -129,7 +129,7 @@ function log_debian()
 			tag=${subject#UBUNTU: }
 			tag=${tag//~/_}
 			if verify_tag "${tag}" ; then
-				pr_info "-- Follow release tag ${tag}"
+				pr_info "-- Follow release tag: ${tag}"
 				log_debian "${tag}"
 				return
 			fi
@@ -171,7 +171,7 @@ function log_debian()
 		fi
 
 		# Finally follow the identified tag
-		pr_info "-- Follow tag ${tag}"
+		pr_info "-- Follow tag: ${tag}"
 		log_debian "${tag}"
 		return
 
