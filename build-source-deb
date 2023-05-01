@@ -6,12 +6,13 @@
 function usage()
 {
 	cat <<EOF
-Usage: build-source-deb [-h] [-o] [-r RELEASE] [-v VERSION]
+Usage: build-source-deb [-h] [-m] [-o] [-r RELEASE] [-v VERSION]
 
 Build a Debian source package in a schroot.
 
 Optional arguments:
   -h, --help             Show this help text and exit.
+  -m, --maintainer       Ignore maintainer email address (DEBEMAIL).
   -o, --orig             Include the original source tarball.
   -r, --release RELEASE  Use RELEASE rather than querying the changelog.
   -v, --version VERSION  Previous source package version.
@@ -27,6 +28,9 @@ while [ ${#} -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-m|--maintainer)
+			export DEBEMAIL=
 			;;
 		-o|--orig)
 			orig=1
