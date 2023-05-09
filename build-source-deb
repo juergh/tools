@@ -6,11 +6,12 @@
 function usage()
 {
 	cat <<EOF
-Usage: build-source-deb [-h] [-m] [-o] [-r RELEASE] [-v VERSION]
+Usage: build-source-deb [-c] [-h] [-m] [-o] [-r RELEASE] [-v VERSION]
 
 Build a Debian source package in a schroot.
 
 Optional arguments:
+  -c, --clean            Clean the git repo before the build.
   -h, --help             Show this help text and exit.
   -m, --maintainer       Ignore maintainer email address (DEBEMAIL).
   -o, --orig             Include the original source tarball.
@@ -19,12 +20,16 @@ Optional arguments:
 EOF
 }
 
+clean=0
 orig=0
 release=
 opts=()
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-c|--clean)
+			clean=1
+			;;
 		-h|--help)
 			usage
 			exit
@@ -51,9 +56,15 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
-if [ -d .git ] && [ -n "$(git status --porcelain)" ] ; then
-	echo "Repo is unclean"
-	exit 1
+if [ -d .git ] ; then
+	if [ ${clean} -eq 1 ] && [ -n "$(git status --porcelain)" ] ; then
+		git reset --hard HEAD
+		git clean -dxf
+	fi
+	if [ -n "$(git status --porcelain)" ] ; then
+		echo "Repo is unclean"
+		exit 1
+	fi
 fi
 
 if [ -z "${release}" ] ; then
