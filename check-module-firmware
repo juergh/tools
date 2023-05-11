@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+#
+# Parse a c file and try to figure out if a MODULE_FIRMWARE alias is missing
+#
+
+# import os
+import re
+import sys
+
+def read_line(fh):
+    """
+    Return complete (continued) lines
+    """
+    prev_line = ''
+    cont = False
+
+    for line in fh:
+        # Strip newlines and such
+        line = line.rstrip()
+
+        # Make sure that lines ending with \ continue
+        if cont:
+            line = prev_line + ' ' + line.lstrip()
+        if line.endswith('\\'):
+            cont = True
+            prev_line = line[:-1].rstrip()
+            continue
+        cont = False
+
+        yield line.replace('\t', ' ' * 8)
+
+RE_INCLUDE = re.compile(r'^\s*#\s*include\s+"([^"]+)"')
+
+def read_file(infile):
+    lines = []
+    with open(infile, encoding='utf-8') as fh:
+        for line in read_line(fh):
+            lines.append(line.strip())
+            # Read local includes
+            # m = RE_INCLUDE.match(line)
+            # if m:
+            #     h = os.path.join(os.path.dirname(infile), m.group(1))
+            #     return read_file(h))
+    return lines
+
+RE_DEFINE = re.compile(r'^\s*#\s*define\s+([^\s]+)\s+(.*)')
+
+def resolve_fname(name, lines):
+    name = name.replace('*', '\\*')
+    for line in lines:
+        m = re.match(r'^\s*#define\s+{}\s+(.*)'.format(name), line)
+        if m:
+            return m.group(1)
+    return name
+
+RE_REQ_FW = re.compile(r'\b(request_firmware|firmware_request_nowarn|' +
+                       r'firmware_request_platform|request_firmware_nowait|' +
+                       r'request_firmware_direct|request_firmware_into_buf|' +
+                       'request_partial_firmware_into_buf)\\((.*)\\);')
+
+RE_MOD_FW = re.compile(r'MODULE_FIRMWARE\((.*)\);')
+
+def process_file(infile):
+    lines = read_file(infile)
+
+    mod_fws = {}
+    errs = []
+
+    # First pass: Parse MODULE_FIRMWARE
+    for line in lines:
+        m = RE_MOD_FW.search(line)
+        if m:
+            name = m.group(1)
+            if name in mod_fws:
+                errs.append(f'   Duplicate MODULE_FIRMWARE for ${name}')
+            mod_fws[name] = 1
+
+    for line in lines:
+        # Check for firmware request calls
+        m = RE_REQ_FW.search(line)
+        if m:
+            args = m.group(2).split(',')
+            if len(args) < 3:
+                continue
+            if m.group(1) == 'request_firmware_nowait':
+                name = args[2]
+            else:
+                name = args[1]
+            name = name.strip()
+
+            if name in mod_fws:
+                continue
+            if name.startswith('"') and name.endswith('"'):
+                errs.append(f'   Missing MODULE_FIRMWARE for {name}')
+                continue
+
+            rname = resolve_fname(name, lines)
+            if rname != name:
+                if rname in mod_fws:
+                    continue
+                if rname.startswith('"') and rname.endswith('"'):
+                    errs.append(f'   Missing MODULE_FIRMWARE for {rname}')
+                    continue
+
+            errs.append(f'   To check {name}')
+            #            elif name != '__func__':
+            #               chk_fws[name] = 1
+            #          continue
+
+    if errs:
+        print(f'\n-- {infile}')
+        print("\n".join(errs))
+
+
+for f in sys.argv[1:]:
+    process_file(f)
