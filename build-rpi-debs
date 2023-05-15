@@ -125,7 +125,7 @@ function usage()
 {
 	cat <<EOF
 Usage: build-rpi-deb [-c CPUS] [-d] [-f] [-h] [-i FILE] [-m] [-n CFG:VAL] [-o]
-                     [-s SCHROOT] v6|v7|v7l|v8 [-- ARGS...]
+                     [-r REMOTE] [-s SCHROOT] v6|v7|v7l|v8 [-- ARGS...]
 
 Build Raspberry Pi kernel packages.
 
@@ -159,9 +159,12 @@ Optional arguments:
                             v=bar: Set option to value bar
   -o, --ubuntu-config     Use the Ubuntu kernel config rather than the
                           raspberrypi defconfig.
+  -r, --remote REMOTE     Push to and build on the remote host REMOTE.
   -s, --schroot SCHROOT   Run the build in the schroot session SCHROOT.
 EOF
 }
+
+orig_args=("${@}")
 
 cpus=$(getconf _NPROCESSORS_ONLN)
 dbg_pkg=0
@@ -170,6 +173,7 @@ config_file=
 minimal_modules=0
 configs=()
 ubuntu_config=0
+remote=
 scmd=
 args=("bindeb-pkg")
 version=
@@ -204,6 +208,10 @@ while [ ${#} -gt 0 ] ; do
 		-o|--ubuntu-config)
 			ubuntu_config=1
 			;;
+		-r|--remote)
+			shift
+			remote=${1}
+			;;
 		-s|--schroot)
 			shift
 			scmd="schroot -p -r -c ${1} --"
@@ -223,6 +231,38 @@ while [ ${#} -gt 0 ] ; do
 	esac
 	shift
 done
+
+# Build on a remote host
+if [ -n "${remote}" ] && [ "${remote}" != "localhost" ] ; then
+	echo "-- Building on remote host: ${remote}"
+
+	# Push HEAD
+	git push --force "${remote}" HEAD:build
+
+	url=$(git remote get-url "${remote}")
+	rdir=/${url#*/"${remote}"/}
+
+	# Replace the remote to prevent recursion
+	new_args=()
+	for a in "${orig_args[@]}" ; do
+		if [ "${a}" = "${remote}" ] ; then
+			a=localhost
+		fi
+		new_args+=("${a}")
+	done
+
+	# Copy the build script and execute it
+	scp "${0}" "${remote}:${rdir}/"
+	cat <<EOF | ssh "${remote}" bash - 2>&1 | tee build.log
+cd ${rdir}
+
+git checkout build-tmp || git checkout -b build-tmp build
+git reset --hard build
+
+./${0##*/} ${new_args[@]}
+EOF
+	exit
+fi
 
 case "${version}" in
 	v6)
