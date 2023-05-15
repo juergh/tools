@@ -125,7 +125,7 @@ function usage()
 {
 	cat <<EOF
 Usage: build-rpi-deb [-c CPUS] [-d] [-f] [-h] [-i FILE] [-m] [-n CFG:VAL] [-o]
-                     [-r REMOTE] [-s SCHROOT] v6|v7|v7l|v8 [-- ARGS...]
+                     [-r REMOTE] [-s SCHROOT] [-w] v6|v7|v7l|v8 [-- ARGS...]
 
 Build Raspberry Pi kernel packages.
 
@@ -161,6 +161,7 @@ Optional arguments:
                           raspberrypi defconfig.
   -r, --remote REMOTE     Push to and build on the remote host REMOTE.
   -s, --schroot SCHROOT   Run the build in the schroot session SCHROOT.
+  -w, --download          Download package from the remote host REMOTE.
 EOF
 }
 
@@ -175,6 +176,7 @@ configs=()
 ubuntu_config=0
 remote=
 scmd=
+download=0
 args=("bindeb-pkg")
 version=
 
@@ -216,6 +218,9 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			scmd="schroot -p -r -c ${1} --"
 			;;
+		-w|--download)
+			download=1
+			;;
 		--)
 			shift
 			args=("${@}")
@@ -252,7 +257,7 @@ if [ -n "${remote}" ] && [ "${remote}" != "localhost" ] ; then
 	done
 
 	# Copy the build script and execute it
-	scp "${0}" "${remote}:${rdir}/"
+	scp "${0}" "${remote}":"${rdir}"/
 	cat <<EOF | ssh "${remote}" bash - 2>&1 | tee build.log
 cd ${rdir}
 
@@ -261,6 +266,17 @@ git reset --hard build
 
 ./${0##*/} ${new_args[@]}
 EOF
+
+	# Download the packages
+	if [ ${download} -eq 1 ] ; then
+		echo "-- Downloading packages"
+		while IFS= read -r line ; do
+			pkg=${line#*in \'../}
+			pkg=${pkg%\'*}
+			scp "${remote}":"${rdir}"/buildd/"${pkg}" .
+		done < <(grep 'dpkg-deb: building package ' build.log)
+	fi
+
 	exit
 fi
 
