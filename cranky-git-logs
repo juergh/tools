@@ -19,12 +19,15 @@ Usage: $(basename "${0}") [-h] [-l] [GIT_LOG_OPTIONS]
 Show kernel source git repo logs.
 
 Optional arguments:
-  -h, --help   Show this help message and exit.
-  -l, --local  Show local changes.
+  -h, --help         Show this help message and exit.
+  -l, --local        Show local changes, i.e., changes between origin and
+                     local HEAD.
+  -r, --release NUM  Show change since previous NUM releases.
 EOF
 }
 
 local=0
+release=0
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -35,12 +38,21 @@ while [ ${#} -gt 0 ] ; do
 		-l|--local)
 			local=1
 			;;
+		-r|--release)
+			shift
+			release=${1}
+			;;
 		*)
 			break
 			;;
 	esac
 	shift
 done
+
+if [ ${local} -ne 0 ] && [ "${release}" -ne 0 ] ; then
+	usage
+	exit 2
+fi
 
 while IFS= read -r path ; do
 	echo
@@ -49,11 +61,19 @@ while IFS= read -r path ; do
 
 	rev_range=()
 	if [ ${local} -eq 1 ] ; then
+		# shellcheck disable=SC1083
 		rtb=$(git rev-parse --abbrev-ref --symbolic-full-name @{u})
 		subject=$(git log --format=%s "${rtb}" -1)
-		m=$(git log --format="%h ___%s___" -1000 | grep -m1 -F "___${subject}___" || true)
+		m=$(git log --format="%h ___%s___" -1000 | \
+		    grep -m1 -F "___${subject}___" || true)
 		if [ -n "${m}" ] ; then
 			rev_range=("${m%% *}..")
+		fi
+	elif [ "${release}" -gt 0 ] ; then
+		m=$(git log --format="%h ___%s" HEAD~1 | \
+		    grep -m"${release}" -F "__UBUNTU: Ubuntu-" | tail -1)
+		if [ -n "${m}" ] ; then
+			rev_range=("${m%% *}~1..")
 		fi
 	fi
 
