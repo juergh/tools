@@ -125,7 +125,7 @@ function usage()
 {
 	cat <<EOF
 Usage: build-rpi-deb [-c CPUS] [-d] [-f] [-h] [-i FILE] [-m] [-n CFG:VAL] [-o]
-                     v6|v7|v7l|v8 [-- ARGS...]
+                     [-s SCHROOT] v6|v7|v7l|v8 [-- ARGS...]
 
 Build Raspberry Pi kernel packages.
 
@@ -159,6 +159,7 @@ Optional arguments:
                             v=bar: Set option to value bar
   -o, --ubuntu-config     Use the Ubuntu kernel config rather than the
                           raspberrypi defconfig.
+  -s, --schroot SCHROOT   Run the build in the schroot session SCHROOT.
 EOF
 }
 
@@ -169,6 +170,7 @@ config_file=
 minimal_modules=0
 configs=()
 ubuntu_config=0
+scmd=
 args=("bindeb-pkg")
 version=
 
@@ -201,6 +203,10 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-o|--ubuntu-config)
 			ubuntu_config=1
+			;;
+		-s|--schroot)
+			shift
+			scmd="schroot -p -r -c ${1} --"
 			;;
 		--)
 			shift
@@ -281,7 +287,7 @@ if [ -z "${config_file}" ] ; then
 			"${buildd}"/.config
 	else
 		echo "-- Using raspberrypi config ${ARCH}/${defconfig}..."
-		make O="${buildd}" "${defconfig}"
+		${scmd} make O="${buildd}" "${defconfig}"
 	fi
 else
 	echo "-- Using config file ${config_file}..."
@@ -337,7 +343,7 @@ done
 if [ ${#config_cmds[@]} -gt 0 ] ; then
 	./scripts/config --file "${buildd}"/.config "${config_cmds[@]}"
 fi
-make O="${buildd}" olddefconfig
+${scmd} make O="${buildd}" olddefconfig
 
 kernel_version=$(make -k kernelversion)
 build_version=$(cat "${buildd}"/.version)
@@ -360,5 +366,5 @@ make_opts=(
 	"${args[@]}"
 )
 
-echo "-- Running: make ${make_opts[*]} 2>&1 | tee build.log"
-make "${make_opts[@]}" 2>&1 | tee build.log
+echo "-- Running: ${scmd} make ${make_opts[*]} 2>&1 | tee build.log"
+${scmd} make "${make_opts[@]}" 2>&1 | tee build.log
