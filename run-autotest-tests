@@ -125,7 +125,7 @@ fi
 for repo in autotest autotest-client-tests ; do
 	repo_dir=${repo//-//}
 	if ! [ -d "${repo_dir}/.git" ] ; then
-		git clone "${git_opts[@]}" git://kernel.ubuntu.com/ubuntu/"${repo}" \
+		git clone "${git_opts[@]}" https://git.launchpad.net/~canonical-kernel-team/+git/"${repo}" \
 			"${repo_dir}"
 	elif [ "${update}" -eq 1 ] ; then
 		# juergh: git --git-dir=... doesn't seem to be working correctly on
