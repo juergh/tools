@@ -81,16 +81,24 @@ def do_mp3_convert(args):
     """
     Convert mp3
     """
-    ffmpeg_opts = (
-        '-y',
-        '-loglevel', '24',
-        '-codec:a', 'libmp3lame',
-        '-b:a', '192k',
-        '-ac:a', '2',
-        '-ar:a', '44100'
-    )
     for f in args.file:
-        new = f + '.new.mp3'
+
+        if args.file[0].endswith('.ogg'):
+            codec = 'libvorbis'
+        else:
+            codec = 'libmp3lame'
+
+        ffmpeg_opts = (
+            '-y',
+            '-loglevel', '24',
+            '-codec:a', codec,
+            '-b:a', '192k',
+            '-ac:a', '2',
+            '-ar:a', '44100',
+            '-map', '0:a',
+        )
+
+        new = 'new - ' + f
         print(f)
         # pylint: disable=W1510
         proc = subprocess.run(('ffmpeg', '-i', f) + ffmpeg_opts + (new, ))
