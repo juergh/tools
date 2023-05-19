@@ -3,12 +3,14 @@
 # Run autotest tests
 #
 
+AUTOTEST_DIR=${HOME}/.cache/autotest
+
 function run_single()
 {
 	local test_dir suffix found ctrl_name ctrl_file
 
 	# The test directory
-	test_dir=autotest/client/tests/"${TEST}"
+	test_dir="${AUTOTEST_DIR}"/client/tests/"${TEST}"
 
 	# Check if the test exists
 	if ! [ -d "${test_dir}" ] ; then
@@ -21,7 +23,7 @@ function run_single()
 		for suffix in "${SERIES}" "${ARCH}" "${KERNEL}" ; do
 			if [ -e "${test_dir}"/blacklist."${suffix}" ] ; then
 				echo "--- Skipping [${TEST}] --- Test is blacklisted" \
-					 "(blacklist.${suffix})"
+				     "(blacklist.${suffix})"
 				return
 			fi
 		done
@@ -43,8 +45,8 @@ function run_single()
 
 	# Finally run the test
 	echo "--- Running [${TEST}]"
-	AUTOTEST_PATH=${PWD}/autotest sudo -E autotest/client/autotest-local \
-		--verbose "${ctrl_file}"
+	AUTOTEST_PATH=${AUTOTEST_DIR} sudo -E \
+	    "${AUTOTEST_DIR}"/client/autotest-local --verbose "${ctrl_file}"
 }
 
 
@@ -114,19 +116,30 @@ if [ "${#TESTS[@]}" -eq 0 ] ; then
 fi
 
 # Cleanup the client tests
-if [ -d autotest/client/tests/.git ] ; then
-	sudo chown -R "$(id -u):$(id -g)" autotest/client/tests/
+if [ -d "${AUTOTEST_DIR}"/client/tests/.git ] ; then
+	sudo chown -R "$(id -u):$(id -g)" "${AUTOTEST_DIR}"/client/tests/
 	if [ ${CLEAN} -eq 1 ] ; then
-		sudo rm -rf autotest/client/tmp/*
+		sudo rm -rf "${AUTOTEST_DIR}"/client/tmp/*
 	fi
 fi
 
 # Clone (or update) the necessary repos
 for repo in autotest autotest-client-tests ; do
-	repo_dir=${repo//-//}
+	case "${repo}" in
+		autotest)
+			repo_dir=${AUTOTEST_DIR}
+			;;
+		autotest-client-tests)
+			repo_dir=${AUTOTEST_DIR}/client/test
+			;;
+		*)
+			echo "--- Invalid repo name: ${repo}" 2>&1
+			exit 1
+	esac
+
 	if ! [ -d "${repo_dir}/.git" ] ; then
 		git clone "${git_opts[@]}" https://git.launchpad.net/~canonical-kernel-team/+git/"${repo}" \
-			"${repo_dir}"
+		    "${repo_dir}"
 	elif [ "${update}" -eq 1 ] ; then
 		# juergh: git --git-dir=... doesn't seem to be working correctly on
 		# Precise, so cd to the git directory instead
