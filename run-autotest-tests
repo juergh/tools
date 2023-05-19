@@ -127,9 +127,11 @@ fi
 for repo in autotest autotest-client-tests ; do
 	case "${repo}" in
 		autotest)
+			branch=autotest3
 			repo_dir=${AUTOTEST_DIR}
 			;;
 		autotest-client-tests)
+			branch=master
 			repo_dir=${AUTOTEST_DIR}/client/test
 			;;
 		*)
@@ -138,12 +140,13 @@ for repo in autotest autotest-client-tests ; do
 	esac
 
 	if ! [ -d "${repo_dir}/.git" ] ; then
-		git clone "${git_opts[@]}" https://git.launchpad.net/~canonical-kernel-team/+git/"${repo}" \
+		git clone "${git_opts[@]}" -b "${branch}" \
+		    https://git.launchpad.net/~canonical-kernel-team/+git/"${repo}" \
 		    "${repo_dir}"
 	elif [ "${update}" -eq 1 ] ; then
 		# juergh: git --git-dir=... doesn't seem to be working correctly on
 		# Precise, so cd to the git directory instead
-		( cd "${repo_dir}" && git fetch origin master )
+		( cd "${repo_dir}" && git fetch origin "${branch}" )
 		( cd "${repo_dir}" && git reset --hard FETCH_HEAD )
 	fi
 done
