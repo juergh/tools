@@ -4,6 +4,8 @@
 #
 
 import argparse
+import datetime
+import re
 import sys
 
 import requests
@@ -177,6 +179,33 @@ def do_pull_binaries(args):
         with open(url.split('/')[-1], 'wb') as fh:
             r = requests.get(url)
             fh.write(r.content)
+
+@add_help("Search bugs")
+@add_arg("source", help="Spurce package name")
+@add_arg("-d", "--show-duplicates", action="store_true")
+@add_arg("-s", "--status", default="New,Confirmed")
+@add_arg("-u", "--subject", help="Subject search regex")
+def do_search_bugs(args):
+    lp_dist = args.lp.distributions["ubuntu"]
+    lp_source = lp_dist.getSourcePackage(name=args.source)
+
+    # FIXME: Make this an argument
+    created_since = datetime.datetime.utcnow() - datetime.timedelta(days=45)
+
+    lp_tasks = lp_source.searchTasks(status=args.status.split(","),
+                                     created_since=created_since,
+                                     omit_duplicates=not args.show_duplicates)
+    if not lp_tasks:
+        return
+
+    re_subject = None
+    if args.subject:
+        re_subject = re.compile(rf"{args.subject}")
+
+    for task in lp_tasks:
+        bug = task.bug
+        if not re_subject or re_subject.search(bug.title):
+            print(f"LP: #{bug.id} - {bug.title}")
 
 # -----------------------------------------------------------------------------
 # Main entry point
