@@ -207,6 +207,17 @@ def do_search_bugs(args):
         if not re_subject or re_subject.search(bug.title):
             print(f"LP: #{bug.id} - {bug.title}")
 
+@add_help("Tag bug", help="Show bug tags or add tag(s) to a bug")
+@add_arg("bug", help="Bug ID")
+@add_arg("tag", nargs="*")
+def do_tag_bug(args):
+    lp_bug = args.lp.bugs[args.bug]
+    print(f"LP: #{lp_bug.id:<7} - {lp_bug.title}")
+    print(f"    Tags: {lp_bug.tags}")
+    if args.tag:
+        lp_bug.tags += args.tag
+        lp_bug.lp_save()
+
 # -----------------------------------------------------------------------------
 # Main entry point
 
