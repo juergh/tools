@@ -83,9 +83,21 @@ function do_fix()
 
 # rebase ----------------------------------------------------------------------
 
+# shellcheck disable=SC2034
+rebase_opt_args=(
+	"[-t TAG] || -t, --tag TAG || Rebase onto tag TAG."
+)
+
 function do_rebase()
 {
-	run "${CRANKY}" rebase
+	local args
+
+	args=()
+	if [ -n "${TAG}" ] ; then
+		args+=("--tag" "${TAG}")
+	fi
+
+	run cranky-rebase "${args[@]}"
 }
 
 # open ------------------------------------------------------------------------
@@ -316,6 +328,7 @@ help=0
 SRU_CYCLE=
 RERUN=0
 REBASE=0
+TAG=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -338,6 +351,10 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		--rerun)
 			RERUN=1
+			;;
+		-t|--tag)
+			shift
+			TAG=${1}
 			;;
 		--)
 			shift
