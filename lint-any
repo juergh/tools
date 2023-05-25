@@ -66,8 +66,7 @@ for f in "${@}" ; do
 	elif file "${f}" | grep -iq 'python script' ; then
 		python_scripts+=("${f}")
 	else
-		echo "Unknown file type: ${f}" >&2
-		exit 1
+		echo "-- Unsupported file type: ${f}" >&2
 	fi
 done
 
