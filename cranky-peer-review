@@ -64,7 +64,12 @@ function do_download()
 
 function do_fetch()
 {
-	local path key val
+	local fetch_opts path key val
+
+	fetch_opts=("--no-tags")
+	if [ "${FORCE}" -eq 1 ] ; then
+		fetch_opts+=("--force")
+	fi
 
 	for path in "${PATHS[@]}" ; do
 		echo
@@ -72,19 +77,19 @@ function do_fetch()
 		cd "${path}"
 		key=$(cranky shell-helper tree-type)
 		val=${FETCH["${key}"]}
-		echo "-- git fetch --no-tags ${val% *} tag ${val#* }"
+		echo "-- git fetch ${fetch_opts[*]} ${val% *} tag ${val#* }"
 		if [ "${DRY_RUN}" -eq 1 ] ; then
 			continue
 		fi
 
-		git fetch --no-tags "${val% *}" tag "${val#* }"
+		git fetch "${fetch_opts[@]}" "${val% *}" tag "${val#* }"
 	done
 }
 
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-c] [-d] [-f] [-h] [-o] ISSUE
+Usage: $(basename "${0}") [-c] [-d] [-f] [-h] [-o] [-r] ISSUE
 
 Parse the provided Jira <ISSUE> and fetch the referenced repos.
 
@@ -94,6 +99,7 @@ Optional arguments:
   -f, --fetch          Fetch repos.
   -h, --help           Show this help text and exit.
   -o, --download       Download the source packages.
+  -r, --force          Overwrite existing tags.
 EOF
 }
 
@@ -101,6 +107,7 @@ checkout=1
 DRY_RUN=0
 fetch=1
 download=1
+FORCE=0
 issue=
 
 c=0
@@ -124,6 +131,9 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-o|--download)
 			d=1
+			;;
+		-r|--force)
+			FORCE=1
 			;;
 		*)
 			if [ -n "${issue}" ] ; then
