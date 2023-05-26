@@ -117,11 +117,14 @@ while IFS= read -r path ; do
 			# Update the current branch to the latest tag
 			if [ -e debian/debian.env ] ; then
 				if [ -n "${rebase_tag}" ] ; then
+					echo "Rebase onto ${latest_tag}"
 					"${run[@]}" git rebase --onto "${latest_tag}" "${rebase_tag}"
 				else
+					echo "Reset --hard to ${latest_tag}"
 					"${run[@]}" git reset --hard "${latest_tag}"
 				fi
 			else
+				echo "Fast forward to ${latest_tag}"
 				"${run[@]}" git merge --ff-only "${latest_tag}"
 			fi
 		fi
