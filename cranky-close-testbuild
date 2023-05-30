@@ -34,6 +34,8 @@ Optional arguments
 EOF
 }
 
+CRANKY=${CRANKY:-cranky}
+
 suffix=
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -84,13 +86,13 @@ if ! git log --format=%s -1 | grep -q "^UBUNTU: Ubuntu-.*${version}$" ; then
 	distro=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
 	if [ "${distro}" != "UNRELEASED" ] ; then
 		# Create an opening commit
-		cranky fix
-		cranky open
-#		cranky reorder
+		"${CRANKY}" fix
+		"${CRANKY}" open
+#		${CRANKY}" reorder
 	fi
 
 	# Create a closing commit
-	cranky close
+	"${CRANKY}" close
 fi
 
 distro=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)

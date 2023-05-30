@@ -29,6 +29,8 @@ Optional 'cranky rebase' arguments:
 EOF
 }
 
+CRANKY=${CRANKY:-cranky}
+
 tag=
 args=()
 
@@ -50,7 +52,7 @@ while [ $# -gt  0 ] ; do
 done
 
 if [ -z "${tag}" ] ; then
-	run cranky rebase "${args[@]}"
+	run "${CRANKY}" rebase "${args[@]}"
 	exit
 fi
 
@@ -66,4 +68,4 @@ echo "-- Repo: ${RELEASE_REPO}"
 echo "-- Tag:  ${tag}"
 
 run git fetch --no-tags "${RELEASE_REPO}" tag "${tag}"
-run cranky rebase "${args[@]}" -l "${tag}"
+run "${CRANKY}" rebase "${args[@]}" -l "${tag}"

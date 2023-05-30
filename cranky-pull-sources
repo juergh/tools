@@ -28,6 +28,8 @@ Optional arguments:
 EOF
 }
 
+CRANKY=${CRANKY:-cranky}
+
 pocket=
 
 while [ ${#} -gt 0 ] ; do
@@ -64,7 +66,7 @@ if [ "${pocket}" != "none" ] ; then
 	declare -A versions=()
 	while IFS=' ' read -r package version rest ; do
 		versions[${package}]=${version}
-	done < <(cranky rmadison -s -p "${pocket}")
+	done < <("${CRANKY}" rmadison -s -p "${pocket}")
 fi
 
 # Walk through the package set
@@ -97,13 +99,13 @@ while read -r path ; do
 		cd ..
 
 		if [ "${use_series}" -eq 0 ] ; then
-			if ! cranky pull-source "${package}" "${version}" ; then
+			if ! "${CRANKY}" pull-source "${package}" "${version}" ; then
 				use_series=1
 			fi
 		fi
 
 		if [ "${use_series}" -eq 1 ] ; then
-			cranky pull-source "${package}" "${version}" "${series}"
+			"${CRANKY}" pull-source "${package}" "${version}" "${series}"
 		fi
 	)
-done < <(cranky shell-helper source-packages-path)
+done < <("${CRANKY}" shell-helper source-packages-path)

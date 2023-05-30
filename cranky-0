@@ -1,6 +1,7 @@
 #!/bin/bash -eu
 
 CRANKY=${CRANKY:-cranky}
+export CRANKY
 
 function out()
 {

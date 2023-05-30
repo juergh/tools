@@ -26,6 +26,8 @@ Optional arguments:
 EOF
 }
 
+CRANKY=${CRANKY:-cranky}
+
 local=0
 release=0
 
@@ -78,4 +80,4 @@ while IFS= read -r path ; do
 	fi
 
 	git --no-pager log --color=always --decorate=short "${@}" "${rev_range[@]}"
-done < <(cranky shell-helper source-packages-path) | less
+done < <("${CRANKY}" shell-helper source-packages-path) | less

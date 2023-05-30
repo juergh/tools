@@ -1,6 +1,8 @@
 #!/bin/bash -eu
 
-readarray -t paths < <(cranky shell-helper source-packages-path)
+CRANKY=${CRANKY:-cranky}
+
+readarray -t paths < <("${CRANKY}" shell-helper source-packages-path)
 
 for path in "${paths[@]}" ; do
 	cd "${path}"

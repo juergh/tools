@@ -124,6 +124,8 @@ Optional arguments:
 EOF
 }
 
+CRANKY=${CRANKY:-cranky}
+
 current=0
 log=0
 
@@ -158,5 +160,5 @@ else
 	while IFS= read -r path ; do
 		cd "${path}"
 		verify_current "${abi}" "${log}"
-	done < <(cranky shell-helper source-packages-path)
+	done < <("${CRANKY}" shell-helper source-packages-path)
 fi

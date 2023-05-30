@@ -10,6 +10,8 @@ Optional arguments:
 EOF
 }
 
+CRANKY=${CRANKY:-cranky}
+
 host=
 
 while [ ${#} -gt 0 ] ; do
@@ -34,7 +36,7 @@ if [ -z "${host}" ] ; then
 	exit 2
 fi
 
-readarray -t paths < <(cranky shell-helper source-packages-path)
+readarray -t paths < <("${CRANKY}" shell-helper source-packages-path)
 
 first=1
 for path in "${paths[@]}" ; do

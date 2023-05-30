@@ -28,6 +28,8 @@ Optional arguments:
 EOF
 }
 
+CRANKY=${CRANKY:-cranky}
+
 tag_opts=()
 re_run=0
 
@@ -54,7 +56,7 @@ done
 while IFS= read -r path ; do
 	cd "${path}"
 
-	if [ "$(cranky shell-helper tree-type)" = "main" ] ; then
+	if [ "$("${CRANKY}" shell-helper tree-type)" = "main" ] ; then
 		continue
 	fi
 
@@ -102,17 +104,17 @@ while IFS= read -r path ; do
 	fi
 	git merge --ff-only "${tag_latest}"
 
-	cranky update-dependent
+	"${CRANKY}" update-dependent
 	if [ ${re_run} -eq 1 ] ; then
-		cranky tag -f "${tag_opts[@]}"
+		"${CRANKY}" tag -f "${tag_opts[@]}"
 	else
-		cranky tag "${tag_opts[@]}"
+		"${CRANKY}" tag "${tag_opts[@]}"
 	fi
 
 	echo
 	git --no-pager log origin/"${branch}"~1..
 	echo
 
-done < <(cranky shell-helper source-packages-path)
+done < <("${CRANKY}" shell-helper source-packages-path)
 
 echo "Success: Updated all dependents"

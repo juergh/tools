@@ -73,6 +73,8 @@ Optional arguments:
 EOF
 }
 
+CRANKY=${CRANKY:-cranky}
+
 current=0
 DRY_RUN=0
 REMOTE=origin
@@ -108,5 +110,5 @@ else
 	while IFS= read -r path ; do
 		cd "${path}"
 		push_all
-	done < <(cranky shell-helper source-packages-path)
+	done < <("${CRANKY}" shell-helper source-packages-path)
 fi

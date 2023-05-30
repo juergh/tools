@@ -16,6 +16,8 @@ Optional arguments:
 EOF
 }
 
+CRANKY=${CRANKY:-cranky}
+
 run=()
 rebase=0
 update=0
@@ -63,7 +65,7 @@ if [ -z "${handle}" ] ; then
 	handle=${series}:${package}
 fi
 
-"${run[@]}" cranky checkout "${handle}"
+"${run[@]}" "${CRANKY}" checkout "${handle}"
 
 if [ "${update}" -eq 0 ] ; then
 	exit
@@ -129,4 +131,4 @@ while IFS= read -r path ; do
 			fi
 		fi
 	)
-done < <(cranky shell-helper source-packages-path "${handle}")
+done < <("${CRANKY}" shell-helper source-packages-path "${handle}")

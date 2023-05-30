@@ -59,7 +59,7 @@ Optional arguments:
 EOF
 }
 
-cranky=${CRANKY:-cranky}
+CRANKY=${CRANKY:-cranky}
 
 current=0
 force=0
@@ -143,7 +143,7 @@ if [ "${force}" -eq 0 ] ; then
 				echo "${path}: Repo is unclean" >&2
 				clean=0
 			fi
-		done < <("${cranky}" shell-helper source-packages-path)
+		done < <("${CRANKY}" shell-helper source-packages-path)
 	fi
 	if [ "${clean}" -eq 0 ] ; then
 		echo "Use -f, --force to auto-clean before the build" >&2
@@ -187,7 +187,7 @@ if [ -n "${offset}${abi}" ] ; then
 		fi
 
 		set_pkg_build_opts "${package}" "${version}"
-	done < <("${cranky}" shell-helper source-packages-path)
+	done < <("${CRANKY}" shell-helper source-packages-path)
 
 else
 	# Get the previous versions from the provided pocket
@@ -195,7 +195,7 @@ else
 	while IFS=' ' read -r package version rest ; do
 		found=1
 		set_pkg_build_opts "${package}" "${version}"
-	done < <("${cranky}" rmadison -s -p "${pocket}")
+	done < <("${CRANKY}" rmadison -s -p "${pocket}")
 
 	if [ ${found} -eq 0 ] ; then
 		echo "Invalid pocket: ${pocket}" >&2
@@ -216,5 +216,5 @@ if [ ${#BO_MAIN[@]} -ne 0 ] ; then
 	build_opts+=("--build-opts" "main:${BO_MAIN[*]}")
 fi
 
-echo -e "\e[33m${cranky} build-sources ${build_opts[*]}\e[0m"
-"${cranky}" build-sources "${build_opts[@]}"
+echo -e "\e[33m${CRANKY} build-sources ${build_opts[*]}\e[0m"
+"${CRANKY}" build-sources "${build_opts[@]}"

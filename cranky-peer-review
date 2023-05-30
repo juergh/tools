@@ -75,7 +75,7 @@ function do_fetch()
 		echo
 		echo "${path}"
 		cd "${path}"
-		key=$(cranky shell-helper tree-type)
+		key=$("${CRANKY}" shell-helper tree-type)
 		val=${FETCH["${key}"]}
 		echo "-- git fetch ${fetch_opts[*]} ${val% *} tag ${val#* }"
 		if [ "${DRY_RUN}" -eq 1 ] ; then
@@ -102,6 +102,8 @@ Optional arguments:
   -r, --force          Overwrite existing tags.
 EOF
 }
+
+CRANKY=${CRANKY:-cranky}
 
 checkout=1
 DRY_RUN=0
@@ -215,7 +217,7 @@ if [ ${download} -eq 0 ] && [ ${fetch} -eq 0 ] ; then
 	exit
 fi
 
-readarray -t PATHS < <(cranky shell-helper source-packages-path "${HANDLE}")
+readarray -t PATHS < <("${CRANKY}" shell-helper source-packages-path "${HANDLE}")
 
 if [ ${download} -eq 1 ] ; then
 	do_download

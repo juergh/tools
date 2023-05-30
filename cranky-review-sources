@@ -122,7 +122,7 @@ function review_src()
 			while read -r f ; do ln -sf "${f}" . ; done )
 
 		# Finally call cranky review against TMPD
-		( cd ../ && cranky review -p "${TMPD}" "${changes}" )
+		( cd ../ && "${CRANKY}" review -p "${TMPD}" "${changes}" )
 
 		# Add a 'header' that identifies the previous and current dsc
 		{
@@ -139,7 +139,7 @@ function review_src()
 function usage()
 {
 	cat <<EOF
-Usage: cranky review-sources [-c] [-h] [POCKET|OFFSET|VERSION]
+Usage: cranky-review-sources [-c] [-h] [POCKET|OFFSET|VERSION]
 
 Review the differences between the current kernel source packages and
 previous source packages.
@@ -158,6 +158,8 @@ Optional arguments:
   -h, --help     Show this help message and exit.
 EOF
 }
+
+CRANKY=${CRANKY:-cranky}
 
 current=0
 pos_arg=0
@@ -209,7 +211,7 @@ done
 TMPD=
 trap out EXIT
 
-readarray -t src_dirs < <(cranky shell-helper source-packages-path)
+readarray -t src_dirs < <("${CRANKY}" shell-helper source-packages-path)
 if [ "${#src_dirs[@]}" -eq 0 ] ; then
 	exit 1
 fi
@@ -219,7 +221,7 @@ declare -A PREV_VERSION=()
 if [ -n "${POCKET}" ] ; then
 	while read -r src version rest ; do
 		PREV_VERSION[${src}]=${version}
-	done < <(cranky rmadison -s -p "${POCKET}")
+	done < <("${CRANKY}" rmadison -s -p "${POCKET}")
 fi
 
 for src_dir in "${src_dirs[@]}" ; do
