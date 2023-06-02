@@ -68,12 +68,11 @@ function set_globals()
 	TOKEN=()
 
 	# Figure out what type of repo this is
-	if [ "${repo_name}" = kteam-tools ] ; then
-		REPO="kteam-tools"
-		TARGET=("kteam-tools")
-	elif [ "${repo_name}" = ckct ] ; then
-		REPO="ckct"
-		TARGET=("ckct")
+	if [ "${repo_name}" = kteam-tools ] || \
+	   [ "${repo_name}" = ckct ] || \
+	   [ "${repo_name}" = autotest-client-tests ] ; then
+		REPO=${repo_name}
+		TARGET=("${repo_name}")
 	elif [ -e debian/debian.env ] ; then
 		REPO="ubuntu-kernel (main)"
 		# shellcheck disable=SC1091
