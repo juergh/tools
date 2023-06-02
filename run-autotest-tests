@@ -132,7 +132,7 @@ for repo in autotest autotest-client-tests ; do
 			;;
 		autotest-client-tests)
 			branch=master
-			repo_dir=${AUTOTEST_DIR}/client/test
+			repo_dir=${AUTOTEST_DIR}/client/tests
 			;;
 		*)
 			echo "--- Invalid repo name: ${repo}" 2>&1
