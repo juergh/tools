@@ -124,8 +124,8 @@ modules=(
 function usage()
 {
 	cat <<EOF
-Usage: build-rpi-deb [-c CPUS] [-d] [-f] [-h] [-i FILE] [-m] [-n CFG:VAL] [-o]
-                     [-r REMOTE] [-s SCHROOT] [-w] v6|v7|v7l|v8 [-- ARGS...]
+Usage: build-rpi-deb [-c CPUS] [-d] [-f] [-h] [-i FILE] [-l] [-m] [-n CFG:VAL]
+                     [-o] [-r REMOTE] [-s SCHROOT] [-w] v6|v7|v7l|v8 [-- ARGS...]
 
 Build Raspberry Pi kernel packages.
 
@@ -148,6 +148,7 @@ Optional arguments:
   -i, --config-file FILE  Use the provided config file as the base config file.
                           If not provided, uses the raspberrypi defconfig or
                           Ubuntu kernel config.
+  -l, --clean             Run 'make clean' before the build.
   -m, --minimal-modules   Build only a minimal set of modules.
   -n, --config CFG:VAL    Set kernel config option CFG to value VAL.
                           Possible values for VAL:
@@ -171,6 +172,7 @@ cpus=$(getconf _NPROCESSORS_ONLN)
 dbg_pkg=0
 ubuntu_flavor=0
 config_file=
+clean=0
 minimal_modules=0
 configs=()
 ubuntu_config=0
@@ -199,6 +201,9 @@ while [ ${#} -gt 0 ] ; do
 		-i|--config-file)
 			shift
 			config_file=${1}
+			;;
+		-l|--clean)
+			clean=1
 			;;
 		-m|--minimal-modules)
 			minimal_modules=1
@@ -326,6 +331,11 @@ fi
 buildd=$(pwd)/buildd/${version}
 if ! [ -d "${buildd}" ] ; then
 	mkdir -p "${buildd}"
+fi
+
+# Do some cleaning up first
+if [ ${clean} -eq 1 ] ; then
+	${scmd} make O="${buildd}" clean
 fi
 
 # Initialize the build version
