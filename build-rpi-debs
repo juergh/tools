@@ -411,7 +411,7 @@ if [ ${#config_cmds[@]} -gt 0 ] ; then
 fi
 ${scmd} make O="${buildd}" olddefconfig
 
-kernel_version=$(make -k kernelversion)
+kernel_version=$(make -k kernelversion 2>/dev/null)
 build_version=$(cat "${buildd}"/.version)
 abi_version=$((9000 + build_version))
 curr_commit=$(git rev-parse HEAD)
