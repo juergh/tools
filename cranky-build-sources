@@ -63,9 +63,8 @@ CRANKY=${CRANKY:-cranky}
 
 current=0
 force=0
-pocket=
-offset=
-abi=
+prev_type=
+prev_val=
 build_opts=()
 
 BO_META=()
@@ -93,25 +92,28 @@ while [ "${#}" -gt 0 ] ; do
 			BO_MAIN+=("-sa")
 			;;
 		updates|release|security|proposed)
-			if [ -n "${pocket}${offset}${abi}" ] ; then
+			if [ -n "${prev_type}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
-			pocket=${1}
+			prev_type=pocket
+			prev_val=${1}
 			;;
 		[1-9])
-			if [ -n "${pocket}${offset}${abi}" ] ; then
+			if [ -n "${prev_type}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
-			offset=${1}
+			prev_type=offset
+			prev_val=${1}
 			;;
-		[0-9]*.[0-9]*.[0-9]*-[0-9]*)
-			if [ -n "${pocket}${offset}${abi}" ] ; then
+		[0-9]*.[0-9]*.0-[0-9]*)
+			if [ -n "${prev_type}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
-			abi=${1}
+			prev_type=abi
+			prev_val=${1}
 			;;
 		*)
 			echo "Invalid argument: ${1}" >&2
@@ -121,7 +123,7 @@ while [ "${#}" -gt 0 ] ; do
 	shift
 done
 
-if [ -z "${pocket}${offset}${abi}" ] ; then
+if [ -z "${prev_type}" ] ; then
 	usage
 	exit 2
 fi
@@ -151,8 +153,20 @@ if [ "${force}" -eq 0 ] ; then
 	fi
 fi
 
-if [ -n "${offset}${abi}" ] ; then
-	# Use the package version from the changelog
+if [ "${prev_type}" = "pocket" ] ; then
+	# Get the previous versions from the provided pocket
+	found=0
+	while IFS=' ' read -r package version rest ; do
+		found=1
+		set_pkg_build_opts "${package}" "${version}"
+	done < <("${CRANKY}" rmadison -s -p "${prev_val}")
+
+	if [ ${found} -eq 0 ] ; then
+		echo "Invalid pocket: ${prev_val}" >&2
+		exit 1
+	fi
+else
+	# Get the previous versions from the changelogs
 	while IFS= read -r path ; do
 		if [ ${current} -eq 1 ] && [ "${path}" != "$(realpath .)" ] ; then
 			continue
@@ -164,43 +178,34 @@ if [ -n "${offset}${abi}" ] ; then
 			. "${path}"/debian/debian.env
 		fi
 
-		if [ -n "${offset}" ] ; then
+		package=
+		version=
+
+		if [ "${prev_type}" = "offset" ] ; then
 			# Use the provided offset
 			package=$(dpkg-parsechangelog -l "${path}"/"${DEBIAN}"/changelog \
-			                              -o "${offset}" -c 1 -S source)
+			          -o "${prev_val}" -c 1 -S source)
 			version=$(dpkg-parsechangelog -l "${path}"/"${DEBIAN}"/changelog \
-			                              -o "${offset}" -c 1 -S version)
-		else
+			          -o "${prev_val}" -c 1 -S version)
+		elif [ "${prev_type}" = "abi" ] ; then
 			# Use the provided ABI
-			v=${abi%-*}
+			v=${prev_val%-*}
 			v=${v//./\\.}
-			u=${abi#*-}
+			u=${prev_val#*-}
 			match=$(grep -m1 "^linux.* (${v}[-.]${u}\." \
 			        "${path}"/"${DEBIAN}"/changelog)
-			if [ -z "${match}" ] ; then
-				echo "Unable to find a changelog entry with ABI: ${abi}" >&2
-				exit 1
-			fi
 			package=${match%% *}
 			version=${match#* \(}
 			version=${version%\) *}
 		fi
 
+		if [ -z "${package}" ] || [ -z "${version}" ] ; then
+			echo "Failed to determine package and/or version" >&2
+			exit 1
+		fi
+
 		set_pkg_build_opts "${package}" "${version}"
 	done < <("${CRANKY}" shell-helper source-packages-path)
-
-else
-	# Get the previous versions from the provided pocket
-	found=0
-	while IFS=' ' read -r package version rest ; do
-		found=1
-		set_pkg_build_opts "${package}" "${version}"
-	done < <("${CRANKY}" rmadison -s -p "${pocket}")
-
-	if [ ${found} -eq 0 ] ; then
-		echo "Invalid pocket: ${pocket}" >&2
-		exit 1
-	fi
 fi
 
 if [ ${#BO_META[@]} -ne 0 ] ; then
