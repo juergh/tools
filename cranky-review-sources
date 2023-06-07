@@ -62,7 +62,7 @@ function review_src()
 		return
 	fi
 
-	if [ -z "${POCKET}" ] && [ -z "${OFFSET}" ] ; then
+	if [ -z "${PREV_TYPE}" ] ; then
 		# Review an existing debdiff
 		if ! [ -e ../"${debdiff}" ] ; then
 			echo "No .debdiff file found: ${debdiff}" >&2
@@ -100,14 +100,18 @@ function review_src()
 		fi
 
 		# Figure out the previous package version
-		if [ -n "${VERSION}" ] ; then
-			prev_version=${VERSION}
-		elif [ -n "${OFFSET}" ] ; then
-			prev_version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
-											   -o "${OFFSET}" -c 1 -S Version)
-		else
-			prev_version=${PREV_VERSION[${src}]}
-		fi
+		case "${PREV_TYPE}" in
+			pocket)
+				prev_version=${PREV_VERSION[${src}]}
+				;;
+			offset)
+				prev_version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog \
+				               -o "${PREV_VAL}" -c 1 -S Version)
+				;;
+			version)
+				prev_version=${PREV_VAL}
+				;;
+		esac
 
 		prev_dsc="${src}"_"${prev_version}".dsc
 		if ! [ -e ../"${prev_dsc}" ] ; then
@@ -162,10 +166,8 @@ EOF
 CRANKY=${CRANKY:-cranky}
 
 current=0
-pos_arg=0
-POCKET=
-OFFSET=
-VERSION=
+PREV_TYPE=
+PREV_VAL=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -177,28 +179,28 @@ while [ ${#} -gt 0 ] ; do
 			exit
 			;;
 		release|security|updates|proposed)
-			if [ ${pos_arg} -eq 1 ] ; then
+			if [ -n "${PREV_VAL}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
-			pos_arg=1
-			POCKET=${1}
+			PREV_TYPE=pocket
+			PREV_VAL=${1}
 			;;
 		[1-9])
-			if [ ${pos_arg} -eq 1 ] ; then
+			if [ -n "${PREV_VAL}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
-			pos_arg=1
-			OFFSET=${1}
+			PREV_TYPE=offset
+			PREV_VAL=${1}
 			;;
 		[1-9]*.[0-9]*.0-[0-9]*.[0-9]*)
-			if [ ${pos_arg} -eq 1 ] ; then
+			if [ -n "${PREV_VAL}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
-			pos_arg=1
-			VERSION=${1}
+			PREV_TYPE=version
+			PREV_VAL=${1}
 			;;
 		  *)
 			echo "Invalid argument: ${1}" >&2
@@ -216,12 +218,12 @@ if [ "${#src_dirs[@]}" -eq 0 ] ; then
 	exit 1
 fi
 
-declare -A PREV_VERSION=()
 # Get the previous versions from the provided pocket
-if [ -n "${POCKET}" ] ; then
+declare -A PREV_VERSION=()
+if [ "${PREV_TYPE}" = "pocket" ] ; then
 	while read -r src version rest ; do
 		PREV_VERSION[${src}]=${version}
-	done < <("${CRANKY}" rmadison -s -p "${POCKET}")
+	done < <("${CRANKY}" rmadison -s -p "${PREV_VAL}")
 fi
 
 for src_dir in "${src_dirs[@]}" ; do
