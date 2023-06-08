@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import warnings
@@ -129,6 +130,9 @@ def do_mp3_tag_set(args):
     """
     Set mp3 file metadata tags
     """
+    # Disc number regex (from album name)
+    re_discnumber = re.compile(r"^.* \((disc|cd)\s*(\d+)\)$", re.IGNORECASE)
+
     for f in args.file:
         print()
         print(f)
@@ -150,9 +154,14 @@ def do_mp3_tag_set(args):
         # Read current file
         t = taglib.File(f)   # pylint: disable=I1101
 
+        # Try to determine the disc number from the album name
+        m = re_discnumber.match(album)
+        if m:
+            tags['DISCNUMBER'] = [m.group(2)]
+
         # Preserve some existing tags
         for key in ("DATE", "DISCNUMBER"):
-            if key in t.tags:
+            if key in t.tags and key not in tags:
                 tags[key] = t.tags[key]
 
         for key, val in tags.items():
