@@ -147,10 +147,13 @@ def do_mp3_tag_set(args):
             'TRACKNUMBER': [tracknumber],
         }
 
-        # Preserve DATE if it exists
+        # Read current file
         t = taglib.File(f)   # pylint: disable=I1101
-        if 'DATE' in t.tags:
-            tags['DATE'] = t.tags['DATE']
+
+        # Preserve some existing tags
+        for key in ("DATE", "DISCNUMBER"):
+            if key in t.tags:
+                tags[key] = t.tags[key]
 
         for key, val in tags.items():
             print('  {:<12}: {}'.format(key, ' '.join(val)))
@@ -159,7 +162,7 @@ def do_mp3_tag_set(args):
             print('Use -f, --force to write the tags')
             continue
 
-        t = taglib.File(f)   # pylint: disable=I1101
+        # Save the new tags
         t.tags = tags
         t.save()
     return 0
