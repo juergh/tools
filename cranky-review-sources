@@ -190,7 +190,7 @@ while [ ${#} -gt 0 ] ; do
 			usage
 			exit
 			;;
-		release|security|updates|proposed)
+		release|security|updates|proposed|proposed#2)
 			if [ -n "${PREV_TYPE}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2

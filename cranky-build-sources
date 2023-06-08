@@ -91,7 +91,7 @@ while [ "${#}" -gt 0 ] ; do
 		-o|--orig)
 			BO_MAIN+=("-sa")
 			;;
-		updates|release|security|proposed)
+		updates|release|security|proposed|proposed#2)
 			if [ -n "${prev_type}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
