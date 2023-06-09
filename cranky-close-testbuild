@@ -59,11 +59,6 @@ if [ -z "${suffix}" ] ; then
 	suffix=$(date +%Y%m%d)+git$(git log --abbrev=8 --format=%h -1)
 fi
 
-if ! [ -f debian/debian.env ] ; then
-	echo "Not an Ubuntu kernel directory"
-	exit 1
-fi
-
 if [ -n "$(git status --porcelain)" ] ; then
 	echo "Repo is not clean"
 	exit 1
@@ -77,10 +72,14 @@ git checkout -b "${TESTBUILD_BRANCH}"
 
 trap out INT TERM EXIT HUP
 
-# shellcheck disable=SC1091
-. debian/debian.env
+DEBIAN=debian
+if [ -e debian/debian.env ] ; then
+	# shellcheck disable=SC1091
+	. debian/debian.env
+fi
 changelog="${DEBIAN}"/changelog
 
+# Close the tree
 version=$(dpkg-parsechangelog -l "${changelog}" -S Version)
 if ! git log --format=%s -1 | grep -q "^UBUNTU: Ubuntu-.*${version}$" ; then
 	distro=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
@@ -88,7 +87,7 @@ if ! git log --format=%s -1 | grep -q "^UBUNTU: Ubuntu-.*${version}$" ; then
 		# Create an opening commit
 		"${CRANKY}" fix
 		"${CRANKY}" open
-#		${CRANKY}" reorder
+		# ${CRANKY}" reorder
 	fi
 
 	# Create a closing commit
