@@ -138,32 +138,32 @@ __EOF__
 			  "contain_body('Launchpad-Subscription: linux-firmware')"
 
 	# Move patch mail
-	move_mail "Mailing List/Ubuntu/kernel-team" \
-			  "Mailing List/Ubuntu/kernel-team/patch" \
-			  "contain_subject('PATCH')"
-	move_mail "Mailing List/Ubuntu/kernel-team" \
-			  "Mailing List/Ubuntu/kernel-team/patch" \
-			  "contain_subject('PULL')"
+	#move_mail "Mailing List/Ubuntu/kernel-team" \
+	#		  "Mailing List/Ubuntu/kernel-team/patch" \
+	#		  "contain_subject('PATCH')"
+	#move_mail "Mailing List/Ubuntu/kernel-team" \
+	#		  "Mailing List/Ubuntu/kernel-team/patch" \
+	#		  "contain_subject('PULL')"
 
 	# Move processed patch threads
-	move_thread "Mailing List/Ubuntu/kernel-team/patch" \
-				"Mailing List/Ubuntu/kernel-team/done" \
-				"contain_subject('APPLIED')"
-	move_thread "Mailing List/Ubuntu/kernel-team/patch" \
-				"Mailing List/Ubuntu/kernel-team/done" \
-				"contain_subject('NACK')"
-	move_thread "Mailing List/Ubuntu/kernel-team/patch" \
-				"Mailing List/Ubuntu/kernel-team/done" \
-				"contain_subject('NAK')"
-	move_thread "Mailing List/Canonical/canonical-kernel-esm" \
-				"Mailing List/Canonical/canonical-kernel-esm/done" \
-				"contain_subject('APPLIED')"
-	move_thread "Mailing List/Canonical/canonical-kernel-esm" \
-				"Mailing List/Canonical/canonical-kernel-esm/done" \
-				"contain_subject('NACK')"
-	move_thread "Mailing List/Canonical/canonical-kernel-esm" \
-				"Mailing List/Canonical/canonical-kernel-esm/done" \
-				"contain_subject('NAK')"
+	#move_thread "Mailing List/Ubuntu/kernel-team/patch" \
+	#			"Mailing List/Ubuntu/kernel-team/done" \
+	#			"contain_subject('APPLIED')"
+	#move_thread "Mailing List/Ubuntu/kernel-team/patch" \
+	#			"Mailing List/Ubuntu/kernel-team/done" \
+	#			"contain_subject('NACK')"
+	#move_thread "Mailing List/Ubuntu/kernel-team/patch" \
+	#			"Mailing List/Ubuntu/kernel-team/done" \
+	#			"contain_subject('NAK')"
+	#move_thread "Mailing List/Canonical/canonical-kernel-esm" \
+	#			"Mailing List/Canonical/canonical-kernel-esm/done" \
+	#			"contain_subject('APPLIED')"
+	#move_thread "Mailing List/Canonical/canonical-kernel-esm" \
+	#			"Mailing List/Canonical/canonical-kernel-esm/done" \
+	#			"contain_subject('NACK')"
+	#move_thread "Mailing List/Canonical/canonical-kernel-esm" \
+	#			"Mailing List/Canonical/canonical-kernel-esm/done" \
+	#			"contain_subject('NAK')"
 
 	# Move noise mail (needs to come last)
 	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
