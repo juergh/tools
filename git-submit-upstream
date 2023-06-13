@@ -1,0 +1,120 @@
+#!/bin/bash -u
+#
+# Submit patch(es) upstream
+#
+
+function pr_banner()
+{
+	local txt
+
+	if [ -z "${__COLS:-}" ] ; then
+		__COLS=$(tput cols)
+	fi
+	txt=${*}$(printf "%${__COLS}s")
+	echo
+	echo -e "\033[45m${txt::${__COLS}}\033[0m"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [--] [GIT_FORMAT_PATCH_OPTIONS]
+
+Send patch(es) upstream.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
+
+rm -rf .outgoing
+mkdir .outgoing
+
+pr_banner " TODO: check if already sent"
+
+pr_banner " git format-patch ${*}"
+git format-patch -o .outgoing "${@}"
+
+pr_banner " show patches"
+for p in .outgoing/*.patch ; do
+	echo
+	echo -e "\033[33m${p#*/}\033[0m"
+	/usr/share/source-highlight/src-hilite-lesspipe.sh "${p}"
+done
+
+pr_banner " checkpatch"
+./scripts/checkpatch.pl .outgoing/*.patch
+
+pr_banner " get_maintainer"
+
+to=
+cc="linux-kernel@vger.kernel.org"
+while IFS=" " read -r email roles ; do
+	echo "${email} ${roles}"
+	case "${roles}" in
+		"(maintainer"*|"(reviewer"*|"(open list"*|"(supporter"*|\
+		"(moderated list"*)
+			if [ "${email}" != "linux-kernel@vger.kernel.org" ] ; then
+				to="${to},${email}"
+			fi
+			;;
+		"(commit_signer"*|"(authored"*|"(added_lines"*|"(removed_lines"*)
+			cc="${cc},${email}"
+			;;
+		*)
+			echo
+			echo "Error: Unsupported roles: ${roles}" >&2
+			exit 1
+			;;
+	esac
+done < <(./scripts/get_maintainer.pl --email --tree --no-git --git-fallback \
+         --m --r --no-n --l --multiline  --pattern-depth=0 \
+         --remove-duplicates --no-rolestats --roles .outgoing/*.patch)
+
+# Determine email account to use
+account=$(grep -m1 "^From: " .outgoing/*.patch)
+account=${account#*@}
+account=${account%.*}
+
+# git send-email options
+opts=(
+	"--smtp-server=${HOME}/bin/msmtp-${account}"
+	"--to=${to:1}"
+	"--cc=${cc:1}"
+	.outgoing/*.patch
+)
+
+echo
+pr_banner " git send-email --dry-run ${opts[*]}"
+git send-email --dry-run "${opts[@]}"
+
+echo
+while true ; do
+	echo -n "Send email (y|N)? "
+	read -r tmp
+	case "${tmp,,}" in
+		y) break ;;
+		""|n) exit ;;
+	esac
+done
+
+echo
+pr_banner " git send-email ${opts[*]}"
+git send-email "${opts[@]}"
