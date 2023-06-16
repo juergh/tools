@@ -96,8 +96,8 @@ account=${account%.*}
 # git send-email options
 opts=(
 	"--smtp-server=${HOME}/bin/msmtp-${account}"
-	"--to=${to:1}"
-	"--cc=${cc:1}"
+	"--to=${to#,}"
+	"--cc=${cc#,}"
 	.outgoing/*.patch
 )
 
