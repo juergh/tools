@@ -47,7 +47,7 @@ def do_image_resize(args):
         print()
         print(f)
         i = Image.open(f)
-        n = i.resize((400, 400), Image.ANTIALIAS)
+        n = i.resize((400, 400), Image.Resampling.LANCZOS)
         n.save(f + '.new', 'JPEG')
         os.rename(f + '.new', f)
         print('  Size: {}'.format(n.size))
