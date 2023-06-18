@@ -75,7 +75,8 @@ while IFS=" " read -r email roles ; do
 				to="${to},${email}"
 			fi
 			;;
-		"(commit_signer"*|"(authored"*|"(added_lines"*|"(removed_lines"*)
+		"(commit_signer"*|"(authored"*|"(added_lines"*|"(removed_lines"*|\
+		"(odd fixer"*)
 			cc="${cc},${email}"
 			;;
 		*)
