@@ -8,14 +8,13 @@ user_files=(
 	"${HOME}"/.canonistack/
 	"${HOME}"/.claws-mail/
 	"${HOME}"/.config/gtk-3.0/gtk.css
-#	"${HOME}"/.config/hexchat/servlist.conf
-#	"${HOME}"/.cranky
 	"${HOME}"/.dput.cf
 	"${HOME}"/.emacs
 	"${HOME}"/.emacs.d/
 	"${HOME}"/.emacs.el/
 	"${HOME}"/.gnupg/
 	"${HOME}"/.gitconfig*
+	"${HOME}"/.local/share/themes/juergh/gnome-shell/gnome-shell.css
 	"${HOME}"/.nanorc
 	"${HOME}"/.quiltrc-dpkg
 	"${HOME}"/.sesame/
