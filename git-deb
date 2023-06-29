@@ -105,11 +105,18 @@ function set_globals()
 	fi
 
 	# Unstable is special
-	if [ "${DERIVATIVE}" = "unstable" ] ; then
-		DERIVATIVE=
-		SRU=0
-		TARGET=("Unstable")
-	fi
+	case "${DERIVATIVE}" in
+		unstable)
+			DERIVATIVE=
+			SRU=0
+			TARGET=("Unstable")
+			;;
+		*-unstable)
+			DERIVATIVE=${DERIVATIVE%-unstable}
+			SRU=0
+			TARGET=("Unstable:${DERIVATIVE}")
+			;;
+	esac
 
 	# Determine the series
 	SERIES=
