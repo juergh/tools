@@ -41,6 +41,15 @@ do_hourly()
 		if [ -d "${repo}"/.git ] ; then
 			update_repo "${repo}"
 		fi
+#		if [ "${repo}" = "kteam-tools" ] ; then
+#			while IFS= read -r line ; do
+#				f=${line#* href=\"}
+#				f=${f%%\"*}
+#				wget -O kteam-tools/info/"${f}" \
+#				        https://kernel.ubuntu.com/info/"${f}"
+#			done < <(curl -s https://kernel.ubuntu.com/info/ | \
+#			         grep -E ' href=.*(json|yaml)')
+#		fi
 	done
 }
 
