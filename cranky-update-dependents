@@ -53,7 +53,23 @@ while [ "${#}" -gt 0 ] ; do
 	shift
 done
 
-while IFS= read -r path ; do
+readarray -t paths < <("${CRANKY}" shell-helper source-packages-path)
+
+main_branch=
+for path in "${paths[@]}" ; do
+	cd "${path}"
+	if [ "$("${CRANKY}" shell-helper tree-type)" = "main" ] ; then
+		main_branch=$(git rev-parse --abbrev-ref HEAD)
+		break
+	fi
+done
+
+if [ -z "${main_branch}" ] ; then
+	echo "Failed to determine main branch" >&2
+	exit 1
+fi
+
+for path in "${paths[@]}" ; do
 	cd "${path}"
 
 	if [ "$("${CRANKY}" shell-helper tree-type)" = "main" ] ; then
@@ -62,8 +78,8 @@ while IFS= read -r path ; do
 
 	echo "${path}"
 
-	branch=$(git branch | grep " cranky/" | sed -e 's,.* cranky/,,')
-	git checkout cranky/"${branch}"
+	branch=${main_branch/-next/}
+	git checkout "${branch}"
 
 	tag=$(git describe --exact-match HEAD 2>/dev/null || echo)
 	if [ -z "${tag}" ] ; then
@@ -98,9 +114,11 @@ while IFS= read -r path ; do
 		exit 1
 	fi
 
+	tracking_branch=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}')
+
 	git clean -dxf
 	if [ ${re_run} -eq 1 ] ; then
-		git reset --hard origin/"${branch}"
+		git reset --hard "${tracking_branch}"
 	fi
 	git merge --ff-only "${tag_latest}"
 
@@ -112,9 +130,9 @@ while IFS= read -r path ; do
 	fi
 
 	echo
-	git --no-pager log origin/"${branch}"~1..
+	git --no-pager log "${tracking_branch}"~1..
 	echo
 
-done < <("${CRANKY}" shell-helper source-packages-path)
+done
 
 echo "Success: Updated all dependents"
