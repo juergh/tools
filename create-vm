@@ -173,19 +173,23 @@ function download_debian_image()
 
 function download_ubuntu_image()
 {
-	local suffix name url
+	local suffix relnum name url
 
 	suffix=
 	if [ "${RELEASE}" = "precise" ] || [ "${RELEASE}" = "trusty" ] || \
 		   [ "${RELEASE}" = "xenial" ] ; then
-		suffix="-disk1"
 		if [ "${BOOT_MODE}" = "uefi" ] ; then
 			suffix="-uefi1"
+		else
+			suffix="-disk1"
 		fi
 	fi
 
-	name=${RELEASE}-server-cloudimg-${ARCH}${suffix}.img
-	url=https://cloud-images.ubuntu.com/${RELEASE}/current/${name}
+	relnum=$(ubuntu-distro-info --series "${RELEASE}" --release)
+	relnum=${relnum%% *}
+
+	name=ubuntu-${relnum}-server-cloudimg-${ARCH}${suffix}.img
+	url=https://cloud-images.ubuntu.com/releases/${RELEASE}/release/${name}
 
 	download_image "${url}"
 }
