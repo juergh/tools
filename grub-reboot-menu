@@ -3,11 +3,12 @@
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] [-n] [-s]
+Usage: $(basename "${0}") [-e] [-h] [-n] [-s]
 
 Set GRUB boot entry.
 
 Optional arguments:
+  -e, --env    Show the content of the grubenv file and exit.
   -h, --help   Show this help text and exit.
   -n, --next   Set the boot entry for the next boot only. This is the default.
   -s, --saved  Set the saved default boot entry.
@@ -23,6 +24,11 @@ saved=0
 
 while [ ${#} -ne 0 ] ; do
 	case "${1}" in
+		-e|--env)
+			cat /boot/grub/grubenv
+			echo
+			exit
+			;;
 		-h|--help)
 			usage
 			exit
