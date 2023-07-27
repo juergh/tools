@@ -89,6 +89,7 @@ for i in $(seq 0 "$((num_entries - 1))") ; do
 	printf "%3d   %s\n" "${i}" "${entry##*>}"
 done
 
+echo
 while true ; do
 	echo -n "Choice: "
 	read -r c
