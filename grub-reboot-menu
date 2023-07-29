@@ -3,15 +3,18 @@
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-e] [-h] [-n] [-s]
+Usage: $(basename "${0}") [-h] [action]
 
-Set GRUB boot entry.
+Manage GRUB boot entries.
+
+Available actions:
+  env    Show the content of the grubenv file.
+  list   List the grub entries (default).
+  next   Set the boot entry for the next boot only.
+  saved  Set the saved default boot entry.
 
 Optional arguments:
-  -e, --env    Show the content of the grubenv file and exit.
-  -h, --help   Show this help text and exit.
-  -n, --next   Set the boot entry for the next boot only. This is the default.
-  -s, --saved  Set the saved default boot entry.
+  -h, --help  Show this help text and exit.
 EOF
 }
 
@@ -20,24 +23,20 @@ if [ "$(id -u)" != "0" ] ; then
 	exit 1
 fi
 
-saved=0
+action=
 
 while [ ${#} -ne 0 ] ; do
 	case "${1}" in
-		-e|--env)
-			cat /boot/grub/grubenv
-			echo
-			exit
-			;;
 		-h|--help)
 			usage
 			exit
 			;;
-		-n|--next)
-			true
-			;;
-		-s|--saved)
-			saved=1
+		env|list|next|saved)
+			if [ -n "${action}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit
+			fi
+			action=${1}
 			;;
 		*)
 			echo "Invalid argument: ${1}" >&2
@@ -46,6 +45,15 @@ while [ ${#} -ne 0 ] ; do
 	esac
 	shift
 done
+
+# Set the default action
+action=${action:-list}
+
+if [ "${action}" = "env" ] ; then
+	cat /boot/grub/grubenv
+	echo
+	exit
+fi
 
 in_menuentry=0
 submenus=()
@@ -82,12 +90,16 @@ done < /boot/grub/grub.cfg
 
 num_entries=${#entries[@]}
 
-echo "Idx   Entry   Title"
+echo "Idx   Title"
 echo "---------------------------------------------------------------------"
 for i in $(seq 0 "$((num_entries - 1))") ; do
 	entry=${entries[${i}]}
 	printf "%3d   %s\n" "${i}" "${entry##*>}"
 done
+
+if [ "${action}" = "list" ] ; then
+	exit
+fi
 
 echo
 while true ; do
@@ -99,7 +111,7 @@ while true ; do
 done
 
 entry=${entries[${c}]}
-if [ ${saved} -eq 1 ] ; then
+if [ "${action}" = "saved" ] ; then
 	grub-set-default "${entry}"
 else
 	grub-reboot "${entry}"
