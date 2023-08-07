@@ -1,6 +1,6 @@
 #!/bin/bash -eu
 #
-# Ammend an arbitraty commit
+# Reword the commit message of an arbitraty commit
 #
 
 commit=${1::8}
