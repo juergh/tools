@@ -93,7 +93,11 @@ function tag_name()
 	name=$(pkg_name "${entry}")
 	version=$(pkg_version "${entry}")
 
-	tag=${name#linux}
+	if [ "${name#linux-source-}" != "${name}" ] ; then
+		tag=
+	else
+		tag=${name#linux}
+	fi
 	tag=Ubuntu${tag}-${version}
 	tag=${tag//~/_}
 
