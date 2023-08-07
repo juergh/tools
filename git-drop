@@ -1,0 +1,17 @@
+#!/bin/bash -eu
+#
+# Drop an arbitraty commit
+#
+
+commit=${1::8}
+
+script=$(mktemp)
+trap "rm -f ${script}" EXIT INT TERM HUP
+
+cat <<EOF >"${script}"
+#!/bin/bash
+sed -ie 's/^pick ${commit}/drop ${commit}/' "\${1}"
+EOF
+chmod 755 "${script}"
+
+GIT_SEQUENCE_EDITOR="${script}" git rebase -i "${commit}"~1
