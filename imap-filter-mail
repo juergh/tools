@@ -69,26 +69,6 @@ end
 __EOF__
 }
 
-function mark_gerrit_mail()
-{
-	local src=${1} mark=${2}
-
-	cat <<__EOF__
-
-print('')
-print('-- Mark gerrit mail: ${mark}')
-messages = account['${src}']:contain_body(' has submitted this change. ') * account['${src}']:is_unseen()
-for _, message in ipairs(messages) do
-   mbox, uid = table.unpack(message)
-   subject = mbox[uid]:fetch_field('Subject')
-   subject = subject:sub(10)   -- Remove 'Subject: ' prefix
-   subject = subject:gsub('\r', ''):gsub('\n', '')   -- Remove line breaks
-   msgs = account['${src}']:contain_subject(subject) * account['${src}']:is_unseen()
-   msgs:${mark}
-end
-__EOF__
-}
-
 function filter_canonical()
 {
 	local username=${1}
@@ -114,10 +94,6 @@ __EOF__
 	move_mail "Mailing List/Canonical/canonical-kernel-team" \
 			  "Canonical/ckctreview" \
 			  "contain_subject('[ckctreview]')"
-
-	# Mark gerrit mail
-	mark_gerrit_mail "Canonical/ckctreview" \
-					 "mark_seen()"
 
 	# Move 'The Daily Bug report' mail
 	move_mail "Mailing List/Ubuntu/kernel-team" \
