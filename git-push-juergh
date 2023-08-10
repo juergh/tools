@@ -60,7 +60,7 @@ fi
 
 if ! git remote | grep -qxF juergh ; then
 	git remote add juergh \
-		git+ssh://git.launchpad.net/~juergh/ubuntu/+source/linux
+		git+ssh://git.launchpad.net/~juergh/+git/linux
 fi
 
 # shellcheck disable=SC1091
