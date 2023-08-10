@@ -24,7 +24,9 @@ function out()
 		mv CONFIGS.bak CONFIGS
 	fi
 
-	if [ ${rc} -ne 0 ] ; then
+	if [ ${rc} -eq 0 ] ; then
+		echo "-- Configs written to MASTERCONFIGS/"
+	else
 		echo "-- Error: Script failed" >&2
 	fi
 
@@ -71,7 +73,7 @@ series=$(dpkg-parsechangelog -SDistribution)
 if [ "${series}" = "UNRELEASED" ] ; then
 	series=$(dpkg-parsechangelog -SDistribution -o1 -c1)
 fi
-run-chroot "${series}" -- debian/rules genconfigs
+run-chroot "${series}" -- debian/rules genconfigs || true
 
 rm -rf MASTERCONFIGS
 mv CONFIGS MASTERCONFIGS
