@@ -17,8 +17,8 @@ Optional arguments:
 EOF
 }
 
-if ! [ -e debian/debian.env ] ; then
-	echo "Doesn't look like an Ubuntu kernel repo" >&2
+if ! [ -d debian ] ; then
+	echo "Doesn't look like a Debian repo" >&2
 	exit 1
 fi
 
@@ -58,26 +58,52 @@ if [ -z "${branch}" ] ; then
 	fi
 fi
 
-if ! git remote | grep -qxF juergh ; then
-	git remote add juergh \
-		git+ssh://git.launchpad.net/~juergh/+git/linux
+# TODO: switch to branch to determine the below
+
+changelog=debian/changelog
+if [ -e debian/debian.env ] ; then
+	# shellcheck disable=SC1091
+	. debian/debian.env
+	changelog=${DEBIAN}/changelog
 fi
 
-# shellcheck disable=SC1091
-. debian/debian.env
-
-release=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
+# Source package name and release/series
+release=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
 if [ "${release}" = "UNRELEASED" ]; then
-	release=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution \
-								  -o 1 -c 1)
+	release=$(dpkg-parsechangelog -l "${changelog}" -S Distribution -o 1 -c 1)
 fi
-package=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
+package=$(dpkg-parsechangelog -l "${changelog}" -S Source)
 
+# Remote name and branch
+remote_name=${package}
+remote_branch=${release}/${branch}
+
+# Kernel packages are special
+case "${package}" in
+	linux-firmware)
+		;;
+	linux-meta*)
+		remote_name=linux-meta
+		remote_branch=${release}/${package}/${branch}
+		;;
+	linux*)
+		remote_name=linux
+		remote_branch=${release}/${package}/${branch}
+		;;
+esac
+
+remote_url=$(git remote get-url juergh 2>/dev/null || true)
+if [ -z "${remote_url}" ] ; then
+	remote_url="git+ssh://git.launchpad.net/~juergh/+git/${remote_name}"
+	git remote add juergh "${remote_url}"
+fi
+
+echo "Remote:  juergh ${remote_url}"
 echo "Release: ${release}"
 echo "Source:  ${package}"
 echo "Branch:  ${branch}"
 echo
-echo "git push ${opts[*]} juergh ${branch}:${release}/${package}/${branch}"
+echo "git push ${opts[*]} juergh ${branch}:${remote_branch}"
 
 if [ ${dry_run} -eq 1 ] ; then
 	echo
@@ -85,4 +111,4 @@ if [ ${dry_run} -eq 1 ] ; then
 	exit
 fi
 
-git push "${opts[@]}" juergh "${branch}":"${release}"/"${package}"/"${branch}"
+git push "${opts[@]}" juergh "${branch}":"${remote_branch}"
