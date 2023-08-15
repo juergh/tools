@@ -3,17 +3,28 @@
 # List unreleased commits on linux-firmware branches
 #
 
-for branch in trusty xenial bionic focal jammy kinetic lunar ; do
+readarray -t all < <(ubuntu-distro-info --supported-esm; \
+                     ubuntu-distro-info --supported; \
+                     ubuntu-distro-info --devel)
+
+declare -A dne
+
+for branch in "${all[@]}" ; do
+	if [ "${dne[${branch}]:-0}" = "1" ] ; then
+		continue
+	fi
+	dne[${branch}]=1
+
 	version=$(git show "${branch}":debian/changelog | \
-				  dpkg-parsechangelog -l- -Sversion)
+	          dpkg-parsechangelog -l- -Sversion)
 	if [ "${version%.0}" != "${version}" ] ; then
 		# Dummy initial SRU release version, pull the next one
 		version=$(git show "${branch}":debian/changelog | \
-					  dpkg-parsechangelog -l- -Sversion -o1 -c1)
+		          dpkg-parsechangelog -l- -Sversion -o1 -c1)
 	fi
 	tag=Ubuntu-${version}
 
 	echo "-- $branch"
-	git log --oneline "${tag}".."${branch}"
+	git --no-pager log --oneline "${tag}".."${branch}"
 	echo
 done
