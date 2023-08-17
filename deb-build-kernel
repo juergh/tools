@@ -1,0 +1,275 @@
+#!/bin/bash -eu
+#
+# Build Debian kernel packages
+#
+
+function debian_arch()
+{
+	case "${1}" in
+		amd64|x86_64)    echo "amd64" ;;
+		arm64)           echo "arm64" ;;
+		armhf|arm)       echo "armhf" ;;
+		ppc64el|powerpc) echo "ppc64el" ;;
+		riscv64|riscv)   echo "riscv64" ;;
+		s390x|s390)      echo "s390x" ;;
+		*)
+			echo "Invalid architecture: ${1}" >&2
+			exit 1
+			;;
+	esac
+}
+
+function kernel_arch()
+{
+	case "${1}" in
+		amd64|x86_64)    echo "x86_64" ;;
+		arm64)           echo "arm64" ;;
+		armhf|arm)       echo "arm" ;;
+		ppc64el|powerpc) echo "powerpc" ;;
+		riscv64|riscv)   echo "riscv" ;;
+		s390x|s390)      echo "s390" ;;
+		*)
+			echo "Invalid architecture: ${1}" >&2
+			exit 1
+			;;
+	esac
+}
+
+function run()
+{
+	local cmd
+
+	cmd=()
+	if [ -n "${SCHROOT}" ] ; then
+		cmd=("schroot" "-p" "-r" "-c" "${SCHROOT}" "--")
+	fi
+	cmd+=("${@}")
+
+	echo "-- Run: ${*}"
+	if [ "${DRY_RUN}" -eq 0 ] ; then
+		"${@}"
+	fi
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: deb-build-kernel [-a ARCH] [-b ABI] [-c CPUS] [-d] [-f FLAVOR] [-g] [-h]
+                        [-l] [-s SCHROOT] TARGET [-- ARGS...]
+
+Build Debian kernel packages.
+
+Positional arguments:
+  TARGET                 Build target (see below).
+  ARGS                   Additional arguments passed to kernel make. If not
+                         provided, defaults to 'bindeb-pkg' (to build binary
+                         Debian packages).
+
+Recognized special TARGETs:
+  v6                     Build an ARMv6 32-bit kernel.
+  v7                     Build an ARMv7 32-bit kernel.
+  v7l                    Build an ARMv7 32-bit LPAE kernel.
+  v8                     Build an ARMv8 64-bit kernel.
+
+Optional arguments:
+  -a, --arch ARCH        Kernel architecture.
+  -b, --abi ABI          Kernel ABI number. If not provided, defaults to 9000.
+  -c, --cpus CPUS        Number of CPUs to use for compiling. If not provided,
+                         defaults to the number of online CPUs.
+  -d, --dry-run
+  -f, --flavor FLAVOR    Kernel flavor name.
+  -g, --dbg-pkg          Enable build of kernel debug package.
+  -h, --help             Show this help text and exit.
+  -l, --clean            Run 'make clean' before the build.
+  -s, --schroot SCHROOT  Name of the schroot session to run the build in.
+EOF
+}
+
+DRY_RUN=0
+SCHROOT=
+
+arch=$(dpkg-architecture -q DEB_HOST_ARCH)
+abi=9000
+cpus=$(getconf _NPROCESSORS_ONLN)
+flavor=
+dbg_pkg=0
+clean=0
+
+target=
+args=("bindeb-pkg")
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-a|--arch)
+			shift
+			arch=${1}
+			;;
+		-b|--abi)
+			shift
+			abi=${1}
+			;;
+		-c|--cpus)
+			shift
+			cpus=${1}
+			;;
+		-d|--dry-run)
+			DRY_RUN=1
+			;;
+		-f|--flavor)
+			shift
+			flavor=${1#-}
+			;;
+		-g|--dbg-pkg)
+			dbg_pkg=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-l|--clean)
+			clean=1
+			;;
+		-s|--schroot)
+			shift
+			SCHROOT=${1}
+			;;
+		--)
+			shift
+			args=("${@}")
+			break
+			;;
+		*)
+			if [ -n "${target}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			target=${1}
+			;;
+	esac
+	shift
+done
+
+#config=
+defconfig=
+version=
+
+case "${target}" in
+	v6)
+		arch=arm
+		defconfig=bcmrpi_defconfig
+		version=v6
+		;;
+	v7)
+		arch=arm
+		defconfig=bcm2709_defconfig
+		version=v7
+		;;
+	v7l)
+		arch=arm
+		defconfig=bcm2711_defconfig
+		version=v7l
+		;;
+	v8)
+		arch=arm64
+		defconfig=bcm2711_defconfig
+		version=v8
+		;;
+esac
+
+# Debian architecture name
+arch=$(debian_arch "${arch}")
+
+# Set environment variables for compilation
+ARCH=$(kernel_arch "${arch}")
+CROSS_COMPILE=$(dpkg-architecture -a "${arch}" -q DEB_HOST_GNU_TYPE \
+                2>/dev/null)-
+export ARCH CROSS_COMPILE
+
+if [ -z "${defconfig}" ] ; then
+	if [ -z "${target}" ] ; then
+		defconfig=${ARCH}_defconfig
+	elif [ -e arch/"${ARCH}"/configs/"${target}" ] ; then
+		defconfig=${target}
+	else
+		echo "Failed to determine defconfig" >&2
+		exit 2
+	fi
+fi
+
+# Initialize the build directory
+buildd=$(pwd)/buildd/${ARCH}/${defconfig%_defconfig}
+if ! [ -d "${buildd}" ] ; then
+	mkdir -p "${buildd}"
+fi
+
+# Do some cleaning up first
+if [ ${clean} -eq 1 ] ; then
+	run make O="${buildd}" clean
+fi
+
+# Initialize the build version
+if ! [ -e "${buildd}"/.version ] ; then
+	echo 1 > "${buildd}"/.version
+fi
+
+# Generate the config file
+echo "-- Use config ${ARCH}/${defconfig}..."
+run make O="${buildd}" "${defconfig}"
+
+# Disable the build of the debug package
+if [ ${dbg_pkg} -eq 0 ] ; then
+	echo "-- Disable debug package..."
+	configs+=("DEBUG_INFO:u")
+fi
+
+# Purge the local version
+configs+=("LOCALVERSION:s=")
+
+# Set/modify additional options
+config_cmds=()
+for cfg_val in "${configs[@]}" ; do
+	cfg=${cfg_val%%:*}
+	val=${cfg_val#*:}
+	case "${val}" in
+		e)   config_cmds+=("--enable" "${cfg}") ;;
+		d)   config_cmds+=("--disable" "${cfg}") ;;
+		m)   config_cmds+=("--module" "${cfg}") ;;
+		u)   config_cmds+=("--undefine" "${cfg}") ;;
+		s=*) config_cmds+=("--set-str" "${cfg}" "${val#*=}") ;;
+		v=*) config_cmds+=("--set-val" "${cfg}" "${val#*=}") ;;
+		*)
+			echo "-- Ignore invalid config option: ${cfg_val}" >&2
+			continue
+			;;
+	esac
+done
+if [ ${#config_cmds[@]} -gt 0 ] ; then
+	run ./scripts/config --file "${buildd}"/.config "${config_cmds[@]}"
+fi
+run make O="${buildd}" olddefconfig
+
+kernel_version=$(make -k kernelversion 2>/dev/null)
+build_version=$(head -1 "${buildd}"/.version)
+abi_version=$((abi + build_version))
+curr_commit=$(git rev-parse HEAD)
+
+if [ -n "${flavor}" ] ; then
+	local_version=-${abi_version}-${flavor}
+	pkg_version=${kernel_version}-${abi_version}+git${curr_commit::8}
+else
+	local_version=-${version}
+	pkg_version=${kernel_version}-${build_version}+git${curr_commit::8}
+fi
+
+echo "-- Kernel version:  ${kernel_version}${local_version}"
+echo "-- Package version: ${pkg_version}"
+
+make_opts=(
+	"O=${buildd}"
+	"LOCALVERSION=${local_version}"
+	"KDEB_PKGVERSION=${pkg_version}"
+	"-j${cpus}"
+	"${args[@]}"
+)
+
+run make "${make_opts[@]}" 2>&1 | tee deb-build-kernel.log
