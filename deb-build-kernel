@@ -255,7 +255,7 @@ configs=()
 
 # Disable the build of the debug package
 if [ ${dbg_pkg} -eq 0 ] ; then
-	echo "-- Disable debug package..."
+	echo "-- Disable debug package"
 	configs+=("DEBUG_INFO:u")
 	configs+=("DEBUG_INFO_NONE:e")
 fi
