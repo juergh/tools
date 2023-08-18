@@ -3,13 +3,12 @@
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] [URL]
+Usage: $(basename "${0}") [-h] ARCHIVE
 
 Fetch an email archive.
 
 Positional arguments:
-  URL         Mailing list archive URL. If not provided, read the URL from the
-              file 'url' in the current directory.
+  ARCHIVE     File containing NAME and URL of the Mailing list archive.
 
 Optional arguments:
   -h, --help  Show this help text and exit.
@@ -31,7 +30,7 @@ declare -A month=(
 	[december]=12
 )
 
-url=
+archive=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -40,29 +39,30 @@ while [ ${#} -gt 0 ] ; do
 			exit
 			;;
 		*)
-			if [ -n "${url}" ] ; then
+			if [ -n "${archive}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
-			url=${1}
+			archive=${1}
 			;;
 	esac
 	shift
 done
 
-if [ -z "${url}" ] ; then
-	if ! [ -e url ] ; then
-		echo "No URL provided and no url file found" >&2
-		exit 1
-	fi
-	url=$(cat url)
+if [ -z "${archive}" ] ; then
+	usage
+	exit 2
 fi
 
-# Save the URL
-echo "${url}" > url
+read -r name url < "${archive}"
 
-mkdir -p archives
-cd archives
+if [ -z "${name}" ] || [ -z "${url}" ] ; then
+	echo "Invalid content: ${1}" >&2
+	exit 1
+fi
+
+mkdir -p "${name}"
+cd "${name}"
 
 # Remove the newest archive (could be incomplete/partial)
 ls 20*.txt 2>/dev/null | tail -1 | xargs rm -f
