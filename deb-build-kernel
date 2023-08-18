@@ -45,9 +45,9 @@ function run()
 	fi
 	cmd+=("${@}")
 
-	echo "-- Run: ${*}"
+	echo "-- Run: ${cmd[*]}"
 	if [ "${DRY_RUN}" -eq 0 ] ; then
-		"${@}"
+		"${cmd[@]}"
 	fi
 }
 
@@ -55,7 +55,7 @@ function usage()
 {
 	cat <<EOF
 Usage: deb-build-kernel [-a ARCH] [-b ABI] [-c CPUS] [-d] [-f FLAVOR] [-g] [-h]
-                        [-l] [-s SCHROOT] TARGET [-- ARGS...]
+                        [-l] [-n] [-s SCHROOT] TARGET [-- ARGS...]
 
 Build Debian kernel packages.
 
@@ -70,6 +70,7 @@ Recognized special TARGETs:
   v7                     Build an ARMv7 32-bit kernel.
   v7l                    Build an ARMv7 32-bit LPAE kernel.
   v8                     Build an ARMv8 64-bit kernel.
+  <arch>-<flavor>
 
 Optional arguments:
   -a, --arch ARCH        Kernel architecture.
@@ -81,6 +82,7 @@ Optional arguments:
   -g, --dbg-pkg          Enable build of kernel debug package.
   -h, --help             Show this help text and exit.
   -l, --clean            Run 'make clean' before the build.
+  -n, --config-only      Only create the kernel config.
   -s, --schroot SCHROOT  Name of the schroot session to run the build in.
 EOF
 }
@@ -94,6 +96,7 @@ cpus=$(getconf _NPROCESSORS_ONLN)
 flavor=
 dbg_pkg=0
 clean=0
+config_only=0
 
 target=
 args=("bindeb-pkg")
@@ -129,6 +132,9 @@ while [ ${#} -gt 0 ] ; do
 		-l|--clean)
 			clean=1
 			;;
+		-n|--config-only)
+			config_only=1
+			;;
 		-s|--schroot)
 			shift
 			SCHROOT=${1}
@@ -149,7 +155,6 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
-#config=
 defconfig=
 version=
 
@@ -174,16 +179,25 @@ case "${target}" in
 		defconfig=bcm2711_defconfig
 		version=v8
 		;;
+	*-*)
+		arch=${target%%-*}
+		flavor=${target#*-}
+		defconfig=ubuntu
+		;;
 esac
 
 # Debian architecture name
 arch=$(debian_arch "${arch}")
 
-# Set environment variables for compilation
+# Set environment variables for the build
 ARCH=$(kernel_arch "${arch}")
 CROSS_COMPILE=$(dpkg-architecture -a "${arch}" -q DEB_HOST_GNU_TYPE \
                 2>/dev/null)-
 export ARCH CROSS_COMPILE
+
+#
+# FIXME vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+#
 
 if [ -z "${defconfig}" ] ; then
 	if [ -z "${target}" ] ; then
@@ -195,6 +209,12 @@ if [ -z "${defconfig}" ] ; then
 		exit 2
 	fi
 fi
+#
+# FIXME ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+
+# ----------------------------------------------------------------------------
+# Initialize the build environment
 
 # Initialize the build directory
 buildd=$(pwd)/buildd/${ARCH}/${defconfig%_defconfig}
@@ -212,14 +232,31 @@ if ! [ -e "${buildd}"/.version ] ; then
 	echo 1 > "${buildd}"/.version
 fi
 
+# ----------------------------------------------------------------------------
+# Generate the kernel config file
+
 # Generate the config file
-echo "-- Use config ${ARCH}/${defconfig}..."
-run make O="${buildd}" "${defconfig}"
+if [ "${defconfig}" = "ubuntu" ] ; then
+	echo "-- Use Ubuntu config ${arch}-${flavor}"
+	#run fakeroot ./debian/rules clean genconfigs || true
+	#cp CONFIGS/"${arch}"-config.flavour."${flavor}"
+	./debian/scripts/misc/annotations --arch "${arch}" --flavour "${flavor}" \
+	                                  --export > "${buildd}"/.config
+else
+	echo "-- Use config ${ARCH}/${defconfig}"
+	run make O="${buildd}" "${defconfig}"
+fi
+
+# ----------------------------------------------------------------------------
+# Modify the kernel config file
+
+configs=()
 
 # Disable the build of the debug package
 if [ ${dbg_pkg} -eq 0 ] ; then
 	echo "-- Disable debug package..."
 	configs+=("DEBUG_INFO:u")
+	configs+=("DEBUG_INFO_NONE:e")
 fi
 
 # Purge the local version
@@ -248,6 +285,15 @@ if [ ${#config_cmds[@]} -gt 0 ] ; then
 fi
 run make O="${buildd}" olddefconfig
 
+if [ ${config_only} -eq 1 ] ; then
+	echo
+	echo "-- Kernel config written to ${buildd}/.config"
+	exit
+fi
+
+# ----------------------------------------------------------------------------
+# Generate kernel and package versions
+
 kernel_version=$(make -k kernelversion 2>/dev/null)
 build_version=$(head -1 "${buildd}"/.version)
 abi_version=$((abi + build_version))
@@ -264,6 +310,9 @@ fi
 echo "-- Kernel version:  ${kernel_version}${local_version}"
 echo "-- Package version: ${pkg_version}"
 
+# ----------------------------------------------------------------------------
+# Do the build
+
 make_opts=(
 	"O=${buildd}"
 	"LOCALVERSION=${local_version}"
@@ -273,3 +322,6 @@ make_opts=(
 )
 
 run make "${make_opts[@]}" 2>&1 | tee deb-build-kernel.log
+
+echo
+echo "-- Debian packages: ${buildd%/*}/linux-*_${pkg_version}_${arch}.*"
