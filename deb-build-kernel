@@ -240,8 +240,9 @@ if [ "${defconfig}" = "ubuntu" ] ; then
 	echo "-- Use Ubuntu config ${arch}-${flavor}"
 	#run fakeroot ./debian/rules clean genconfigs || true
 	#cp CONFIGS/"${arch}"-config.flavour."${flavor}"
-	./debian/scripts/misc/annotations --arch "${arch}" --flavour "${flavor}" \
-	                                  --export > "${buildd}"/.config
+	python3 ./debian/scripts/misc/annotations \
+	        --arch "${arch}" --flavour "${flavor}" --export > \
+	        "${buildd}"/.config
 else
 	echo "-- Use config ${ARCH}/${defconfig}"
 	run make O="${buildd}" "${defconfig}"
