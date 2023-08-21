@@ -3,6 +3,10 @@
 # Run verify-release-ready against a set of kernel packages
 #
 
+function pr_fail() { echo -e "\033[31mfail\033[0m" ; }
+function pr_pass() { echo -e "\033[32mpass\033[0m" ; }
+function pr_warn() { echo -e "\033[33mwarning\033[0m" ; }
+
 function get_abi()
 {
 	local DEBIAN v
@@ -27,9 +31,9 @@ function check_abi()
 
 	printf "%60s: " "matching ABIs (${this_abi})"
 	if [ "${this_abi}" = "${abi}" ] ; then
-		echo -e "\033[32mpass\033[0m"
+		pr_pass
 	else
-		echo -e "\033[31mfail\033[0m"
+		pr_fail
 	fi
 }
 
@@ -48,9 +52,11 @@ function check_cycle()
 
 	printf "%60s: " "matching SRU cycle (${deriv})"
 	if [ "${deriv}" = "${master}" ] ; then
-		echo -e "\033[32mpass\033[0m"
+		pr_pass
+	elif [ "${deriv%-*}" = "${master%-*}" ] ; then
+		pr_warn
 	else
-		echo -e "\033[31mfail\033[0m"
+		pr_fail
 	fi
 }
 
@@ -61,18 +67,18 @@ function check_emails()
 	ae=$(git log --format=%ae -1)
 	printf "%60s: " "commit author email (${ae})"
 	if [ "${ae/@canonical.com/}" != "${ae}" ] ; then
-		echo -e "\033[32mpass\033[0m"
+		pr_pass
 	else
-		echo -e "\033[31mfail\033[0m"
+		pr_fail
 	fi
 
 	sob=$(git log -1 | grep 'Signed-off-by:')
 	sob=${sob#*Signed-off-by: }
 	printf "%60s: " "SOB (${sob})"
 	if [ "${sob/@canonical.com/}" != "${sob}" ] ; then
-		echo -e "\033[32mpass\033[0m"
+		pr_pass
 	else
-		echo -e "\033[31mfail\033[0m"
+		pr_fail
 	fi
 }
 
