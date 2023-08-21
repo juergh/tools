@@ -3,9 +3,9 @@
 # Run verify-release-ready against a set of kernel packages
 #
 
-function pr_fail() { echo -e "\033[31mfail\033[0m" ; }
+function pr_fail() { echo -e "\033[31mfail\033[0m     ${*}" ; }
 function pr_pass() { echo -e "\033[32mpass\033[0m" ; }
-function pr_warn() { echo -e "\033[33mwarning\033[0m" ; }
+function pr_warn() { echo -e "\033[33mwarning\033[0m  ${*}" ; }
 
 function get_abi()
 {
@@ -54,9 +54,42 @@ function check_cycle()
 	if [ "${deriv}" = "${master}" ] ; then
 		pr_pass
 	elif [ "${deriv%-*}" = "${master%-*}" ] ; then
-		pr_warn
+		pr_warn "(master cycle = ${master})"
 	else
-		pr_fail
+		pr_fail "(master cycle = ${master})"
+	fi
+}
+
+function check_scycle()
+{
+	local deriv prev prev_deriv
+
+	if ! [ -e debian/debian.env ] ; then
+		return
+	fi
+
+	# shellcheck disable=SC1091
+	. debian/debian.env
+	deriv=$(sed 's,.* ,,' "${DEBIAN}"/tracking-bug)
+
+	if [ "${deriv#s}" = "${deriv}"  ] ; then
+		# Not a security respin cycle
+		return
+	fi
+
+	# Get the previous cycle name
+	prev_deriv=$(git log --format=%h -- "${DEBIAN}"/tracking-bug | \
+	             head -2 | tail -1 | \
+	             xargs -I{} git show {}:"${DEBIAN}"/tracking-bug | \
+	             sed 's,.* ,,')
+
+	printf "%60s: " "security SRU cycle (${deriv})"
+	deriv=${deriv%-*}
+	p_deriv=${prev_deriv%-*}
+	if [ "${deriv#s}" = "${p_deriv#s}" ] ; then
+		pr_pass
+	else
+		pr_fail "(prev cycle = ${prev_deriv})"
 	fi
 }
 
@@ -111,6 +144,7 @@ function verify_current()
 		check_abi "${abi}"
 	fi
 	check_cycle
+	check_scycle
 	check_emails
 	"${KTEAM_TOOLS}"/maintscripts/verify-release-ready || true
 }
