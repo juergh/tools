@@ -47,10 +47,20 @@ function do_checkout()
 
 function do_download()
 {
-	local abi path
+	local path tag abi
 
-	abi=$(echo "${FETCH[main]}" | grep -oP '\d+\.\d+\.\d+-\d+')
 	path=${PATHS[0]}
+	tag=${FETCH[main]:-}
+
+	if [ -z "${tag}" ] ; then
+		tag=$(git -C "${path}" log --format=%s HEAD -1)
+	fi
+
+	abi=$(echo "${tag}" | grep -oP '\d+\.\d+\.\d+-\d+')
+	if [ -z "${abi}" ] ; then
+		echo "Failed to determine ABI from: ${tag}" >&2
+		exit 1
+	fi
 
 	echo
 	echo "-- scp ${REMOTE_DIR}/linux*_${abi//-/\[-.\]}.* ${path}/../"
@@ -72,11 +82,14 @@ function do_fetch()
 	fi
 
 	for path in "${PATHS[@]}" ; do
-		echo
-		echo "${path}"
 		cd "${path}"
 		key=$("${CRANKY}" shell-helper tree-type)
-		val=${FETCH["${key}"]}
+		val=${FETCH["${key}"]:-}
+		if [ -z "${val}" ] ; then
+			continue
+		fi
+		echo
+		echo "${path}"
 		echo "-- git fetch ${fetch_opts[*]} ${val% *} tag ${val#* }"
 		if [ "${DRY_RUN}" -eq 1 ] ; then
 			continue
