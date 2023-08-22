@@ -20,7 +20,8 @@ EOF
 
 shellcheck_exclude="--exclude=SC1117"
 flake_ignore="--ignore=E501,E302,E305,E402,W504"
-pylint_disable="--disable=C0301,W0311,E0401,C1801,R0912,R0903,W0621,C0103,C0114,C0115,C0116,C0209"
+pylint_disable="--disable=C0301,W0311,E0401,C1801,R0912,R0903,W0621,C0103,C0114,C0115,C0116,C0209,R0904"
+ruff_ignore="--ignore=E402,E501"
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -80,7 +81,7 @@ if [ ${#python_scripts[@]} -gt 0 ] ; then
 	flake8 "${flake_ignore}" "${python_scripts[@]}" || true
 
 	echo "-- Run ruff"
-	ruff check "${python_scripts[@]}" || true
+	ruff check "${ruff_ignore}" "${python_scripts[@]}" || true
 
 	echo "-- Run pylint"
 	pylint "${pylint_disable}" "${python_scripts[@]}" || true
