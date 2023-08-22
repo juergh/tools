@@ -8,8 +8,8 @@ function usage()
 	cat <<EOF
 Usage: lint-any [-h] [-d ID] FILE [FILE...]
 
-Run the relevant linting tools (shellcheck, flake8, pylint) on the provided
-files.
+Run the relevant linting tools (shellcheck, flake8, pylint, ruff) on the
+provided files.
 
 Optional arguments:
   -d, --disable ID  Disable the checker with the given id. Can be a comma-
@@ -20,7 +20,7 @@ EOF
 
 shellcheck_exclude="--exclude=SC1117"
 flake_ignore="--ignore=E501,E302,E305,E402,W504"
-pylint_disable="--disable=C0301,W0311,E0401,C1801,R0912,C0326,R0903,C0330,W0621,C0103,C0114,C0115,C0116,C0209"
+pylint_disable="--disable=C0301,W0311,E0401,C1801,R0912,R0903,W0621,C0103,C0114,C0115,C0116,C0209"
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -76,9 +76,12 @@ if [ ${#shell_scripts[@]} -gt 0 ] ; then
 fi
 
 if [ ${#python_scripts[@]} -gt 0 ] ; then
-	echo "-- Running flake8"
+	echo "-- Run flake8"
 	flake8 "${flake_ignore}" "${python_scripts[@]}" || true
 
-	echo "-- Running pylint"
+	echo "-- Run ruff"
+	ruff check "${python_scripts[@]}" || true
+
+	echo "-- Run pylint"
 	pylint "${pylint_disable}" "${python_scripts[@]}" || true
 fi
