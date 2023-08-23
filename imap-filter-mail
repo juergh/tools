@@ -74,6 +74,24 @@ end
 __EOF__
 }
 
+function move_gitea_mail_merged()
+{
+	local src=${1} dst=${2}
+
+	cat <<__EOF__
+
+print('')
+print('-- Move mail: Gitea merged')
+messages = account['${src}']:contain_field('X-Gitea-Reason', 'merge')
+for _, message in ipairs(messages) do
+   mbox, uid = table.unpack(message)
+   gitea_id = mbox[uid]:fetch_field('X-Gitea-Issue-ID'):match('%d+')
+   thread = account['${src}']:contain_field('X-Gitea-Issue-ID', gitea_id)
+   move_messages(thread, account['${dst}'])
+end
+__EOF__
+}
+
 function filter_canonical()
 {
 	local username=${1}
@@ -95,11 +113,6 @@ __EOF__
 			  "Canonical/Activity" \
 			  "contain_subject('[ACTIVITY]')"
 
-	# Move ckctreview mail
-	move_mail "Mailing List/Canonical/canonical-kernel-team" \
-			  "Canonical/ckctreview" \
-			  "contain_subject('[ckctreview]')"
-
 	# Move 'The Daily Bug report' mail
 	move_mail "Mailing List/Ubuntu/kernel-team" \
 			  "Canonical/Bugs" \
@@ -118,33 +131,9 @@ __EOF__
 			  "Launchpad-Message-For/juergh" \
 			  "contain_body('Launchpad-Subscription: linux-firmware')"
 
-	# Move patch mail
-	#move_mail "Mailing List/Ubuntu/kernel-team" \
-	#		  "Mailing List/Ubuntu/kernel-team/patch" \
-	#		  "contain_subject('PATCH')"
-	#move_mail "Mailing List/Ubuntu/kernel-team" \
-	#		  "Mailing List/Ubuntu/kernel-team/patch" \
-	#		  "contain_subject('PULL')"
-
-	# Move processed patch threads
-	#move_thread "Mailing List/Ubuntu/kernel-team/patch" \
-	#			"Mailing List/Ubuntu/kernel-team/done" \
-	#			"contain_subject('APPLIED')"
-	#move_thread "Mailing List/Ubuntu/kernel-team/patch" \
-	#			"Mailing List/Ubuntu/kernel-team/done" \
-	#			"contain_subject('NACK')"
-	#move_thread "Mailing List/Ubuntu/kernel-team/patch" \
-	#			"Mailing List/Ubuntu/kernel-team/done" \
-	#			"contain_subject('NAK')"
-	#move_thread "Mailing List/Canonical/canonical-kernel-esm" \
-	#			"Mailing List/Canonical/canonical-kernel-esm/done" \
-	#			"contain_subject('APPLIED')"
-	#move_thread "Mailing List/Canonical/canonical-kernel-esm" \
-	#			"Mailing List/Canonical/canonical-kernel-esm/done" \
-	#			"contain_subject('NACK')"
-	#move_thread "Mailing List/Canonical/canonical-kernel-esm" \
-	#			"Mailing List/Canonical/canonical-kernel-esm/done" \
-	#			"contain_subject('NAK')"
+	# Move Gitea mail
+	move_gitea_mail_merged "Canonical/ckctreview" \
+						   "Canonical/ckctreview/done"
 
 	# Move noise mail (needs to come last)
 	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
