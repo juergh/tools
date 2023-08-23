@@ -26,6 +26,7 @@ function push_all()
 		fi
 	fi
 
+	REMOTE=${tracking_remote}
 	if [ "${REMOTE}" = "${tracking_remote}" ] ; then
 		push_branch_opts+=("${branch}:${tracking_branch}")
 	fi
