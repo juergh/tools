@@ -1,0 +1,24 @@
+#!/bin/bash -eu
+#
+# Import a GPG key for APT
+#
+
+function out()
+{
+	gpg --delete-keys --batch --yes "${KEYID}"
+}
+
+KEYID=${1}
+trap out EXIT
+
+
+gpg --keyserver keyserver.ubuntu.com --recv-keys "${KEYID}"
+
+uid=$(gpg --list-key --with-colons "${KEYID}" | awk -F: '$1 == "uid" { print $10; exit }')
+uid=${uid,,}
+uid=${uid// /-}
+
+outfile=/etc/apt/trusted.gpg.d/${uid}.asc
+gpg --export --armor --output "${outfile}" "${KEYID}"
+
+echo "Key stored in ${outfile}"
