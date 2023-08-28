@@ -47,7 +47,11 @@ function check_cycle()
 
 	# shellcheck disable=SC1091
 	. debian/debian.env
-	master=$(sed 's,.* ,,' debian.master/tracking-bug)
+
+	# shellcheck disable=SC1091
+	. "${DEBIAN}"/etc/update.conf
+
+	master=$(sed 's,.* ,,' "${DEBIAN_MASTER}"/tracking-bug)
 	deriv=$(sed 's,.* ,,' "${DEBIAN}"/tracking-bug)
 
 	printf "%60s: " "matching SRU cycle (${deriv})"
