@@ -1,2 +1,5 @@
 #!/bin/bash
-gpg --clearsign < /dev/null > /dev/null
+
+tmp=$(mktemp)
+gpg --clearsign "${tmp}" > /dev/null
+rm -f "${tmp}"
