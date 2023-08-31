@@ -5,14 +5,19 @@
 
 function pr_banner()
 {
-	local txt
+	local line
 
 	if [ -z "${__COLS:-}" ] ; then
 		__COLS=$(tput cols)
 	fi
-	txt=${*}$(printf "%${__COLS}s")
+
 	echo
-	echo -e "\033[45m${txt::${__COLS}}\033[0m"
+
+	# Split long strings, extend the lines and print them
+	while IFS= read -r line; do
+		line=${line}$(printf "%${__COLS}s")
+		echo -e "\033[45m${line::${__COLS}}\033[0m"
+	done < <(echo "${*}" | fold -w$((__COLS - 2)))
 }
 
 function usage()
@@ -44,65 +49,84 @@ while [ $# -gt 0 ] ; do
 	shift
 done
 
-rm -rf .outgoing
-mkdir .outgoing
-
 pr_banner " TODO: check if already sent"
 
-pr_banner " git format-patch ${*}"
-git format-patch -o .outgoing "${@}"
+if [ $# -gt 0 ] ; then
+	pr_banner " git format-patch ${*}"
+	rm -rf .outgoing
+	mkdir .outgoing
+	git format-patch -o .outgoing "${@}"
+fi
+
+if ! [ -d .outgoing ] ; then
+	echo "No such directory: .outgoing" >&2
+	exit 1
+fi
 
 pr_banner " show patches"
 for p in .outgoing/*.patch ; do
 	echo
-	echo -e "\033[33m${p#*/}\033[0m"
+	echo -e "\033[45m${p#*/}\033[0m"
 	/usr/share/source-highlight/src-hilite-lesspipe.sh "${p}"
 done
 
-pr_banner " checkpatch"
-./scripts/checkpatch.pl .outgoing/*.patch
+if [ -e WHENCE ] ; then
+	# From .git/config
+	to=
+	cc=
 
-pr_banner " get_maintainer"
+elif [ -e scripts/checkpatch.pl ] ; then
+	pr_banner " checkpatch"
+	./scripts/checkpatch.pl .outgoing/*.patch
 
-to=
-cc="linux-kernel@vger.kernel.org"
-while IFS=" " read -r email roles ; do
-	echo "${email} ${roles}"
-	case "${roles}" in
-		"(maintainer"*|"(reviewer"*|"(open list"*|"(supporter"*|\
-		"(moderated list"*)
-			if [ "${email}" != "linux-kernel@vger.kernel.org" ] ; then
-				to="${to},${email}"
-			fi
-			;;
-		"(commit_signer"*|"(authored"*|"(added_lines"*|"(removed_lines"*|\
-		"(odd fixer"*)
-			cc="${cc},${email}"
-			;;
-		*)
-			echo
-			echo "Error: Unsupported roles: ${roles}" >&2
-			exit 1
-			;;
-	esac
-done < <(./scripts/get_maintainer.pl --email --tree --no-git --git-fallback \
-         --m --r --no-n --l --multiline  --pattern-depth=0 \
-         --remove-duplicates --no-rolestats --roles .outgoing/*.patch)
+	pr_banner " get_maintainer"
+
+	to=
+	cc="linux-kernel@vger.kernel.org"
+	while IFS=" " read -r email roles ; do
+		echo "${email} ${roles}"
+		case "${roles}" in
+			"(maintainer"*|"(reviewer"*|"(open list"*|"(supporter"*|\
+			"(moderated list"*)
+				if [ "${email}" != "linux-kernel@vger.kernel.org" ] ; then
+					to="${to},${email}"
+				fi
+				;;
+			"(commit_signer"*|"(authored"*|"(added_lines"*|"(removed_lines"*|\
+			"(odd fixer"*)
+				cc="${cc},${email}"
+				;;
+			*)
+				echo
+				echo "Error: Unsupported roles: ${roles}" >&2
+				exit 1
+				;;
+		esac
+	done < <(./scripts/get_maintainer.pl --email --tree --no-git \
+	         --git-fallback --m --r --no-n --l --multiline \
+	         --pattern-depth=0 --remove-duplicates --no-rolestats --roles \
+	         .outgoing/*.patch)
+
+else
+	echo "Error: Don't know how to handle this repo" >&2
+	exit 1
+fi
 
 # Determine email account to use
-account=$(grep -m1 "^From: " .outgoing/*.patch)
+account=$(grep -m1 "^From: " .outgoing/*.patch | head -1)
 account=${account#*@}
 account=${account%.*}
 
 # git send-email options
-opts=(
-	"--smtp-server=${HOME}/bin/msmtp-${account}"
-	"--to=${to#,}"
-	"--cc=${cc#,}"
-	.outgoing/*.patch
-)
+opts=("--smtp-server=${HOME}/bin/msmtp-${account}")
+if [ -n "${to}" ] ; then
+	opts+=("--to=${to#,}")
+fi
+if [ -n "${cc}" ] ; then
+	opts+=("--cc=${cc#,}")
+fi
+opts+=(.outgoing/*.patch)
 
-echo
 pr_banner " git send-email --dry-run ${opts[*]}"
 git send-email --dry-run "${opts[@]}"
 
@@ -116,6 +140,5 @@ while true ; do
 	esac
 done
 
-echo
 pr_banner " git send-email ${opts[*]}"
 git send-email "${opts[@]}"
