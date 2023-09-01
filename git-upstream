@@ -1,0 +1,167 @@
+#!/bin/bash -eu
+
+function out()
+{
+	local rc=$?
+
+	trap - INT TERM EXIT HUP
+
+	if [ ${rc} -ne 0 ] ; then
+		pr_error "Script failed"
+	fi
+
+	exit "${rc}"
+}
+
+function pr_error()
+{
+	echo -e "\033[31m${*}\033[0m" 1>&2
+}
+
+function pr_warn()
+{
+	echo -e "\033[33m${*}\033[0m"
+}
+
+function pr_banner()
+{
+	local line
+
+	if [ -z "${__COLS:-}" ] ; then
+		__COLS=$(tput cols)
+	fi
+
+	# Split long strings, extend the lines and print them
+	echo
+	while IFS= read -r line; do
+		line=${line}$(printf "%${__COLS}s")
+		echo -e "\033[45m${line::${__COLS}}\033[0m"
+	done < <(echo "${*}" | fold -w$((__COLS - 2)))
+}
+
+function do_format_patch()
+{
+	local opts
+
+	if [ ${#} -eq 0 ] ; then
+		pr_error "Missing options for git-format-patch"
+		exit 1
+	fi
+
+	opts=()
+	if [ "${COVER_LETTER}" -ne 0 ] ; then
+		opts+=("--cover-letter")
+	fi
+	if [ "${VERSION}" -ne 0 ] ; then
+		opts+=("--subject-prefix=PATCH v${VERSION}")
+	fi
+	opts+=("${@}")
+
+	rm -rf .outgoing
+	mkdir .outgoing
+	git format-patch -o .outgoing "${opts[@]}"
+}
+
+function do_review()
+{
+	echo
+	for patch in .outgoing/*.patch ; do
+		pr_banner "Patch ${patch#*/}"
+		colordiff < "${patch}"
+	done
+}
+
+function do_send_email()
+{
+	local opts
+
+	if [ ${#} -eq 0 ] ; then
+		pr_error "Missing options for git-send-email"
+		exit 1
+	fi
+
+	account=$(grep -m1 '^From: ' .outgoing/*.patch | head -1)
+	account=${account#*@}
+	account=${account%%.*}
+
+	opts=()
+	opts+=("--smtp-server=${HOME}/bin/msmtp-${account}")
+	if [ "${FORCE}" -eq 0 ] ; then
+		opts+=("--dry-run")
+		echo "Use -f, --force to send the email"
+	fi
+	opts+=("${@}")
+
+	pr_banner "git send-email ${opts[*]} ./outgoing/*.patch"
+	git send-email "${opts[@]}" .outgoing/*.patch
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: git-deb [-c] [-v NUM] COMMAND [OPTS]
+
+Helper script for managing upstream submissions.
+
+Supported commands:
+  format-patch [OPTS]         Create a patch (series) in .outgoing/.
+  review                      Review patches in .outgoing/.
+  send-email [OPTS]           Send patches in .outgoing/.
+
+  OPTS                        Additional options for the underlying git
+                              command.
+
+Optional arguments:
+  -c, --cover-letter          Add a cover letter.
+  -f, --force                 Force things.
+  -h, --help                  Show this help text.
+  -v, --version NUM           The revision number of the patch to include in
+                              the subject prefix.
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+COVER_LETTER=0
+FORCE=0
+VERSION=0
+cmd=
+
+while [ ${#} -gt 0 ] ; do
+	case ${1} in
+		-c|--cover-letter)
+			COVER_LETTER=1
+			;;
+		-f|--force)
+			FORCE=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-v|--version)
+			shift
+			VERSION=${1}
+			;;
+		format-patch|review|send-email)
+			cmd=${1//-/_}
+			shift
+			break
+			;;
+		*)
+			pr_error "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+if [ -z "${cmd}" ] ; then
+	usage
+	exit 2
+fi
+
+trap out EXIT INT TERM HUP
+
+do_"${cmd}" "${@}"
