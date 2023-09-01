@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+
+import re
+
+from ast import literal_eval
+
+def load_config(infile):
+    config = {}
+    with open(infile) as fh:
+        for line in fh:
+            line = line.strip()
+            if line.startswith("CONFIG_"):
+                cfg, val = line.split("=", 1)
+                config[cfg] = val
+            elif line.startswith("# CONFIG_"):
+                cfg = line.split(" ")[1]
+                config[cfg] = "-"
+    return config
+
+def merge_configs(k1, c1, k2, c2):
+    config = {}
+    keys = list(set(list(c1.keys()) + list(c2.keys())))
+    for key in keys:
+        v1 = c1.get(key, "-")
+        v2 = c2.get(key, "-")
+        config[key] = {k1: v1, k2: v2}
+    return config
+
+RE_POLICY = re.compile(r"(CONFIG_.+?)\s+")
+
+def load_annotations(infile, k1, k2):
+    anno = {}
+    with open(infile) as fh:
+        for line in fh:
+            line = line.strip()
+            if line.startswith("CONFIG_"):
+                cfg, rest = line.split(" ", 1)
+                anno[cfg] = {k1: "-", k2: "-", "note": ""}
+                for item in re.findall(r"\s*(.+?<.+?)>\s*", rest):
+                    name, val = item.split("<")
+                    if name == "policy":
+                        val = literal_eval(val)
+                        anno[cfg][k1] = val.get(k1, "-")
+                        anno[cfg][k2] = val.get(k2, "-")
+                    elif name == "note":
+                        anno[cfg]["note"] = val
+    return anno
+
+# Load master DEFCONFIGS
+m_dc_arm64 = load_config("DEFCONFIGS.master/arm64-config.flavour.generic")
+m_dc_armhf = load_config("DEFCONFIGS.master/armhf-config.flavour.generic")
+m_dc = merge_configs("arm64", m_dc_arm64, "armhf", m_dc_armhf)
+
+# Load master CONFIGS
+m_c_arm64 = load_config("CONFIGS.master/arm64-config.flavour.generic")
+m_c_armhf = load_config("CONFIGS.master/armhf-config.flavour.generic")
+m_c = merge_configs("arm64", m_c_arm64, "armhf", m_c_armhf)
+
+# Load raspi DEFCONFIGS
+r_dc_arm64 = load_config("DEFCONFIGS.raspi/arm64-config.flavour.raspi")
+r_dc_armhf = load_config("DEFCONFIGS.raspi/armhf-config.flavour.raspi")
+r_dc = merge_configs("arm64", r_dc_arm64, "armhf", r_dc_armhf)
+
+# Load raspi CONFIGS
+r_c_arm64 = load_config("CONFIGS.raspi/arm64-config.flavour.raspi")
+r_c_armhf = load_config("CONFIGS.raspi/armhf-config.flavour.raspi")
+r_c = merge_configs("arm64", r_c_arm64, "armhf", r_c_armhf)
+
+# Load raspi annotations
+r_a = load_annotations("debian.raspi/config/annotations", "arm64", "armhf")
+
+# Walk through all raspi configs
+for cfg, val in r_c.items():
+
+    # It is a raspi or master defconfig
+    if cfg in r_dc or cfg in m_dc:
+        # Load current note from annotations
+        if cfg not in r_a:
+            continue
+        cur = r_a[cfg]["note"]
+
+        new = ""
+        if cfg not in r_dc:
+            # raspi config overrides a master defconfig
+            new = "Required for Pi (different from master)"
+        elif cfg not in m_dc:
+            # rasp config is a raspi-only defconfig
+            new = "Required for Pi (not in master)"
+        elif val != m_dc[cfg]:
+            # raspi config overrides a master config
+            new = "Required for Pi (different from master)"
+
+        if new and not cur:
+            #print(f"{cfg:<50} -- {cur:<50} -- {new}")
+            print(f"{cfg} note<'{new}'>")
