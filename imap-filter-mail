@@ -74,15 +74,17 @@ end
 __EOF__
 }
 
-function move_gitea_mail_merged()
+function move_gitea_mail_done()
 {
 	local src=${1} dst=${2}
 
 	cat <<__EOF__
 
 print('')
-print('-- Move mail: Gitea merged')
-messages = account['${src}']:contain_field('X-Gitea-Reason', 'merge')
+print('-- Move mail: Gitea merged or closed')
+messages = account['${src}']:contain_field('X-Gitea-Reason', 'merge') +
+           account['${src}']:contain_field('X-Gitea-Reason', 'close')
+
 for _, message in ipairs(messages) do
    mbox, uid = table.unpack(message)
    gitea_id = mbox[uid]:fetch_field('X-Gitea-Issue-ID'):match('%d+')
@@ -132,8 +134,8 @@ __EOF__
 			  "contain_body('Launchpad-Subscription: linux-firmware')"
 
 	# Move Gitea mail
-	move_gitea_mail_merged "Canonical/ckctreview" \
-						   "Canonical/ckctreview/done"
+	move_gitea_mail_done "Canonical/ckctreview" \
+	                     "Canonical/ckctreview/done"
 
 	# Move noise mail (needs to come last)
 	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
