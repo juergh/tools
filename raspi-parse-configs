@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+#
+# Parse raspi annotations and try to figure out diffs to master
+#
 
 import re
 
@@ -14,7 +17,7 @@ def load_config(infile):
                 config[cfg] = val
             elif line.startswith("# CONFIG_"):
                 cfg = line.split(" ")[1]
-                config[cfg] = "-"
+                config[cfg] = "n"
     return config
 
 def merge_configs(k1, c1, k2, c2):
@@ -46,6 +49,11 @@ def load_annotations(infile, k1, k2):
                         anno[cfg]["note"] = val
     return anno
 
+def replace(d, a, b):
+    for key, val in d.items():
+        if val == a:
+            d[key] = b
+    
 # Load master DEFCONFIGS
 m_dc_arm64 = load_config("DEFCONFIGS.master/arm64-config.flavour.generic")
 m_dc_armhf = load_config("DEFCONFIGS.master/armhf-config.flavour.generic")
@@ -69,27 +77,29 @@ r_c = merge_configs("arm64", r_c_arm64, "armhf", r_c_armhf)
 # Load raspi annotations
 r_a = load_annotations("debian.raspi/config/annotations", "arm64", "armhf")
 
-# Walk through all raspi configs
-for cfg, val in r_c.items():
 
-    # It is a raspi or master defconfig
-    if cfg in r_dc or cfg in m_dc:
-        # Load current note from annotations
-        if cfg not in r_a:
-            continue
-        cur = r_a[cfg]["note"]
+# Walk through all annotations
+for cfg, val in r_a.items():
+    if cfg not in r_dc:
+        # not a raspi defconfig
+        continue
 
-        new = ""
-        if cfg not in r_dc:
-            # raspi config overrides a master defconfig
-            new = "Required for Pi (different from master)"
-        elif cfg not in m_dc:
-            # rasp config is a raspi-only defconfig
-            new = "Required for Pi (not in master)"
-        elif val != m_dc[cfg]:
-            # raspi config overrides a master config
-            new = "Required for Pi (different from master)"
+    note = val["note"]
+    if note:
+        # config contains a note already
+        continue
 
-        if new and not cur:
-            #print(f"{cfg:<50} -- {cur:<50} -- {new}")
-            print(f"{cfg} note<'{new}'>")
+    del val["note"]
+    m_val = m_c.get(cfg, {})
+
+    replace(val, "-", "n")
+    replace(m_val, "-", "n")
+    if val == m_val:
+        # config matches master
+        continue
+
+    if not m_val:
+        new = "Required for Pi (not in master)"
+    else:
+        new = "Required for Pi (different from master)"
+    print(f"{cfg} note<'{new}'>")
