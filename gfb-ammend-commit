@@ -66,54 +66,43 @@ def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, note, prefix,
         msg = msg[:-1]
 
     # -------------------------------------------------------------------------
-    # Add Buglinks
+    # Remove all BugLinks from the message and put them into a list
 
+    buglink_tags = []
     if bugs:
-        # Extract existing BugLink lines into a tmp list
-        tmp_bug = []
-        tmp_msg = []
-        for m in msg:
+        for m in list(msg):
             if re.match(r"BugLink: http[s]://bugs.launchpad.net", m):
-                tmp_bug.append(color[0] + m + color[1])
-            else:
-                tmp_msg.append(m)
+                buglink_tags.append(color[0] + m + color[1])
+                msg.remove(m)
 
         # Add new BugLink line(s)
         for bug in bugs:
-            if bug.startswith('http'):
-                tmp_bug.append(color[0] +
-                               "BugLink: {}".format(bug) +
-                               color[1])
-            else:
-                tmp_bug.append(color[0] + "BugLink: https://" +
-                               "bugs.launchpad.net/bugs/{}".format(bug) +
-                               color[1])
+            buglink_tags.append(color[0] + "BugLink: https://" +
+                                "bugs.launchpad.net/bugs/{}".format(bug) +
+                                color[1])
 
-        # Prepend the sorted BugLinks to the message
-        msg = sorted(set(tmp_bug)) + [""] + tmp_msg
+        # Sort and weed out any duplicates
+        buglink_tags = sorted(set(buglink_tags))
 
     # -------------------------------------------------------------------------
-    # Add CVE tags
+    # Remove all CVE tags from the message and put them into a list
 
+    cve_tags = []
     if cves:
-        # Extract existing CVE lines into a tmp list
-        tmp_cve = []
-        tmp_msg = []
-        for m in msg:
+        for m in list(msg):
             if re.match(r"CVE-[0-9]{4}-[0-9]{1,}", m):
-                tmp_cve.append(color[0] + m + color[1])
-            else:
-                tmp_msg.append(m)
+                cve_tags.append(color[0] + m + color[1])
+                msg.remove(m)
 
         # Add new CVE tag(s)
         for cve in cves:
             cve = cve.upper()
             if cve.startswith("CVE-"):
                 cve = cve[4:]
-            tmp_cve.append(color[0] + "CVE-{}".format(cve) + color[1])
+            cve_tags.append(color[0] + "CVE-{}".format(cve) + color[1])
 
-        # Prepend the sorted CVE tags to the message
-        msg = sorted(set(tmp_cve)) + [""] + tmp_msg
+        # Sort and weed out any duplicates
+        cve_tags = sorted(set(cve_tags))
 
     # -------------------------------------------------------------------------
     # Add provenance
@@ -182,6 +171,15 @@ def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, note, prefix,
 
     if msg[idx - 1] != "":
         msg.insert(idx, "")
+
+    # -------------------------------------------------------------------------
+    # Insert CVE and BugLink tags
+
+    if buglink_tags:
+        msg[idx:idx] = buglink_tags
+
+    if cve_tags:
+        msg[idx:idx] = cve_tags
 
     # -------------------------------------------------------------------------
     # Prepend the subject to the message
@@ -260,7 +258,8 @@ def main():
     args = parser.parse_args()
 
     # Read the aliases config file
-    with open(os.path.expanduser(os.path.join("~", ".kteam.rc"))) as fh:
+    with open(os.path.expanduser(os.path.join("~", ".kteam.rc")),
+              encoding="utf-8") as fh:
         kteam_rc = json.load(fh)
 
     # Assemble the <foo>-by lists
