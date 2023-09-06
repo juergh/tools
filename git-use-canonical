@@ -1,0 +1,16 @@
+#!/bin/bash -eu
+
+if ! [ -e .git/config ] ; then
+	echo "Not in a git repo" >&2
+	exit 1
+fi
+
+cat <<EOF >> .git/config
+[include]  # REMOVEME
+    path = ${HOME}/.gitconfig-canonical  # REMOVEME
+EOF
+
+debian_chroot=canonical /bin/bash
+
+# remove the last two lines again
+sed -i '/REMOVEME/d' .git/config
