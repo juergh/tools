@@ -18,34 +18,54 @@ function out()
 	exit "${rc}"
 }
 
-function import_source_deb()
+function check_tag()
 {
-	local name=${1} version=${2}
-	local tag dsc
+	local tag=${1}
 
-	tag=${version//\~/_}
+	if [ "${TAG}" -eq 0 ] ; then
+		return
+	fi
+
 	if git tag | grep -q "^${tag}$" ; then
-		if [ "${TAG}" -eq 0 ] ; then
-			true
-		elif [ "${FORCE}" -eq 1 ] ; then
+		if [ "${FORCE}" -eq 1 ] ; then
 			git tag -d "${tag}"
 		else
 			echo "Tag exists already: ${tag}" >&2
 			exit 1
 		fi
 	fi
+}
 
-	pull-lp-source -d "${name}" "${version}" || \
-		pull-debian-source -d "${name}" "${version}"
-	dsc="${name}_${version}.dsc"
+function tag_from_version()
+{
+	local version=${1}
+	local tag
 
-	# Remove the temporary directory
-	rm -rf "${TMPD}"
+	tag=${version//\~/_}
+
+	echo "${tag}"
+}
+
+function import_dsc()
+{
+	local dsc=${1}
+	local name version tag
+
+	name=${dsc##*/}
+	name=${name%_*}
+
+	version=${dsc##*_}
+	version=${version%.dsc}
+
+	tag=$(tag_from_version "${version}")
+	check_tag "${tag}"
 
 	# Extract the source package and update the tree
+	rm -rf "${TMPD}"
 	dpkg-source --skip-patches -x "${dsc}" "${TMPD}"
 	rsync -a --delete --exclude .git "${TMPD}"/ .
 
+	# Commit the changes
 	git add .
 	git commit -s -m "Import ${name} ${version}"
 
@@ -54,16 +74,26 @@ function import_source_deb()
 	fi
 }
 
+function pull_source_deb()
+{
+	local name=${1} version=${2}
+
+	pull-lp-source -d "${name}" "${version}" || \
+		pull-debian-source -d "${name}" "${version}"
+}
+
 function usage()
 {
 	cat <<EOF
-Usage: import-source-deb [-f] [-h] [-s NAME] [-t] VERSION [VERSION..]
+Usage: import-source-deb [-f] [-h] [-s NAME] [-t] DSC|VERSION [DSC|VERSION..]
 
-Download a source package (or multiple) and import it into the current branch
-of the current git repo.
+Import a source package (or multiple) into the current branch of the current
+git repo. Download the source package first if a version is provided rather
+than a dsc file.
 
 Positional arguments:
   VERSION            Source package version.
+  DSC                Source package (dsc) file.
 
 Optional arguments:
   -f, --force        Force the import.
@@ -75,7 +105,7 @@ EOF
 }
 
 FORCE=0
-versions=()
+ver_or_dsc=()
 name=
 TAG=1
 
@@ -96,20 +126,16 @@ while [ ${#} -gt 0 ] ; do
 			TAG=0
 			;;
 		*)
-			versions=("${@}")
+			ver_or_dsc=("${@}")
 			break
 			;;
 	esac
 	shift
 done
 
-if [ "${#versions[@]}" -eq 0 ] ; then
+if [ "${#ver_or_dsc[@]}" -eq 0 ] ; then
 	usage
 	exit 2
-fi
-
-if [ -z "${name}" ] ; then
-	name=$(dpkg-parsechangelog -SSource)
 fi
 
 if [ -n "$(git status --porcelain)" ] ; then
@@ -120,6 +146,20 @@ fi
 TMPD=$(mktemp -d)
 trap out EXIT INT TERM HUP
 
-for version in "${versions[@]}" ; do
-	import_source_deb "${name}" "${version}"
+for x in "${ver_or_dsc[@]}" ; do
+	if [ -e "${x}" ] ; then
+		dsc=${x}
+	else
+		tag=$(tag_from_version "${x}")
+		check_tag "${tag}"
+
+		if [ -z "${name}" ] ; then
+			name=$(dpkg-parsechangelog -SSource)
+		fi
+
+		pull_source_deb "${name}" "${x}"
+		dsc=${name}_${x}.dsc
+	fi
+
+	import_dsc "${dsc}"
 done
