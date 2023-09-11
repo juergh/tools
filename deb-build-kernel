@@ -54,8 +54,9 @@ function run()
 function usage()
 {
 	cat <<EOF
-Usage: deb-build-kernel [-a ARCH] [-b ABI] [-c CPUS] [-d] [-f FLAVOR] [-g] [-h]
-                        [-l] [-n] [-s SCHROOT] TARGET [-- ARGS...]
+Usage: deb-build-kernel [-a ARCH] [-b ABI] [-c CPUS] [-d] [-f FLAVOR] [-g]
+                        [-h] [-l] [-n] [-o CFG:VAL] [-s SCHROOT]
+                        TARGET [-- ARGS...]
 
 Build Debian kernel packages.
 
@@ -83,6 +84,14 @@ Optional arguments:
   -h, --help             Show this help text and exit.
   -l, --clean            Run 'make clean' before the build.
   -n, --config-only      Only create the kernel config.
+  -o, --config CFG:VAL   Set kernel config option CFG to value VAL.
+                         Possible values for VAL:
+                           e:     Enable option
+                           d:     Disable option
+                           m:     Turn option into a module
+                           u:     Undefine option
+                           s=foo: Set option to string 'foo'
+                           v=bar: Set option to value bar
   -s, --schroot SCHROOT  Name of the schroot session to run the build in.
 EOF
 }
@@ -97,6 +106,7 @@ flavor=
 dbg_pkg=0
 clean=0
 config_only=0
+configs=()
 
 target=
 args=("bindeb-pkg")
@@ -134,6 +144,10 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-n|--config-only)
 			config_only=1
+			;;
+		-o|--config)
+			shift
+			configs+=("${1}")
 			;;
 		-s|--schroot)
 			shift
@@ -251,8 +265,6 @@ fi
 # ----------------------------------------------------------------------------
 # Modify the kernel config file
 
-configs=()
-
 # Disable the build of the debug package
 if [ ${dbg_pkg} -eq 0 ] ; then
 	echo "-- Disable debug package"
@@ -269,10 +281,10 @@ for cfg_val in "${configs[@]}" ; do
 	cfg=${cfg_val%%:*}
 	val=${cfg_val#*:}
 	case "${val}" in
-		e)   config_cmds+=("--enable" "${cfg}") ;;
-		d)   config_cmds+=("--disable" "${cfg}") ;;
-		m)   config_cmds+=("--module" "${cfg}") ;;
-		u)   config_cmds+=("--undefine" "${cfg}") ;;
+		e)   config_cmds+=("-e" "${cfg}") ;;
+		d)   config_cmds+=("-d" "${cfg}") ;;
+		m)   config_cmds+=("-m" "${cfg}") ;;
+		u)   config_cmds+=("-u" "${cfg}") ;;
 		s=*) config_cmds+=("--set-str" "${cfg}" "${val#*=}") ;;
 		v=*) config_cmds+=("--set-val" "${cfg}" "${val#*=}") ;;
 		*)
