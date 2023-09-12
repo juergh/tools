@@ -236,6 +236,7 @@ ARCH=$(kernel_arch "${arch}")
 CROSS_COMPILE=$(dpkg-architecture -a "${arch}" -q DEB_HOST_GNU_TYPE \
                 2>/dev/null)-
 export ARCH CROSS_COMPILE
+echo "-- Set ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}"
 
 # ----------------------------------------------------------------------------
 # Initialize the build environment
