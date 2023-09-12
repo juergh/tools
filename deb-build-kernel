@@ -328,10 +328,13 @@ if [ -n "${flavor}" ] ; then
 	local_version=-${abi_version}-${flavor}
 	pkg_version=${kernel_version}-${abi_version}+git${curr_commit::8}
 else
-	local_version=-${version}
+	if [ -n "${version}" ] ; then
+		local_version=-${version}
+	else
+		local_version=
+	fi
 	pkg_version=${kernel_version}-${build_version}+git${curr_commit::8}
 fi
-
 echo "-- Kernel version:  ${kernel_version}${local_version}"
 echo "-- Package version: ${pkg_version}"
 
