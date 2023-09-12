@@ -66,12 +66,15 @@ Positional arguments:
                          provided, defaults to 'bindeb-pkg' (to build binary
                          Debian packages).
 
-Recognized special TARGETs:
+Supported TARGETs:
   v6                     Build an ARMv6 32-bit kernel.
   v7                     Build an ARMv7 32-bit kernel.
   v7l                    Build an ARMv7 32-bit LPAE kernel.
   v8                     Build an ARMv8 64-bit kernel.
-  <arch>-<flavor>
+  defconfig              Build a kernel using the selected architecture's
+                         defconfig config file.
+  <arch>-<flavor>        Build a kernel using the Ubuntu kernel config file.
+  <config_file>          Build a kernel using the provided config file.
 
 Optional arguments:
   -a, --arch ARCH        Kernel architecture.
@@ -169,36 +172,61 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
-defconfig=
-version=
+if [ -z "${target}" ] ; then
+	usage
+	exit 2
+fi
 
-case "${target}" in
-	v6)
-		arch=arm
-		defconfig=bcmrpi_defconfig
-		version=v6
-		;;
-	v7)
-		arch=arm
-		defconfig=bcm2709_defconfig
-		version=v7
-		;;
-	v7l)
-		arch=arm
-		defconfig=bcm2711_defconfig
-		version=v7l
-		;;
-	v8)
-		arch=arm64
-		defconfig=bcm2711_defconfig
-		version=v8
-		;;
-	*-*)
-		arch=${target%%-*}
-		flavor=${target#*-}
-		defconfig=ubuntu
-		;;
-esac
+config=
+version=
+subdir=
+
+if [ -e "${target}" ] ; then
+	arch=$(sed -n 's,# Linux/,,p' "${target}" | sed 's, .*,,')
+	config=${target}
+	subdir=${target##*/}
+else
+	case "${target}" in
+		v6)
+			arch=arm
+			config=bcmrpi_defconfig
+			version=v6
+			subdir=v6
+			;;
+		v7)
+			arch=arm
+			config=bcm2709_defconfig
+			version=v7
+			subdir=v7
+			;;
+		v7l)
+			arch=arm
+			config=bcm2711_defconfig
+			version=v7l
+			subdir=v7l
+			;;
+		v8)
+			arch=arm64
+			config=bcm2711_defconfig
+			version=v8
+			subdir=v8
+			;;
+		defconfig)
+			config=defconfig
+			subdir=defconfig
+			;;
+		*-*)
+			arch=${target%%-*}
+			flavor=${target#*-}
+			config=ubuntu
+			subdir=${flavor}
+			;;
+		*)
+			echo "Invalid targt: ${target}" >&2
+			exit 2
+			;;
+	esac
+fi
 
 # Debian architecture name
 arch=$(debian_arch "${arch}")
@@ -209,29 +237,11 @@ CROSS_COMPILE=$(dpkg-architecture -a "${arch}" -q DEB_HOST_GNU_TYPE \
                 2>/dev/null)-
 export ARCH CROSS_COMPILE
 
-#
-# FIXME vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-#
-
-if [ -z "${defconfig}" ] ; then
-	if [ -z "${target}" ] ; then
-		defconfig=${ARCH}_defconfig
-	elif [ -e arch/"${ARCH}"/configs/"${target}" ] ; then
-		defconfig=${target}
-	else
-		echo "Failed to determine defconfig" >&2
-		exit 2
-	fi
-fi
-#
-# FIXME ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#
-
 # ----------------------------------------------------------------------------
 # Initialize the build environment
 
 # Initialize the build directory
-buildd=$(pwd)/buildd/${ARCH}/${defconfig%_defconfig}
+buildd=$(pwd)/buildd/${ARCH}/${subdir}
 if ! [ -d "${buildd}" ] ; then
 	mkdir -p "${buildd}"
 fi
@@ -249,8 +259,10 @@ fi
 # ----------------------------------------------------------------------------
 # Generate the kernel config file
 
-# Generate the config file
-if [ "${defconfig}" = "ubuntu" ] ; then
+if [ -e "${config}" ] ; then
+	echo "-- Use config ${config}"
+	cp "${config}" "${buildd}"/.config
+elif [ "${config}" = "ubuntu" ] ; then
 	echo "-- Use Ubuntu config ${arch}-${flavor}"
 	#run fakeroot ./debian/rules clean genconfigs || true
 	#cp CONFIGS/"${arch}"-config.flavour."${flavor}"
@@ -258,8 +270,8 @@ if [ "${defconfig}" = "ubuntu" ] ; then
 	            --arch "${arch}" --flavour "${flavor}" --export > \
 	            "${buildd}"/.config
 else
-	echo "-- Use config ${ARCH}/${defconfig}"
-	run make O="${buildd}" "${defconfig}"
+	echo "-- Use config ${ARCH}/${config}"
+	run make O="${buildd}" "${config}"
 fi
 
 # ----------------------------------------------------------------------------
