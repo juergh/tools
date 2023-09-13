@@ -13,15 +13,8 @@ function out()
 	exit "${rc}"
 }
 
-function pr_error()
-{
-	echo -e "\033[31m${*}\033[0m" 1>&2
-}
-
-function pr_warn()
-{
-	echo -e "\033[33m${*}\033[0m"
-}
+function pr_error() { echo -e "\033[31m${*}\033[0m" >&2 ; }
+function pr_info()  { echo -e "\033[93m${*}\033[0m" ; }
 
 function pr_banner()
 {
@@ -62,34 +55,84 @@ function do_format_patch()
 	git format-patch -o .outgoing "${opts[@]}"
 }
 
-function do_review()
+function do_check()
 {
-	echo
-	for patch in .outgoing/*.patch ; do
-		pr_banner "Patch ${patch#*/}"
-		colordiff < "${patch}"
-	done
+	if [ -e ./scripts/checkpatch.pl ] ; then
+		./scripts/checkpatch.pl .outgoing/*.patch
+	fi
 }
 
-function do_send_email()
+function do_review()
+{
+	{
+		echo
+		for patch in .outgoing/*.patch ; do
+			pr_banner "Patch ${patch#*/}"
+			colordiff < "${patch}"
+		done
+	} | less
+}
+
+function do_send()
 {
 	local opts
 
-	if [ ${#} -eq 0 ] ; then
-		pr_error "Missing options for git-send-email"
-		exit 1
-	fi
+#	if [ ${#} -eq 0 ] ; then
+#		pr_error "Missing options for git-send-email"
+#		exit 1
+#	fi
+	opts=()
 
+	# Add --smtp-server=...
 	account=$(grep -m1 '^From: ' .outgoing/*.patch | head -1)
 	account=${account#*@}
 	account=${account%%.*}
-
-	opts=()
 	opts+=("--smtp-server=${HOME}/bin/msmtp-${account}")
+
+	# Add recipients
+	if [ -e ./scripts/get_maintainer.pl ] ; then
+		pr_info "Maintainers:"
+		to=
+		cc="linux-kernel@vger.kernel.org"
+		while IFS=" " read -r email roles ; do
+			printf "  %-40s %s\n" "${email}" "${roles}"
+			case "${roles}" in
+				"(maintainer"*|"(reviewer"*|"(open list"*|"(supporter"*|\
+				"(moderated list"*)
+					if [ "${email}" != "linux-kernel@vger.kernel.org" ] ; then
+						to="${to},${email}"
+					fi
+					;;
+				"(commit_signer"*|"(authored"*|"(added_lines"*|"(removed_lines"*|\
+				"(odd fixer"*)
+					cc="${cc},${email}"
+					;;
+				*)
+					echo
+					pr_error "Unsupported roles: ${roles}" >&2
+					exit 1
+					;;
+			esac
+		done < <(./scripts/get_maintainer.pl --email --tree --no-git \
+		         --git-fallback --m --r --no-n --l --multiline \
+		         --pattern-depth=0 --remove-duplicates --no-rolestats --roles \
+		         .outgoing/*.patch)
+
+		if [ -z "${to}" ] ; then
+			pr_error "No primary recipient found" >&2
+			exit 1
+		fi
+		opts+=("--to=${to#,}" "--cc=${cc#,}")
+		echo
+	fi
+
+	# Add --dry-run
 	if [ "${FORCE}" -eq 0 ] ; then
 		opts+=("--dry-run")
-		echo "Use -f, --force to send the email"
+		pr_info "Use -f, --force to send the email"
 	fi
+
+	# Add additionally provided options
 	opts+=("${@}")
 
 	pr_banner "git send-email ${opts[*]} ./outgoing/*.patch"
@@ -104,19 +147,19 @@ Usage: git-upstream [-c] [-v NUM] COMMAND [OPTS]
 Helper script for managing upstream submissions.
 
 Supported commands:
-  format-patch [OPTS]         Create a patch (series) in .outgoing/.
-  review                      Review patches in .outgoing/.
-  send-email [OPTS]           Send patches in .outgoing/.
+  format-patch [OPTS]  Create a patch (series) in .outgoing/.
+  check                Check patches in .outgoing/.
+  review               Review patches in .outgoing/.
+  send [OPTS]          Send patches in .outgoing/.
 
-  OPTS                        Additional options for the underlying git
-                              command.
+  OPTS                 Additional options for the underlying git command.
 
 Optional arguments:
-  -c, --cover-letter          Add a cover letter.
-  -f, --force                 Force things.
-  -h, --help                  Show this help text.
-  -v, --version NUM           The revision number of the patch to include in
-                              the subject prefix.
+  -c, --cover-letter   Add a cover letter.
+  -f, --force          Force things.
+  -h, --help           Show this help text.
+  -v, --version NUM    The revision number of the patch to include in the
+                       subject prefix.
 EOF
 }
 
@@ -144,7 +187,7 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			VERSION=${1}
 			;;
-		format-patch|review|send-email)
+		format-patch|check|review|send)
 			cmd=${1//-/_}
 			shift
 			break
