@@ -6,7 +6,7 @@
 function usage()
 {
 	cat <<EOF
-Usage: create-orig-tarball [-h] COMMIT
+Usage: deb-create-orig-tarball [-h] COMMIT
 
 Create an orig tarball for a Debian source package.
 
