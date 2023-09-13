@@ -99,7 +99,7 @@ function do_send_email()
 function usage()
 {
 	cat <<EOF
-Usage: git-deb [-c] [-v NUM] COMMAND [OPTS]
+Usage: git-upstream [-c] [-v NUM] COMMAND [OPTS]
 
 Helper script for managing upstream submissions.
 
