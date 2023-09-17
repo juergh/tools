@@ -51,8 +51,8 @@ function check_cycle()
 	# shellcheck disable=SC1091
 	. "${DEBIAN}"/etc/update.conf
 
-	master=$(sed 's,.* ,,' "${DEBIAN_MASTER}"/tracking-bug)
-	deriv=$(sed 's,.* ,,' "${DEBIAN}"/tracking-bug)
+	master=$(awk '{ print $2 }' "${DEBIAN_MASTER}"/tracking-bug)
+	deriv=$(awk '{ print $2 }' "${DEBIAN}"/tracking-bug)
 
 	printf "%60s: " "matching SRU cycle (${deriv})"
 	if [ "${deriv}" = "${master}" ] ; then
@@ -61,6 +61,21 @@ function check_cycle()
 		pr_warn "(master cycle = ${master})"
 	else
 		pr_fail "(master cycle = ${master})"
+	fi
+
+	prev_master=$(git log --format=%h -- "${DEBIAN_MASTER}"/tracking-bug | head -1 | \
+	              xargs -I{} git show {}~1:"${DEBIAN_MASTER}"/tracking-bug | \
+	              awk '{ print $2}')
+	prev_deriv=$(git log --format=%h -- "${DEBIAN}"/tracking-bug | head -1 | \
+	             xargs -I{} git show {}~1:"${DEBIAN}"/tracking-bug | \
+	             awk '{ print $2}')
+	printf "%60s: " "matching previous SRU cycle (${prev_deriv})"
+	if [ "${prev_deriv}" = "${prev_master}" ] ; then
+		pr_pass
+	elif [ "${prev_deriv%-*}" = "${prev_master%-*}" ] ; then
+		pr_warn "(master cycle = ${prev_master})"
+	else
+		pr_fail "(master cycle = ${prev_master})"
 	fi
 }
 
