@@ -6,19 +6,15 @@ if ! [ -d "${env_dir}" ] ; then
 	python3 -m venv --system-site-packages "${env_dir}"
 fi
 
-# Save
-_debian_chroot=${debian_chroot:-}
-
-echo "Enter Python virtual environment. Type 'exit' to leave..."
+export debian_chroot=pyvenv
 
 # shellcheck disable=SC1091
 . "${env_dir}"/bin/activate
-debian_chroot=pyvenv /bin/bash
-deactivate
 
-# Restore
-if [ -n "${_debian_chroot}" ] ; then
-    debian_chroot=${_debian_chroot}
+if [ ${#} -eq 0 ] ; then
+	/bin/bash
 else
-    unset debian_chroot
+	"${@}"
 fi
+
+deactivate
