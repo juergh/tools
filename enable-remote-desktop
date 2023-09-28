@@ -33,6 +33,11 @@ Optional arguments:
 EOF
 }
 
+if [ "$(id -u)" -eq 0 ] ; then
+	echo "You cannot run this tool as root" >&2
+	exit 1
+fi
+
 virtual=0
 
 while [ ${#} -gt 0 ] ; do
@@ -52,6 +57,11 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
+if ! python3 -c 'import secretstorage' >/dev/null 2>&1 ; then
+	echo "python3 secretstorage module is not available/installed" >&2
+	exit 1
+fi
+
 password=${PASSWORD:-}
 if [ -z "${password}" ] ; then
 	read -r -s -p "Password for user ${USER}: " password
@@ -66,25 +76,15 @@ if keyring_is_locked ; then
 	$(which gnome-keyring-daemon) --start
 fi
 
-# Set the RDP password
-echo "-- Set RDP credentials"
-echo -n "{'username': <'${USER}'>, 'password': <'${password}'>}" |
-	secret-tool store --label="GNOME Remote Desktop RDP credentials" \
-	            "xdg:schema" "org.gnome.RemoteDesktop.RdpCredentials"
+# Disable screen blank
+echo "-- Disable screen blanking"
+gsettings set org.gnome.desktop.session idle-delay "uint32 0"
 
 # Disable automatic suspend
 #gsettings set org.gnome.settings-daemon.plugins.power \
 #		  sleep-inactive-ac-type "nothing"
 
-# Disable screen blank
-echo "-- Disable screen blanking"
-gsettings set org.gnome.desktop.session idle-delay "uint32 0"
-
-echo "-- Enable and configure RDP"
-
-# Enable RDP
-gsettings set org.gnome.desktop.remote-desktop.rdp enable true
-gsettings set org.gnome.desktop.remote-desktop.rdp view-only false
+echo "-- Configure and enable RDP"
 
 if [ ${virtual} -eq 1 ] ; then
 	# Create a virtual monitor
@@ -97,20 +97,28 @@ else
 			  screen-share-mode "mirror-primary"
 fi
 
-# Generate RDP TLS certificate and key
-tls_crt=$(gsettings get org.gnome.desktop.remote-desktop.rdp tls-cert)
-if [ -z "${tls_crt}" ] || ! [ -e "${tls_crt}" ] ; then
+# Set RDP TLS certificate and key
+d=${HOME}/.local/share/gnome-remote-desktop
+tls_crt=${d}/rdp-tls.crt
+tls_key=${d}/rdp-tls.key
+if ! [ -e "${tls_crt}" ] ; then
 	echo "-- Generate RDP TLS certitificate and key"
-	d=${HOME}/.local/share/gnome-remote-desktop
-	tls_crt=${d}/rdp-tls.crt
-	tls_key=${d}/rdp-tls.key
 	mkdir -p "${d}"
 	openssl req -nodes -new -x509 -keyout "${tls_key}" -out "${tls_crt}" \
 			-days 1000 -subj "/CN=GNOME/C=US"
-	gsettings set org.gnome.desktop.remote-desktop.rdp tls-cert "${tls_crt}"
-	gsettings set org.gnome.desktop.remote-desktop.rdp tls-key "${tls_key}"
 fi
+grdctl rdp set-tls-cert "${tls_crt}"
+grdctl rdp set-tls-key "${tls_key}"
+
+# Allow full control and enable RDP
+grdctl rdp set-credentials "${USER}" "${password}"
+grdctl rdp disable-view-only
+grdctl rdp enable
 
 # Restart the service
 echo "-- Restart RDP daemon"
 systemctl --user restart gnome-remote-desktop
+
+# Show status
+echo "-- Status"
+grdctl status
