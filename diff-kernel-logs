@@ -21,10 +21,55 @@ with open('${infile}') as fh:
 "
 }
 
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [-s] INFILE1 INFILE2
+
+Diff two kernel logs (dmesg).
+
+Optinal arguments:
+  -h, --help  Show this help text and exit.
+  -s, --sort  Sort the logs before the diff.
+EOF
+}
+
+p="cat"
+infile1=
+infile2=
+
+while [ ${#} -ne 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-s|--sort)
+			p="sort"
+			;;
+		*)
+			if [ -z "${infile1}" ] ; then
+				infile1=${1}
+			elif [ -z "${infile2}" ] ; then
+				infile2=${1}
+			else
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${infile1}" ] || [ -z "${infile2}" ] ; then
+	usage
+	exit 2
+fi
+
 trap "rm -f /tmp/.{1,2}" INT TERM EXIT HUP
 
-filter "${1}" > /tmp/.1
-filter "${2}" > /tmp/.2
+filter "${infile1}" | "${p}" > /tmp/.1
+filter "${infile2}" | "${p}" > /tmp/.2
 
 colordiff -y -W "$(tput cols)" /tmp/.1 /tmp/.2 || true
 rm -f /tmp/.1 /tmp/.2
