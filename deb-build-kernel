@@ -54,8 +54,8 @@ function run()
 function usage()
 {
 	cat <<EOF
-Usage: deb-build-kernel [-a ARCH] [-b ABI] [-c CPUS] [-d] [-f FLAVOR] [-g]
-                        [-h] [-l] [-n] [-o CFG:VAL] [-s SCHROOT]
+Usage: deb-build-kernel [-a ARCH] [-b ABI] [-c CPUS] [-d] [-g] [-h] [-l] [-n]
+                        [-o CFG:VAL] [-s SCHROOT] [-v VERSION]
                         TARGET [-- ARGS...]
 
 Build Debian kernel packages.
@@ -71,8 +71,7 @@ Supported TARGETs:
   v7                     Build an ARMv7 32-bit kernel.
   v7l                    Build an ARMv7 32-bit LPAE kernel.
   v8                     Build an ARMv8 64-bit kernel.
-  defconfig              Build a kernel using the selected architecture's
-                         defconfig config file.
+  <defconfig>            Build a kernel using the provided defconfig.
   <arch>-<flavor>        Build a kernel using the Ubuntu kernel config file.
   <config_file>          Build a kernel using the provided config file.
 
@@ -82,7 +81,6 @@ Optional arguments:
   -c, --cpus CPUS        Number of CPUs to use for compiling. If not provided,
                          defaults to the number of online CPUs.
   -d, --dry-run
-  -f, --flavor FLAVOR    Kernel flavor name.
   -g, --dbg-pkg          Enable build of kernel debug package.
   -h, --help             Show this help text and exit.
   -l, --clean            Run 'make clean' before the build.
@@ -96,6 +94,7 @@ Optional arguments:
                            s=foo: Set option to string 'foo'
                            v=bar: Set option to value bar
   -s, --schroot SCHROOT  Name of the schroot session to run the build in.
+  -v, --version VERSION
 EOF
 }
 
@@ -105,11 +104,11 @@ SCHROOT=
 arch=$(dpkg-architecture -q DEB_HOST_ARCH)
 abi=9000
 cpus=$(getconf _NPROCESSORS_ONLN)
-flavor=
 dbg_pkg=0
 clean=0
 config_only=0
 configs=()
+version=
 
 target=
 args=("bindeb-pkg")
@@ -131,10 +130,6 @@ while [ ${#} -gt 0 ] ; do
 		-d|--dry-run)
 			DRY_RUN=1
 			;;
-		-f|--flavor)
-			shift
-			flavor=${1#-}
-			;;
 		-g|--dbg-pkg)
 			dbg_pkg=1
 			;;
@@ -155,6 +150,10 @@ while [ ${#} -gt 0 ] ; do
 		-s|--schroot)
 			shift
 			SCHROOT=${1}
+			;;
+		-v|--version)
+			shift
+			version=${1}
 			;;
 		--)
 			shift
@@ -178,7 +177,6 @@ if [ -z "${target}" ] ; then
 fi
 
 config=
-version=
 subdir=
 
 if [ -e "${target}" ] ; then
@@ -211,14 +209,15 @@ else
 			version=v8
 			subdir=v8
 			;;
-		defconfig)
-			config=defconfig
-			subdir=defconfig
+		*defconfig)
+			config=${target}
+			subdir=${target}
 			;;
 		*-*)
 			arch=${target%%-*}
 			flavor=${target#*-}
 			config=ubuntu
+			version=${abi}-${flavor}
 			subdir=${flavor}
 			;;
 		*)
@@ -322,20 +321,26 @@ fi
 
 kernel_version=$(make -k kernelversion 2>/dev/null)
 build_version=$(head -1 "${buildd}"/.version)
-abi_version=$((abi + build_version))
+#abi_version=$((abi + build_version))
 curr_commit=$(git rev-parse HEAD)
 
-if [ -n "${flavor}" ] ; then
-	local_version=-${abi_version}-${flavor}
-	pkg_version=${kernel_version}-${abi_version}+git${curr_commit::8}
-else
-	if [ -n "${version}" ] ; then
-		local_version=-${version}
-	else
-		local_version=
-	fi
-	pkg_version=${kernel_version}-${build_version}+git${curr_commit::8}
-fi
+# FIXME
+
+#if [ -n "${flavor}" ] ; then
+#	local_version=-${abi_version}-${flavor}
+#	pkg_version=${kernel_version}-${abi_version}+git${curr_commit::8}
+#else
+#	if [ -n "${version}" ] ; then
+#		local_version=-${version}
+#	else
+#		local_version=
+#	fi
+#	pkg_version=${kernel_version}-${build_version}+git${curr_commit::8}
+#fi
+
+local_version=-${version#-}
+pkg_version=${kernel_version}-${build_version}+git${curr_commit::8}
+
 echo "-- Kernel version:  ${kernel_version}${local_version}"
 echo "-- Package version: ${pkg_version}"
 
