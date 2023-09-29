@@ -1,0 +1,9 @@
+#!/bin/bash -eu
+
+case "${1,,}" in
+	j|jammy)  h="jammy/linux-raspi/pi-kernel" ;;
+ 	f|focal)  h="focal/linux-raspi/pi-kernel" ;;
+	b|bionic) h="bionic/linux-raspi-5.4/pi-kernel" ;;
+esac
+
+cranky promote-snap "${h}"
