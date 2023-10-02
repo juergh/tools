@@ -75,7 +75,7 @@ function cbd_download()
 		cbd_hash=${cbd_job%-*}
 		cbd_hash=${cbd_hash##*-}
 
-		OUT_DIR=../cbdd/${cbd_hash}
+		OUT_DIR=../cbd.d/${cbd_hash}
 		rm -rf "${OUT_DIR}"
 	fi
 	mkdir -p "${OUT_DIR}"
@@ -126,7 +126,7 @@ Commandline interface for the CBD kernel builder.
 Optional arguments:
   -h, --help           Show this help text and exit.
   -d, --directory DIR  Directory to download the Debian packages to. If not
-                       provided, defaults to '../cbdd/<git_hash>'.
+                       provided, defaults to '../cbd.d/<git_hash>'.
 EOF
 }
 
