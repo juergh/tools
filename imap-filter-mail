@@ -133,6 +133,11 @@ __EOF__
 			  "Launchpad-Message-For/juergh" \
 			  "contain_body('Launchpad-Subscription: linux-firmware')"
 
+	# Move kernel-snaps mail
+	move_mail "Mailing List/Ubuntu/kernel-team" \
+			  "Mailing List/Ubuntu/kernel-team/kernel-snaps" \
+			  "contain_subject('kernel-snaps')"
+
 	# Move Gitea mail
 	move_gitea_mail_done "Canonical/ckctreview" \
 	                     "Canonical/ckctreview/done"
