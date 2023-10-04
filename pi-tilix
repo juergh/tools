@@ -1,0 +1,6 @@
+#!/bin/bash -eu
+
+pi=${1}
+
+tilix --geometry 100x50 -t "SOL ${pi}" -e pi-console "${pi}"
+tilix -a session-add-down -t "SSH ${pi}" -e ssh "${pi}"
