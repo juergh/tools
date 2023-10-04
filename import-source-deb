@@ -41,7 +41,9 @@ function tag_from_version()
 	local version=${1}
 	local tag
 
-	tag=${version//\~/_}
+	tag=${version}
+	tag=${tag#*:}
+	tag=${tag//\~/_}
 
 	echo "${tag}"
 }
@@ -158,7 +160,7 @@ for x in "${ver_or_dsc[@]}" ; do
 		fi
 
 		pull_source_deb "${name}" "${x}"
-		dsc=${name}_${x}.dsc
+		dsc=${name}_${x#*:}.dsc
 	fi
 
 	import_dsc "${dsc}"
