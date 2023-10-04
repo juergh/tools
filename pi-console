@@ -1,0 +1,5 @@
+#!/bin/bash -eu
+
+pi=${1}
+
+console -M ozzy -p 3109 -U "${pi}"
