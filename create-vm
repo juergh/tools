@@ -712,7 +712,7 @@ case "${RELEASE}/${ARCH}/${BOOT_MODE}" in
 			BOOT_MODE="uefi"
 		fi
 		;;
-	core20/*)
+	core*/*)
 		if [ "${BOOT_MODE}" != "uefi" ] ; then
 			pr_warn "Force boot mode to: uefi"
 			BOOT_MODE="uefi"
@@ -756,15 +756,13 @@ config_drive=1
 if [ "${RELEASE#core}" != "${RELEASE}" ] ; then
 	# Ubuntu core doesn't need a config drive
 	config_drive=0
-	if [ "${RELEASE}" = "core20" ] ; then
-		if [ "${SIZE}" -lt 12 ] ; then
-			# Ubuntu core20 is big :-(
-			SIZE=12
-		fi
-		if [ "${MEMORY}" -lt 2048 ] ; then
-			# 1GB is not enough for grub to loopmount the kernel snap
-			MEMORY=2048
-		fi
+	if [ "${SIZE}" -lt 12 ] ; then
+		# Ubuntu core2* is big :-(
+		SIZE=12
+	fi
+	if [ "${MEMORY}" -lt 2048 ] ; then
+		# 1GB is not enough for grub to loopmount the kernel snap
+		MEMORY=2048
 	fi
 fi
 
