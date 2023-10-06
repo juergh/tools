@@ -102,6 +102,11 @@ function set_globals()
 				REPO="debian-generic"
 				;;
 		esac
+	elif [ -e kernel-info.yaml ] ; then
+		SRU=0
+		REPO=${repo_name}
+		branch=$(git rev-parse --abbrev-ref HEAD)
+		TARGET=("${repo_name}:${branch}")
 	fi
 
 	# Unstable is special
