@@ -48,7 +48,7 @@ function cbd_build()
 
 	# Kick off the build
 	logfile=${HOME}/.cache/cbd/${SERIES}--${SOURCE}.log
-	git push "${opts[@]}" 2>&1 | tee "${logfile}"
+	time git push "${opts[@]}" 2>&1 | tee "${logfile}"
 
 	# Source the CBD variables
 	eval "$(sed -n 's/^remote: CBD/CBD/p' "${logfile}")"
