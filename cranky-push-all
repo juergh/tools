@@ -5,12 +5,22 @@
 
 function push_all()
 {
-	local tag branch tracking tracking_remote tracking_branch force
+	local tag branch tracking tmp tracking_remote tracking_branch force
 	local push_tag push_branch push_branch_opts
 
 	tag=$(git describe --exact-match HEAD 2>/dev/null || true)
 	branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+
 	tracking=$(git rev-parse --abbrev-ref '@{u}' 2>/dev/null || true)
+	if [ -z "${tracking}" ] ; then
+		case "${branch}" in
+			cranky/master-next-*) tmp=cranky/master-next ;;
+			cranky/master-*)      tmp=cranky/master ;;
+			*)                    tmp= ;;
+		esac
+		tracking=$(git for-each-ref --format='%(refname:short) %(upstream:short)' refs/heads | \
+		           grep "^${tmp} " | sed 's/.* //')
+	fi
 	tracking_remote=${tracking%%/*}
 	tracking_branch=${tracking#*/}
 
