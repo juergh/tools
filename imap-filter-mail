@@ -140,7 +140,16 @@ __EOF__
 
 	# Move Gitea mail
 	move_gitea_mail_done "Canonical/ckctreview" \
-	                     "Canonical/ckctreview/done"
+	                     "Canonical/ckctreview/00-done"
+	move_mail "Canonical/ckctreview" \
+	          "Canonical/ckctreview/kteam-tools" \
+	          "contain_subject('[kernel/kteam-tools]')"
+	move_mail "Canonical/ckctreview" \
+	          "Canonical/ckctreview/kernel-versions" \
+	          "contain_subject('[kernel/kernel-versions]')"
+	move_mail "Canonical/ckctreview" \
+	          "Canonical/ckctreview/jammy-linux-oem" \
+	          "contain_subject('[kernel/jammy-linux-oem]')"
 
 	# Move noise mail (needs to come last)
 	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
