@@ -139,17 +139,13 @@ __EOF__
 			  "contain_subject('kernel-snaps')"
 
 	# Move Gitea mail
-	move_gitea_mail_done "Canonical/ckctreview" \
-	                     "Canonical/ckctreview/00-done"
-	move_mail "Canonical/ckctreview" \
-	          "Canonical/ckctreview/kteam-tools" \
-	          "contain_subject('[kernel/kteam-tools]')"
-	move_mail "Canonical/ckctreview" \
-	          "Canonical/ckctreview/kernel-versions" \
-	          "contain_subject('[kernel/kernel-versions]')"
-	move_mail "Canonical/ckctreview" \
-	          "Canonical/ckctreview/jammy-linux-oem" \
-	          "contain_subject('[kernel/jammy-linux-oem]')"
+	for f in kteam-tools kernel-versions jammy-linux-oem ; do
+		move_mail "Canonical/ckctreview" \
+		          "Canonical/ckctreview/${f}" \
+		          "contain_subject('[kernel/${f}]')"
+		move_gitea_mail_done "Canonical/ckctreview/${f}" \
+		                     "Canonical/ckctreview/00-done"
+	done
 
 	# Move noise mail (needs to come last)
 	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
