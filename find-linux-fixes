@@ -21,7 +21,7 @@ function find_fixes()
 	local commit=${1} indent=${2:-2}
 	local fixes fix
 
-	readarray -t fixes < <(grep -P "__FIXES__\s+${commit::12}" "${LINUX_FIXES}")
+	readarray -t fixes < <(grep -aP "__FIXES__\s+${commit::12}" "${LINUX_FIXES}")
 
 	for fix in "${fixes[@]}" ; do
 		printf "%0.s " $(seq "${indent}")
