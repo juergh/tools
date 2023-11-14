@@ -1,5 +1,0 @@
-#!/bin/sh
-
-export PATH=/data/git/tools:${PATH}
-
-git-update hourly /data/git > /data/git/git-update-hourly.log 2>&1
