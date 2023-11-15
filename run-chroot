@@ -104,19 +104,20 @@ Usage: run-chroot [-d] [-h] [-l c|s] [-p] [-u USER] [CHROOT[-ARCH]] [--]
 Run a chroot session. Create it first, if it doesn't exist.
 
 Positional arguments:
-  CHROOT                       Name of an existing chroot or session. If not
-                               provided, defaults to the name of the running
-                               release (${release}).
-  ARCH                         Chroot architecture. If not provided, defaults
-                               to the running host architecture (${arch}).
+  CHROOT                 Name of an existing chroot or session. If not
+                         provided, defaults to the name of the running
+                         release (${release}).
+  ARCH                   Chroot architecture. If not provided, defaults
+                         to the running host architecture (${arch}).
 
 Optional 
-  -d, --destroy                Destroy a session.
-  -h, --help                   Show this help text and exit.
-  -l, --list [chroot|session]  List exisiting chroots or sessions.
-  -p, --no-preserve-env        Don't preserve the user's environment inside
-                               the chroot.
-  -u, --user USER              Run the session as the user USER.
+  -d, --destroy          Destroy a session.
+  -h, --help             Show this help text and exit.
+  -l, --list [chroot|session|all]
+                         List existing chroots or sessions or all.
+  -p, --no-preserve-env  Don't preserve the user's environment inside
+                         the chroot.
+  -u, --user USER        Run the session as the user USER.
 EOF
 }
 
@@ -139,12 +140,13 @@ while [ $# -gt 0 ] ; do
 			case "${1:-}" in
 				c|chroot)  regex="^source:"  ;;
 				s|session) regex="^session:" ;;
+				a|all)     regex="^" ;;
 				*)
 					echo "Invalid type: ${1:-}" >&2
 					exit 2
 					;;
 			esac
-			schroot -l --all | grep "${regex}" | sed "s/${regex}//" | sort
+			schroot -l --all | sed -n "s/${regex}//p" | sort
 			exit
 			;;
 		-p|--no-preserve-env)
