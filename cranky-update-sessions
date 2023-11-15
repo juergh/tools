@@ -4,6 +4,10 @@
 #
 
 while IFS= read -r session ; do
+	echo
+	echo "-- $(date -R)"
+	echo "-- Update session ${session}"
+
 	schroot -r -c "${session}" -u root -- apt-get update
 	schroot -r -c "${session}" -u root -- apt-get --yes --with-new-pkgs upgrade
 done < <(schroot -l --all-sessions | grep '^session:cranky-')
