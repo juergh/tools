@@ -8,6 +8,7 @@ user_files=(
 	"${HOME}"/.canonistack/
 	"${HOME}"/.claws-mail/
 	"${HOME}"/.config/gtk-3.0/gtk.css
+	"${HOME}"/.config/terminator/config
 	"${HOME}"/.dput.cf
 	"${HOME}"/.emacs
 	"${HOME}"/.emacs.d/
