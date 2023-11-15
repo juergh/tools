@@ -10,12 +10,13 @@ update_repo()
 	(
 		cd "${repo}" || exit 1
 
-		date -R | tee .update
+		echo
+		echo "-- $(date -R)"
 		echo "-- Update repo $(pwd)"
 
-		git fetch --tags
-		git reset --hard FETCH_HEAD
-		date -R > .update
+		git fetch
+		remote_branch=$(git rev-parse --abbrev-ref '@{u}')
+		git reset --hard "${remote_branch}"
 	)
 }
 
@@ -26,11 +27,11 @@ update_mirror()
 	(
 		cd "${repo}" || exit 1
 
-		date -R | tee .update
+		echo
+		echo "-- $(date -R)"
 		echo "-- Update mirror $(pwd)"
 
-		git fetch --tags
-		date -R > .update
+		git fetch --all --tags
 	)
 }
 
@@ -41,15 +42,6 @@ do_hourly()
 		if [ -d "${repo}"/.git ] ; then
 			update_repo "${repo}"
 		fi
-#		if [ "${repo}" = "kteam-tools" ] ; then
-#			while IFS= read -r line ; do
-#				f=${line#* href=\"}
-#				f=${f%%\"*}
-#				wget -O kteam-tools/info/"${f}" \
-#				        https://kernel.ubuntu.com/info/"${f}"
-#			done < <(curl -s https://kernel.ubuntu.com/info/ | \
-#			         grep -E ' href=.*(json|yaml)')
-#		fi
 	done
 }
 
@@ -61,8 +53,8 @@ do_daily()
 		update_mirror linux.git
 
 		# Update the fixes file
-		echo "-- Find fixes commits"
-		find-fixes linux.git linux.fixes
+		echo "-- Update linux.fixes"
+		tools/find-fixes linux.git linux.fixes
 	fi
 
 	# Update the remaining mirrors
@@ -80,7 +72,7 @@ EOF
 	exit 2
 fi
 
-cmd=${1}
+freq=${1}
 dir=${2}
 
 if ! cd "${dir}" ; then
@@ -88,4 +80,7 @@ if ! cd "${dir}" ; then
 	exit 1
 fi
 
-do_"${cmd}"
+log=git-update-${freq}.log
+mv "${log}" "${log}".1
+
+do_"${freq}" 2>&1 | tee "${log}"
