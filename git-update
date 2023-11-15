@@ -80,7 +80,4 @@ if ! cd "${dir}" ; then
 	exit 1
 fi
 
-log=git-update-${freq}.log
-mv "${log}" "${log}".1
-
-do_"${freq}" 2>&1 | tee "${log}"
+do_"${freq}"
