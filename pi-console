@@ -1,5 +1,57 @@
 #!/bin/bash -eu
 
-pi=${1}
+function usage()
+{
+	cat <<EOF
+Usage: pi-console [-h] [console]
 
-console -M ozzy -p 3109 -U "${pi}"
+Optional arguments:
+  -h, --help  Show this help text and exit.
+  -i, --info  Show console info.
+EOF
+}
+
+info=0
+console=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-i|--info)
+			info=1
+			;;
+		*)
+			if [ -n "${console}" ] ; then
+				usage
+				exit 2
+			fi
+			console=${1}
+	esac
+	shift
+done
+
+console_cmd=("console"
+			 "-M" "ozzy"
+			 "-p" "3109")
+
+if [ ${info} = 1 ] ; then
+	console_cmd+=("-i")
+fi
+
+if [ -n "${console}" ] ; then
+	console_cmd+=("${console}")
+fi
+
+if [ ${info} = 1 ] ; then
+	echo "Name     Users                           State  Perm  Aliases"
+	echo "-------------------------------------------------------------"
+	while IFS=":" read -r name _tmp _tmp _tmp users state perm _tmp _tmp _tmp aliases _tmp _tmp _tmp _tmp ; do
+		printf "%-7s  %-30s  %-5s  %-4s  %s\n" \
+		       "${name}" "${users}" "${state}" "${perm}" "${aliases//,/ }"
+	done < <("${console_cmd[@]}" | sort -V)
+else
+	"${console_cmd[@]}"
+fi
