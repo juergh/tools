@@ -1,0 +1,15 @@
+#!/bin/bash
+
+if [ "$(id -u)" -eq 0 ] ; then
+	exec sudo -u juergh "$0"
+fi
+
+d=/home/juergh/git/cron
+
+log=${d}/cron-daily.log
+mv "${log}" "${log}".1
+
+{
+	"${d}"/tools/git-update daily "${d}"
+	"${d}"/tools/cranky-update-sessions
+} > "${log}" 2>&1
