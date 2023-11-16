@@ -41,13 +41,14 @@ function create_chroot()
 
 	pr_info "Create new chroot ${chroot}"
 
-	mk-sbuild --arch="${chroot#*-}" "${chroot%-*}"
 	if ! grep -s '^/home' '/etc/schroot/sbuild/fstab' >/dev/null; then
 		cat <<EOF | sudo tee --append '/etc/schroot/sbuild/fstab' >/dev/null
 # Allow use of /home for run-chroot
 /home           /home           none    rw,bind         0       0
 EOF
 	fi
+
+	mk-sbuild --arch="${chroot#*-}" "${chroot%-*}"
 }
 
 function create_session()
