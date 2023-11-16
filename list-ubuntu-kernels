@@ -4,6 +4,7 @@
 #
 
 import argparse
+import os
 import yaml
 
 
@@ -12,11 +13,13 @@ def print_source(source, **kwargs):
         line = source['series']['codename'] + ' ' + source['source']
     else:
         line = '  ' + source['source']
-
+        for src in source['packages']:
+            print('  ' + src)
+        
     if kwargs.get('owner'):
         line += ' (' + source.get('owner', '') + ')'
 
-    print(line)
+#    print(line)
 
 
 parser = argparse.ArgumentParser()
@@ -29,7 +32,7 @@ parser.add_argument('--oneline', action='store_true')
 args = parser.parse_args()
 
 if not args.infile:
-    args.infile = '/data/git/kteam-tools/info/kernel-series.yaml'
+    args.infile = os.environ["KERNEL_VERSIONS"] + "/info/kernel-series.yaml"
 with open(args.infile) as fh:
     kernel_series = yaml.safe_load(fh)
 
