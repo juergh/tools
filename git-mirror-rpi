@@ -16,7 +16,7 @@ date -R
 git for-each-ref refs/heads > .heads
 
 echo "-- Update mirror $(pwd)"
-git fetch
+git fetch --tags origin
 
 while IFS= read -r head ; do
 	branch=${head#*refs/heads/}
