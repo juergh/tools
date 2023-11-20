@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+#
+# Show Ubuntu kernel info
+#
+
+import argparse
+import gzip
+import io
+import json
+import sys
+
+import requests
+
+# Package fields
+PKG_FIELDS = (
+    # Series
+    "series.yymm",
+    "series.name",
+    "series.devel",
+    "series.supported",
+    "series.lts",
+    "series.esm",
+    # Source
+    "source.name",
+    "source.owner",
+    "source.devel",
+    "source.supported",
+    "source.forwardport",
+    "source.backport",
+    # Package
+    "package.name",
+    "package.type",
+    "package.repo.url",
+    "package.repo.branch",
+)
+
+# Predefined package selection filters
+PKG_FILTERS = {
+    "supported": {
+        "series.supported": "true",
+        "source.supported": "true",
+        "series.esm": "false",
+    },
+    "devel": {
+        "series.devel": "true",
+        # "source.devel": "true",
+    },
+    "supported-esm": {
+        "series.supported": "true",
+        "source.supported": "true",
+        "series.esm": "true",
+    },
+    "all": {},
+}
+
+
+def parse_kernel_series(ks):
+    """
+    Parse kernel-series JSON and return a list of package dicts
+    """
+    pkgs = []
+    for series, series_data in ks.items():
+        codename = series_data.get("codename")
+        if not codename:
+            continue
+        series_entry = {
+            "series.yymm": series,
+            "series.name": codename,
+            "series.devel": series_data.get("development", False),
+            "series.supported": series_data.get("supported", False),
+            "series.lts": series_data.get("lts", False),
+            "series.esm": series_data.get("esm", False),
+        }
+
+        for source, source_data in series_data.get("sources", {}).items():
+            source_entry = {
+                "source.name": source,
+                "source.owner": source_data.get("owner"),
+                "source.devel": source_data.get("development", False),
+                "source.supported": source_data.get("supported", True),
+                "source.forwardport": source_data.get("copy_forward", False),
+                "source.backport": source_data.get("backport", False),
+            }
+
+            for package, package_data in source_data.get("packages", {}).items():
+                if not package_data:
+                    continue
+                repo = package_data.get("repo")
+                if not repo:
+                    continue
+                package_entry = {
+                    "package.name": package,
+                    "package.type": package_data.get("type", "main"),
+                    "package.repo.url": repo[0],
+                    "package.repo.branch": (repo[1] if len(repo) > 1 else "master"),
+                }
+
+                entry = dict(series_entry)
+                entry.update(source_entry)
+                entry.update(package_entry)
+                for key, val in dict(entry).items():
+                    entry[key] = str(val).lower()
+                pkgs.append(entry)
+
+    return pkgs
+
+
+def filter_packages(pkgs, f):
+    """
+    Return a list of filtered kernel packages
+    """
+    # Filter the packages
+    filtered = []
+    for pkg in pkgs:
+        if f.items() <= pkg.items():
+            filtered.append(pkg)
+
+    return filtered
+
+
+def print_package(pkg, fields=None, verbose=False):
+    """
+    Print a single package
+    """
+    if not fields:
+        # Print all fields
+        fields = PKG_FIELDS
+
+    if verbose:
+        data = [f"{f}={pkg[f]}" for f in PKG_FIELDS if f in fields]
+    else:
+        data = [pkg[f] for f in PKG_FIELDS if f in fields]
+
+    print(" ".join(data))
+
+
+def main():
+    """
+    Main entry point
+    """
+    desc = "Provides information about Ubuntu's kernels."
+    parser = argparse.ArgumentParser(description=desc)
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Enable verbose output"
+    )
+    parser.add_argument(
+        "--main", action="store_true", help="Show 'main' package information"
+    )
+    parser.add_argument(
+        "selection",
+        nargs="+",
+        help="Select which kernels to list. Possible values are: "
+        "supported, devel, supported-esm, all (and dump).",
+    )
+    args = parser.parse_args()
+
+    # Special selection
+    dump = "dump" in args.selection
+
+    # Create the filter list
+    if not dump:
+        pkg_filters = []
+        for sel in args.selection:
+            if sel not in PKG_FILTERS:
+                print(f"ubuntu-kernel-info: error: invalid argument: {sel}")
+                sys.exit(2)
+            f = PKG_FILTERS[sel]
+            if args.main:
+                f["package.type"] = "main"
+            pkg_filters.append(f)
+
+    # Download and gunzip kernel-series.json
+    r = requests.get("https://kernel.ubuntu.com/info/kernel-series.json.gz", timeout=5)
+    with gzip.open(io.BytesIO(r.content)) as fh:
+        ks = json.load(fh)
+
+    if dump:
+        print(json.dumps(ks, indent=4))
+        sys.exit(0)
+
+    # Parse kernel-series
+    pkgs = parse_kernel_series(ks)
+
+    # Filter the package list
+    pkgs_filtered = []
+    for f in pkg_filters:
+        pkgs_filtered.extend(filter_packages(pkgs, f))
+
+    # Print the filtered list
+    for pkg in pkgs_filtered:
+        print_package(pkg, verbose=args.verbose)
+
+
+if __name__ == "__main__":
+    main()
