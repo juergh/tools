@@ -148,19 +148,20 @@ def main():
     )
     parser.add_argument(
         "selection",
-        nargs="+",
-        help="Select which kernels to list. Possible values are: "
-        "supported, devel, supported-esm, all (and dump).",
+        help="Select which kernels to list. Comma-separated list. "
+        "Possible values are: supported, devel, supported-esm, all (and dump).",
     )
     args = parser.parse_args()
 
+    selection = args.selection.split(",")
+
     # Special selection
-    dump = "dump" in args.selection
+    dump = "dump" in selection
 
     # Create the filter list
     if not dump:
         pkg_filters = []
-        for sel in args.selection:
+        for sel in selection:
             if sel not in PKG_FILTERS:
                 print(f"ubuntu-kernel-info: error: invalid argument: {sel}")
                 sys.exit(2)
