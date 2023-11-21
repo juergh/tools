@@ -141,10 +141,14 @@ def main():
     desc = "Provides information about Ubuntu's kernels."
     parser = argparse.ArgumentParser(description=desc)
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose output"
+        "-t",
+        "--pkg-type",
+        choices=("main", "meta", "signed", "lrm"),
+        help="List only information for the provided package type. "
+        "Possible values are: main, meta, signed, lrm.",
     )
     parser.add_argument(
-        "--main", action="store_true", help="Show 'main' package information"
+        "-v", "--verbose", action="store_true", help="Enable verbose output"
     )
     parser.add_argument(
         "selection",
@@ -166,8 +170,8 @@ def main():
                 print(f"ubuntu-kernel-info: error: invalid argument: {sel}")
                 sys.exit(2)
             f = PKG_FILTERS[sel]
-            if args.main:
-                f["package.type"] = "main"
+            if args.pkg_type:
+                f["package.type"] = args.pkg_type
             pkg_filters.append(f)
 
     # Download and gunzip kernel-series.json
