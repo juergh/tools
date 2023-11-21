@@ -141,31 +141,39 @@ def main():
     desc = "Provides information about Ubuntu's kernels."
     parser = argparse.ArgumentParser(description=desc)
     parser.add_argument(
+        "-f",
+        "--field",
+        help="List only the provided fields. If not provided, lists all fields. "
+        "Comma-separated list. "
+        f"Possible values are: {', '.join(PKG_FIELDS)}.",
+    )
+    parser.add_argument(
         "-t",
         "--pkg-type",
-        choices=("main", "meta", "signed", "lrm"),
-        help="List only information for the provided package type. "
+        help="List only packages of the provided type. If not provided, lists all packages. "
         "Possible values are: main, meta, signed, lrm.",
     )
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose output"
+        "-v", "--verbose", action="store_true", help="Enable verbose output."
     )
     parser.add_argument(
         "selection",
-        help="Select which kernels to list. Comma-separated list. "
+        help="Select which kernels to list. "
+        "Comma-separated list. "
         "Possible values are: supported, devel, supported-esm, all (and dump).",
     )
     args = parser.parse_args()
 
-    selection = args.selection.split(",")
+    fields = args.field.split(",") if args.field else None
+    selections = args.selection.split(",")
 
     # Special selection
-    dump = "dump" in selection
+    dump = "dump" in selections
 
     # Create the filter list
     if not dump:
         pkg_filters = []
-        for sel in selection:
+        for sel in selections:
             if sel not in PKG_FILTERS:
                 print(f"ubuntu-kernel-info: error: invalid argument: {sel}")
                 sys.exit(2)
@@ -193,7 +201,7 @@ def main():
 
     # Print the filtered list
     for pkg in pkgs_filtered:
-        print_package(pkg, verbose=args.verbose)
+        print_package(pkg, fields=fields, verbose=args.verbose)
 
 
 if __name__ == "__main__":
