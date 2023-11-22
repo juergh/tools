@@ -229,7 +229,7 @@ cbd_pos_args=(
 
 function do_cbd()
 {
-	run cbd-cli build "${CBD_ARGS[@]}"
+	run cbd-cli -n build "${CBD_ARGS[@]}"
 }
 
 # push ------------------------------------------------------------------------
