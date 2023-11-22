@@ -15,6 +15,10 @@ function out()
 		git branch -D "${CBD_BRANCH}" >/dev/null
 	fi
 
+	if [ "${rc}" -ne 0 ] ; then
+		echo "-- Script failed" >&2
+	fi
+
 	exit "${rc}"
 }
 
@@ -44,11 +48,15 @@ function cbd_build()
 	fi
 	opts+=("${@}" "-o" "vars")
 
-	echo "-- Push ${opts[*]}"
+	echo "-- git push ${opts[*]}"
 
 	# Kick off the build
 	logfile=${HOME}/.cache/cbd/${SERIES}--${SOURCE}.log
-	time git push "${opts[@]}" 2>&1 | tee "${logfile}"
+	{ time git push "${opts[@]}" 2>&1 || exit 1 ; } | tee "${logfile}"
+
+	if [ "${NO_DOWNLOAD}" -eq 1 ] ; then
+		return
+	fi
 
 	# Source the CBD variables
 	eval "$(sed -n 's/^remote: CBD/CBD/p' "${logfile}")"
@@ -117,20 +125,27 @@ function cbd_help()
 function usage()
 {
 	cat <<EOF
-Usage: cbd-cli [-h] [-d DIR] build [COMMIT] [CBD_OPTS]
+Usage: cbd-cli [-h] [-d DIR] [-n] build [COMMIT] [CBD_OPTS]
        cbd-cli [-h] [-d DIR] download CBD_JOB
        cbd-cli [-h] help
 
 Commandline interface for the CBD kernel builder.
 
+Supported commands:
+  build                Build (and download) kernel packages.
+  download             Download kernel packages.
+  help                 Show CBD help.
+
 Optional arguments:
   -h, --help           Show this help text and exit.
   -d, --directory DIR  Directory to download the Debian packages to. If not
                        provided, defaults to '../cbd.d/<git_hash>'.
+  -n, --no-download    Don't download packages after the build.
 EOF
 }
 
 OUT_DIR=
+NO_DOWNLOAD=0
 cmd=
 
 while [ $# -gt 0 ] ; do
@@ -142,6 +157,9 @@ while [ $# -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-n|--no-download)
+			NO_DOWNLOAD=1
 			;;
 		build|download|help)
 			cmd=${1}
