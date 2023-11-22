@@ -24,7 +24,7 @@ function out()
 
 function cbd_build()
 {
-	local opts logfile
+	local opts commit logfile
 
 	if [ -z "${SERIES}" ] ; then
 		echo "-- Not an Ubuntu kernel repository" >&2
@@ -52,9 +52,11 @@ function cbd_build()
 
 	# Kick off the build
 	logfile=${HOME}/.cache/cbd/${SERIES}--${SOURCE}.log
-	{ time git push "${opts[@]}" 2>&1 || exit 1 ; } | tee "${logfile}"
+	{
+		time git push "${opts[@]}" || echo "FAILED"
+	} 2>&1 | tee "${logfile}"
 
-	if [ "${NO_DOWNLOAD}" -eq 1 ] ; then
+	if [ "${NO_DOWNLOAD}" -eq 1 ] && ! grep -q FAILED "${logfile}" ; then
 		return
 	fi
 
