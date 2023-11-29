@@ -338,7 +338,10 @@ curr_commit=$(git rev-parse HEAD)
 #	pkg_version=${kernel_version}-${build_version}+git${curr_commit::8}
 #fi
 
-local_version=-${version#-}
+local_version=${version#-}
+if [ -n "${local_version}" ] ; then
+	local_version=-${local_version}
+fi
 pkg_version=${kernel_version}-${build_version}+git${curr_commit::8}
 
 echo "-- Kernel version:  ${kernel_version}${local_version}"
