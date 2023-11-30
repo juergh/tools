@@ -267,9 +267,15 @@ if [ "${config}" = "UBUNTU" ] ; then
 	echo "-- Use Ubuntu config ${arch}-${flavor}"
 	#run fakeroot ./debian/rules clean genconfigs || true
 	#cp CONFIGS/"${arch}"-config.flavour."${flavor}"
-	run python3 ./debian/scripts/misc/annotations \
-	            --arch "${arch}" --flavour "${flavor}" --export > \
-	            "${buildd}"/.config
+	if [ ${DRY_RUN} -eq 0 ] ; then
+		run python3 ./debian/scripts/misc/annotations \
+			--arch "${arch}" --flavour "${flavor}" --export > \
+			"${buildd}"/.config
+	else
+		run python3 ./debian/scripts/misc/annotations \
+			--arch "${arch}" --flavour "${flavor}" --export \> \
+			"${buildd}"/.config
+	fi
 elif [ -f "${config}" ] ; then
 	echo "-- Use config ${config}"
 	cp "${config}" "${buildd}"/.config
