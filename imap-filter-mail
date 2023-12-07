@@ -74,7 +74,7 @@ end
 __EOF__
 }
 
-function move_gitea_mail_done()
+function move_mail_gitea_done()
 {
 	local src=${1} dst=${2}
 
