@@ -92,7 +92,7 @@ for _, path in ipairs(paths) do
     for _, message in ipairs(messages) do
       mbox, uid = table.unpack(message)
       id = mbox[uid]:fetch_field('X-Gitea-Issue-ID'):match('%d+')
-      thread = account['${src}']:contain_field('X-Gitea-Issue-ID', id)
+      thread = account[path]:contain_field('X-Gitea-Issue-ID', id)
       move_messages(thread, account['${dst}'])
     end
   end
