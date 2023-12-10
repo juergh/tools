@@ -77,15 +77,24 @@ def do_mp3_bpm_show(args):
         print('  BPM: {:.2f}'.format(bpm))
     return 0
 
-@add('help', 'Convert to mp3')
-def do_mp3_convert(args):
+@add("arg", "-f", "--format", choices=("mp3", "ogg"), required=True)
+@add('help', 'Convert to mp3 or ogg')
+def do_convert(args):
     """
     Convert mp3
     """
+
+    if args.format == "ogg":
+        ext = ".ogg"
+        codec = "libvorbis"
+    else:
+        ext = ".mp3"
+        codec = "libmp3lame"
+
     ffmpeg_opts = (
         '-y',
         '-loglevel', '24',
-        '-codec:a', 'libmp3lame',
+        '-codec:a', codec,
         '-b:a', '192k',
         '-ac:a', '2',
         '-ar:a', '44100',
@@ -94,14 +103,14 @@ def do_mp3_convert(args):
 
     for f in args.file:
         print(f)
-        new = f + ".mp3"
+        new = f + ext
         # pylint: disable=W1510
         proc = subprocess.run(('ffmpeg', '-i', f) + ffmpeg_opts + (new, ))
         if proc.returncode:
             print('Failed to convert {}'.format(f))
         else:
             os.remove(f)
-            os.replace(new, os.path.splitext(f)[0] + ".mp3")
+            os.replace(new, os.path.splitext(f)[0] + ext)
     return 0
 
 @add('help', 'Show mp3 information')
