@@ -145,6 +145,8 @@ function do_dkms()
 {
 	if [ -e ./update-dkms-versions ] ; then
 		run ./update-dkms-versions
+	else
+		run "${CRANKY}" update-dkms-versions
 	fi
 }
 
