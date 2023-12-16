@@ -127,7 +127,7 @@ function cbd_help()
 function usage()
 {
 	cat <<EOF
-Usage: cbd-cli [-h] [-d DIR] [-n] build [COMMIT] [CBD_OPTS]
+Usage: cbd-cli [-h] [-d DIR] [-n] [-s SERIES] build [COMMIT] [CBD_OPTS]
        cbd-cli [-h] [-d DIR] download CBD_JOB
        cbd-cli [-h] help
 
@@ -143,11 +143,15 @@ Optional arguments:
   -d, --directory DIR  Directory to download the Debian packages to. If not
                        provided, defaults to '../cbd.d/<git_hash>'.
   -n, --no-download    Don't download packages after the build.
+  -s, --series SERIES  Use series SERIES instead of reading it from the
+                       changelog.
 EOF
 }
 
 OUT_DIR=
 NO_DOWNLOAD=0
+SERIES=
+SOURCE=
 cmd=
 
 while [ $# -gt 0 ] ; do
@@ -162,6 +166,10 @@ while [ $# -gt 0 ] ; do
 			;;
 		-n|--no-download)
 			NO_DOWNLOAD=1
+			;;
+		-s|--series)
+			shift
+			SERIES=${1}
 			;;
 		build|download|help)
 			cmd=${1}
@@ -181,16 +189,16 @@ CBD_BRANCH=
 TMP_DIR=
 trap out EXIT INT TERM HUP
 
-SERIES=
-SOURCE=
 if [ -e debian/debian.env ] ; then
 	# shellcheck disable=SC1091
 	. debian/debian.env
 	SOURCE=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
-	SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
-	if [ "${SERIES}" = "UNRELEASED" ] ; then
-		SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution \
-									 -o 1 -c 1)
+	if [ -z "${SERIES}" ] ; then
+		SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
+		if [ "${SERIES}" = "UNRELEASED" ] ; then
+			SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution \
+										 -o 1 -c 1)
+		fi
 	fi
 fi
 
