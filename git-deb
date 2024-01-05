@@ -303,23 +303,40 @@ function do_request_pull()
 		fi
 	fi
 
-	# Get the remote where we pushed this branch to
-	commit=$(git rev-parse "${end}")
+	# FIXME --------------------------------------------------------
+
 	branch=$(git rev-parse --abbrev-ref "${end}")
-	readarray -t remotes < <(git for-each-ref refs/remotes | \
-								 grep "^${commit}.*/${branch}$" || true)
-	if [ ${#remotes[@]} -eq 0 ] ; then
-		pr_error "Remote of branch '${branch}' not found"
-		exit 1
-	elif [ ${#remotes[@]} -gt 1 ] ; then
-		pr_error "Error: Multiple remotes of branch '${branch}' found"
-		exit 1
-	fi
-	remote=${remotes[0]#*refs/remotes/}
-	remote=${remote%%/*}
+	remote_branch=${SERIES}/${SOURCE}/${branch}
+
+	case "${SOURCE}" in
+		linux-meta*)   remote_name=linux-meta ;;
+		linux-signed*) remote_name=linux-signed ;;
+		linux*)        remote_name=linux ;;
+	esac
+
+	remote_url="https://git.launchpad.net/~juergh/+git/${remote_name}"
+
+	# Get the remote where we pushed this branch to
+	#commit=$(git rev-parse "${end}")
+	#branch=$(git rev-parse --abbrev-ref "${end}")
+	#readarray -t remotes < <(git for-each-ref refs/remotes | \
+	#							 grep "^${commit}.*/${branch}$" || true)
+	#if [ ${#remotes[@]} -eq 0 ] ; then
+	#	pr_error "Remote of branch '${branch}' not found"
+	#	exit 1
+	#elif [ ${#remotes[@]} -gt 1 ] ; then
+	#	pr_error "Error: Multiple remotes of branch '${branch}' found"
+	#	exit 1
+	#fi
+	#remote=${remotes[0]#*refs/remotes/}
+	#remote=${remote%%/*}
 
 	# The name of the remote branch
-	remote_branch=${remotes[0]#*refs/remotes/*/}
+	#remote_branch=${remotes[0]#*refs/remotes/*/}
+
+	#remote_url="$(git config "remote.${remote}.url")
+
+	# FIXME --------------------------------------------------------
 
 	# Determine the subject for this pull request
 	buglink=$(git log --format=%b "${end}" -2 | grep -m1 '^BugLink: ' || true)
@@ -364,7 +381,7 @@ Signed-off-by: ${name} <${email}>
 --------
 
 EOF
-	git request-pull "${start}" "$(git config "remote.${remote}.url")" \
+	git request-pull "${start}" "${remote_url}" \
 		"${branch}":"${remote_branch}" | \
 		sed 's,git+ssh://.*git\.,https://git.,'
 }
