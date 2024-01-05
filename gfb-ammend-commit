@@ -173,15 +173,15 @@ def modify_msg(msg, reqs, acks, sobs, provenance, bugs, cves, note, prefix,
     # Insert an empty line before the last 'cherry picked/backported from' line
 
     # Get the index of the last 'cherry picked/backported from' line
-    idx = 0
-    for i, m in enumerate(msg):
-        if (("(cherry picked from commit" in m or
-             "(forward ported from commit" in m or
-             "(backported from commit" in m)):
-            idx = i
+    #idx = 0
+    #for i, m in enumerate(msg):
+    #    if (("(cherry picked from commit" in m or
+    #         "(forward ported from commit" in m or
+    #         "(backported from commit" in m)):
+    #        idx = i
 
-    if msg[idx - 1] != "":
-        msg.insert(idx, "")
+    #if msg[idx - 1] != "":
+    #    msg.insert(idx, "")
 
     # -------------------------------------------------------------------------
     # Prepend the subject to the message
