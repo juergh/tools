@@ -12,7 +12,8 @@ Push the provided (or current branch) to juergh's LP linux repo.
 
 Optional arguments:
   -d, --dry-run  Do a dry-run.
-  -f, --force    Do a force-with-lease push.
+  -f, --force    Do a --force-with-lease push. Provide it twice to do a
+                 --force push.
   -h, --help     Show this help text and exit.
 EOF
 }
@@ -23,7 +24,7 @@ if ! [ -d debian ] ; then
 fi
 
 dry_run=0
-opts=()
+force=0
 branch=
 
 while [ ${#} -gt 0 ] ; do
@@ -32,7 +33,7 @@ while [ ${#} -gt 0 ] ; do
 			dry_run=1
 			;;
 		-f|--force)
-			opts+=("--force-with-lease")
+			force=$((force + 1))
 			;;
 		-h|--help)
 			usage
@@ -56,6 +57,13 @@ if [ -z "${branch}" ] ; then
 		echo "Unable to determine current branch name" >&2
 		exit 1
 	fi
+fi
+
+opts=()
+if [ ${force} -eq 1 ] ; then
+	opts+=("--force-with-lease")
+elif [ ${force} -eq 2 ] ; then
+	opts+=("--force")
 fi
 
 # TODO: switch to branch to determine the below
