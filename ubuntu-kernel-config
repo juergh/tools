@@ -1,0 +1,313 @@
+#!/bin/bash -eu
+#
+# Manage Ubuntu kernel configs
+#
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	if [ "${KEEP_DIR}" -eq 1 ] ; then
+		echo "-- Temporary directory: ${TMP_DIR}"
+	else
+		rm -rf "${TMP_DIR}"
+	fi
+
+	rm -f arch/*/configs/ubuntu_defconfig
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "-- Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function do_config_check()
+{
+	local fail arch_flavour arch flavour tmp_conf_file
+
+	echo
+	echo "-- Running config checks for all configurations ..."
+
+	fail=0
+	for arch_flavour in ${FLAVOURS} ; do
+		arch=${arch_flavour%%-*}
+		flavour=${arch_flavour#*-}
+		tmp_conf_file=${TMP_DIR}/${arch}-config.flavour.${flavour}
+
+		echo
+		echo "-- Run config-check for ${arch}-${flavour} ..."
+		python3 debian/scripts/misc/annotations -f "${ANNOTATIONS_FILE}" \
+		        --arch "${arch}" --flavour "${flavour}" --check "${tmp_conf_file}" || \
+			fail=$((fail + 1))
+	done
+
+	if [ ${fail} -gt 0 ] ; then
+		RC=1
+		echo >&2
+		echo "-- ${fail} config check failure(s) detected" >&2
+	fi
+}
+
+function do_import()
+{
+	local fail arch_flavour arch flavour tmp_conf_file
+
+	echo
+	echo "-- Importing all configurations ..."
+	echo
+
+	fail=0
+	for arch_flavour in ${FLAVOURS} ; do
+		arch=${arch_flavour%%-*}
+		flavour=${arch_flavour#*-}
+		tmp_conf_file=${TMP_DIR}/${arch}-config.flavour.${flavour}
+
+		echo "-- Import configs for ${arch}-${flavour} ..."
+		python3 debian/scripts/misc/annotations -f "${ANNOTATIONS_FILE}" \
+		        --arch "${arch}" --flavour "${flavour}" --import "${tmp_conf_file}" || \
+			fail=$((fail + 1))
+	done
+
+	if [ ${fail} -gt 0 ] ; then
+		RC=1
+		echo >&2
+		echo "-- ${fail} import failure(s) detected" >&2
+	fi
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: ubuntu-kernel-config [-h] [-k] [-s] COMMAND
+
+Manage Ubuntu kernel configs.
+
+Supported commands:
+  updateconfigs      synconfig
+  defaultconfigs     olddefconfig
+  genconfigs         oldconfig plus configs saved to CONFIGS
+  editconfigs        menuconfig for select arches
+
+  listnewconfigs     listnewconfig
+  gendefconfigs      savedefconfig plus defconfigs saved to DEFCONFIGS
+  defconfig          defconfig
+
+Optional arguments:
+  -h, --help         Show this help text and exit.
+  -k, --keep-dir     Keep the temporary directory.
+  -s, --skip-checks  Skip config checks.
+EOF
+}
+
+KEEP_DIR=0
+skip_checks=0
+mode=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-k|--keep-dir)
+			KEEP_DIR=1
+			;;
+		-s|--skip-checks)
+			skip_checks=1
+			;;
+		updateconfigs|defaultconfigs|genconfigs|editconfigs|\
+		listnewconfigs|gendefconfigs|defconfig)
+			if [ -n "${mode}" ] ; then
+				echo "-- Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			mode=${1}
+			;;
+		*)
+			echo "-- Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+if [ -z "${mode}" ] ; then
+	usage
+	exit 2
+fi
+
+if ! [ -e debian/debian.env ] ; then
+	echo "-- Not an Ubuntu kernel source directory" >&2
+	exit 1
+fi
+
+# Defaults
+check_configs=1
+import_configs=1
+save_configs=
+
+case "${mode}" in
+	updateconfigs)
+		target="syncconfig"
+		;;
+	defaultconfigs)
+		target="olddefconfig"
+		;;
+	genconfigs)
+		target="oldconfig"
+		import_configs=0
+		save_configs="CONFIGS"
+		;;
+	editconfigs)
+		# target is set later based on user input
+		target=
+		;;
+
+	# New modes
+	listnewconfigs)
+		target="listnewconfig"
+		check_configs=0
+		import_configs=0
+		;;
+	gendefconfigs)
+		target="savedefconfig"
+		check_configs=0
+		import_configs=0
+		save_configs="DEFCONFIGS"
+		;;
+	defconfigs)
+		target="defconfig"
+		;;
+	*)
+		echo "-- Invalid mode: ${1}" >&2
+		exit 1
+		;;
+esac
+
+# shellcheck disable=SC1091
+. debian/debian.env
+
+TMP_DIR=$(mktemp -d)
+trap out EXIT INT TERM HUP
+
+ANNOTATIONS_FILE=${DEBIAN}/config/annotations
+FLAVOURS=$(sed -ne 's/^# FLAVOUR: //p' "${ANNOTATIONS_FILE}")
+
+tmp_build_dir=${TMP_DIR}/build
+
+for arch_flavour in ${FLAVOURS} ; do
+	arch=${arch_flavour%%-*}
+	flavour=${arch_flavour#*-}
+	tmp_conf_file=${TMP_DIR}/${arch}-config.flavour.${flavour}
+
+	# Map Debian arch to kernel arch
+	case "${arch}" in
+		amd64)   kern_arch="x86_64" ;;
+		arm64)   kern_arch="arm64" ;;
+		armhf)   kern_arch="arm" ;;
+		ppc64el) kern_arch="powerpc" ;;
+		riscv64) kern_arch="riscv" ;;
+		s390x)   kern_arch="s390" ;;
+		*)       echo "-- Unsupported architecture: ${arch}" >&2
+		         exit 1 ;;
+	esac
+
+	# Determine cross compiler
+	cross_compile="$(dpkg-architecture -qDEB_HOST_GNU_TYPE -a"${arch}" 2>/dev/null)-"
+
+	# Arch-specific compiler, if any
+	arch_gcc=$(cat <<EOF | make -s -f - all
+DROOT=debian
+DEBIAN=${DEBIAN}
+include debian/rules.d/0-common-vars.mk
+include ${DEBIAN}/rules.d/${arch}.mk
+all:
+	@echo \$(if \$(gcc),\$(gcc),gcc)
+EOF
+	)
+
+	gcc_path=$(which "${cross_compile}${arch_gcc}" || true)
+	if [ -z "${gcc_path}" ] ; then
+		echo "-- ${cross_compile}${arch_gcc} not installed" >&2
+		exit 1
+	fi
+
+	if [ "${mode}" = "editconfigs" ] ; then
+		while true ; do
+			echo -n "Do you want to edit configs for ${arch}-${flavour}? [Y/n] "
+			read -r choice
+			case "${choice,,}" in
+				y|"")
+					target="menuconfig"
+					break
+					;;
+				n)
+					target="syncconfig"
+					break
+					;;
+			esac
+		done
+	fi
+
+	rm -rf "${tmp_build_dir}"
+	mkdir -p "${tmp_build_dir}"
+
+	# Generate .config from annotations
+	python3 debian/scripts/misc/annotations -f "${ANNOTATIONS_FILE}" \
+	        --arch "${arch}" --flavour "${flavour}" --export > "${tmp_build_dir}"/.config
+
+	# Environment variables for 'make *config'
+	env=(
+		ARCH="${kern_arch}"
+		DEB_ARCH="${arch}"
+		CROSS_COMPILE="${cross_compile}"
+		CC="${gcc_path}"
+	)
+
+	if [ "${target}" = "defconfig" ] ; then
+		# This assumes that the annotiations file contains defconfig data and *not*
+		# full config data
+		mv "${tmp_build_dir}"/.config arch/"${kern_arch}"/configs/ubuntu_defconfig
+		env+=(KBUILD_DEFCONFIG="ubuntu_defconfig")
+	fi
+
+	# Call config target
+	echo
+	echo "-- Run ${target} on ${arch}/${flavour} ..."
+	make O="${tmp_build_dir}" "${env[@]}" "${target}"
+
+	# Move config for further processing
+	if [ "${target}" = "savedefconfig" ] ; then
+		mv "${tmp_build_dir}"/defconfig "${tmp_conf_file}"
+	else
+		mv "${tmp_build_dir}"/.config "${tmp_conf_file}"
+	fi
+done
+
+RC=0
+
+if [ ${check_configs} -eq 1 ] ; then
+	if [ ${skip_checks} -eq 1 ] ; then
+		echo
+		echo "-- Skipping config checks ..."
+	else
+		do_config_check
+	fi
+fi
+
+if [ ${import_configs} -eq 1 ] ; then
+	do_import
+fi
+
+if [ -n "${save_configs}" ] ; then
+	rm -rf "${save_configs}"
+	mkdir -p "${save_configs}"
+	cp "${TMP_DIR}"/*config* "${save_configs}"/
+	echo
+	echo "-- Generated configs in directory ${save_configs}/"
+fi
+
+exit "${RC}"
