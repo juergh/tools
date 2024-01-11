@@ -1,5 +1,37 @@
 #!/bin/bash
 
+function usage()
+{
+	cat <<EOF
+Usage: pyvenv [-h] [-u] [<command> ...]
+
+Enter the Python virtual env or run the provided command in it. Create the
+virtual env first, if it doesn't exist.
+
+Optional arguments:
+  -h, --help     Show this help text and exit.
+  -u, --upgrade  Upgrade the installed pip packages.
+EOF
+}
+
+upgrade=0
+
+for arg in "${@}" ; do
+	case "${arg}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-u|--upgrade)
+			upgrade=1
+			break
+			;;
+		*)
+			break
+			;;
+	esac
+done
+
 env_dir=${HOME}/.cache/python-venv
 
 if ! [ -d "${env_dir}" ] ; then
@@ -11,7 +43,11 @@ export debian_chroot=pyvenv
 # shellcheck disable=SC1091
 . "${env_dir}"/bin/activate
 
-if [ ${#} -eq 0 ] ; then
+if [ ${upgrade} -eq 1 ] ; then
+	echo "-- Upgrade installed packages"
+	pip list --local --outdated | tail -n +3 | awk '{print $1}' | \
+		xargs -n1 pip install -U
+elif [ ${#} -eq 0 ] ; then
 	/bin/bash
 else
 	"${@}"
