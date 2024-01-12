@@ -50,13 +50,13 @@ class Test(unittest.TestCase):
         commit = load_commit("data/buglink-good")
         self.assertTrue(commit.check_buglinks())
 
-    def test_buglink_series_good(self):
-        commit_series = load_commit_series("data/buglink-series-good.*")
-        self.assertTrue(commit_series.check_buglinks())
-
     def test_buglink_series_bad(self):
         commit_series = load_commit_series("data/buglink-series-bad.*")
         self.assertFalse(commit_series.check_buglinks())
+
+    def test_buglink_series_good(self):
+        commit_series = load_commit_series("data/buglink-series-good.*")
+        self.assertTrue(commit_series.check_buglinks())
 
     # Signed-off-by tests
 
@@ -86,13 +86,27 @@ class Test(unittest.TestCase):
         commit = load_commit("data/cherrypick-missing-ubuntu")
         self.assertTrue(commit.check_cherrypick())
 
+    def test_cherrypick_bad(self):
+        commit = load_commit("data/cherrypick-bad")
+        self.assertFalse(commit.check_cherrypick())
+
     def test_cherrypick_good(self):
         commit = load_commit("data/cherrypick-good")
         self.assertTrue(commit.check_cherrypick())
 
-    def test_cherrypick_bad(self):
-        commit = load_commit("data/cherrypick-bad")
+    # Backported from ... tests
+
+    def test_backport_bad(self):
+        commit = load_commit("data/backport-bad")
         self.assertFalse(commit.check_cherrypick())
+
+    def test_backport_good_note_bad(self):
+        commit = load_commit("data/backport-good-note-bad")
+        self.assertFalse(commit.check_cherrypick())
+
+    def test_backport_good_note_good(self):
+        commit = load_commit("data/backport-good-note-good")
+        self.assertTrue(commit.check_cherrypick())
 
 if __name__ == "__main__":
     unittest.main()
