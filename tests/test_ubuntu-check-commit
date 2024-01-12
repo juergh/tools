@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+
+import glob
+import unittest
+
+import ubuntu_check_commit as ucc
+
+class FakeCommit:
+    def __init__(self, msg, hexsha="0123456789012345678901234567890123456789"):
+        self.message = msg
+        self.hexsha = hexsha
+
+def load_commit(msg=None, fname=None):
+    if msg:
+        return ucc.Commit(FakeCommit(msg=msg))
+    if fname:
+        commits = []
+        for f in glob.glob(fname):
+            with open(f, encoding="utf-8") as fh:
+                msg = fh.read()
+            commits.append(ucc.Commit(FakeCommit(msg=msg)))
+        if len(commits) == 1:
+            return commits[0]
+        return commits
+    return None
+
+class Test(unittest.TestCase):
+    def test_title(self):
+        commit = load_commit(msg="foo")
+        self.assertEqual(commit.title, "foo")
+
+    def test_buglink_no(self):
+        commit = load_commit(fname="data/buglink-no")
+        self.assertFalse(commit.check_buglinks())
+
+    def test_buglink_invalid(self):
+        commit = load_commit(fname="data/buglink-invalid")
+        self.assertFalse(commit.check_buglinks())
+
+    def test_buglink_invalid_bug(self):
+        commit = load_commit(fname="data/buglink-invalid-bug")
+        self.assertFalse(commit.check_buglinks())
+
+    def test_buglink_valid(self):
+        commit = load_commit(fname="data/buglink-valid")
+        self.assertTrue(commit.check_buglinks())
+
+if __name__ == "__main__":
+    unittest.main()
