@@ -32,6 +32,8 @@ class Test(unittest.TestCase):
         commit = load_commit(msg="foo")
         self.assertEqual(commit.title, "foo")
 
+    # BugLink tests
+
     def test_buglink_missing(self):
         commit = load_commit("data/buglink-missing")
         self.assertFalse(commit.check_buglinks())
@@ -55,6 +57,20 @@ class Test(unittest.TestCase):
     def test_buglink_series_bad(self):
         commit_series = load_commit_series("data/buglink-series-bad.*")
         self.assertFalse(commit_series.check_buglinks())
+
+    # Signed-off-by tests
+
+    def test_sob_missing(self):
+        commit = load_commit("data/sob-missing")
+        self.assertFalse(commit.check_sob())
+
+    def test_sob_bad(self):
+        commit = load_commit("data/sob-bad")
+        self.assertFalse(commit.check_sob())
+
+    def test_sob_good(self):
+        commit = load_commit("data/sob-good")
+        self.assertTrue(commit.check_sob())
 
 if __name__ == "__main__":
     unittest.main()
