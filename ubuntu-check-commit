@@ -116,21 +116,68 @@ class Commit:
         return res
 
 
-def check_commits(commits):
-    """Check the commits"""
-    res = True
-    for commit in commits:
-        res = commit.check() and res
-    return res
+class CommitSeries:
+    """Simple commit series class"""
+
+    def __init__(self):
+        self.commits = []
+
+    def append(self, commit):
+        """Append the provided commit to the commit series"""
+        self.commits.append(commit)
+
+    def check_buglinks(self):
+        """Check BugLink series consistency"""
+        tmp = None
+        for commit in self.commits:
+            if tmp is None:
+                tmp = commit.buglinks
+            tmp &= commit.buglinks
+        if not tmp:
+            pr_fail("Inconsistent BugLinks")
+            return False
+
+        pr_pass(f"Consistent BugLinks: {tmp}")
+        return True
+
+    def check_sob(self):
+        """Check Signed-off-by series consistency"""
+        tmp = None
+        for commit in self.commits:
+            if tmp is None:
+                tmp = commit.sob
+            if commit.sob != tmp:
+                pr_fail("Inconsistent SOBs")
+                return False
+
+        pr_pass(f"Consistent SOB: {tmp}")
+        return True
+
+    def check(self):
+        """Perform all individual commit and series consistency checks"""
+        res = True
+
+        # Perform individual commit checks
+        for commit in self.commits:
+            res = commit.check() and res
+
+        if len(self.commits) > 1:
+            # Perfom commit series consistency checks
+            pr_info("Check commit series consistency")
+            res = self.check_buglinks() and res
+            res = self.check_sob() and res
+
+        return res
 
 
-def load_commits(repo, start, end):
+def load_commit_series(repo, start, end):
     """Load the commits of the provided repo and range"""
-    commits = []
+    series = CommitSeries()
     repo = git.Repo(repo)
     for c in repo.iter_commits(start + ".." + end, reverse=True):
-        commits.append(Commit(c))
-    return commits
+        series.append(Commit(c))
+    return series
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -146,8 +193,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    commits = load_commits(args.repo, args.start, args.end)
-    res = check_commits(commits)
+    series = load_commit_series(args.repo, args.start, args.end)
+    res = series.check()
     if res:
         print("All checks passed")
         sys.exit(0)
