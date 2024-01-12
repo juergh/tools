@@ -5,45 +5,56 @@ import unittest
 
 import ubuntu_check_commit as ucc
 
+class TestException(Exception):
+    pass
+
 class FakeCommit:
     def __init__(self, msg, hexsha="0123456789012345678901234567890123456789"):
         self.message = msg
         self.hexsha = hexsha
 
-def load_commit(msg=None, fname=None):
+def load_commit(fname=None, msg=None):
     if msg:
         return ucc.Commit(FakeCommit(msg=msg))
-    if fname:
-        commits = []
-        for f in glob.glob(fname):
-            with open(f, encoding="utf-8") as fh:
-                msg = fh.read()
-            commits.append(ucc.Commit(FakeCommit(msg=msg)))
-        if len(commits) == 1:
-            return commits[0]
-        return commits
-    return None
 
+    with open(fname, encoding="utf-8") as fh:
+        msg = fh.read()
+    return ucc.Commit(FakeCommit(msg=msg))
+
+def load_commit_series(fglob):
+    series = ucc.CommitSeries()
+    for fname in glob.glob(fglob):
+        series.append(load_commit(fname))
+    return series
+    
 class Test(unittest.TestCase):
     def test_title(self):
         commit = load_commit(msg="foo")
         self.assertEqual(commit.title, "foo")
 
-    def test_buglink_no(self):
-        commit = load_commit(fname="data/buglink-no")
+    def test_buglink_missing(self):
+        commit = load_commit("data/buglink-missing")
         self.assertFalse(commit.check_buglinks())
 
-    def test_buglink_invalid(self):
-        commit = load_commit(fname="data/buglink-invalid")
+    def test_buglink_bad(self):
+        commit = load_commit("data/buglink-bad")
         self.assertFalse(commit.check_buglinks())
 
-    def test_buglink_invalid_bug(self):
-        commit = load_commit(fname="data/buglink-invalid-bug")
+    def test_buglink_bad_bug(self):
+        commit = load_commit("data/buglink-bad-bug")
         self.assertFalse(commit.check_buglinks())
 
-    def test_buglink_valid(self):
-        commit = load_commit(fname="data/buglink-valid")
+    def test_buglink_good(self):
+        commit = load_commit("data/buglink-good")
         self.assertTrue(commit.check_buglinks())
+
+    def test_buglink_series_good(self):
+        commit_series = load_commit_series("data/buglink-series-good.*")
+        self.assertTrue(commit_series.check_buglinks())
+
+    def test_buglink_series_bad(self):
+        commit_series = load_commit_series("data/buglink-series-bad.*")
+        self.assertFalse(commit_series.check_buglinks())
 
 if __name__ == "__main__":
     unittest.main()
