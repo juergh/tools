@@ -11,6 +11,7 @@ import git
 import requests
 
 RE_SOB = re.compile(r"^Signed-off-by: .* <.*@.*\..*>$")
+RE_CHERRYPICK = re.compile(r"^\(cherry picked from commit [0-9a-f]{40}\)$")
 
 
 def pr_info(*args, **kwargs):
@@ -26,7 +27,7 @@ def pr_fail(*args, **kwargs):
 
 
 def get_buglinks(msg):
-    """Return a list of BugLinks found in the commit message"""
+    """Return the list of BugLinks"""
     buglinks = set()
     for line in msg.split("\n"):
         if line.startswith("BugLink:"):
@@ -42,6 +43,14 @@ def get_sob(msg):
         if line.strip() == "":
             continue
         return ""
+    return ""
+
+
+def get_cherrypick(msg):
+    """Return the last cherry-picked line"""
+    for line in reversed(msg.split("\n")):
+        if line.startswith("(cherry picked from"):
+            return line
     return ""
 
 
@@ -62,6 +71,22 @@ def validate_sob(sob):
     return False
 
 
+def validate_cherrypick(cherrypick):
+    """Validate a cherry-pick tag"""
+    if RE_CHERRYPICK.match(cherrypick):
+        return True
+    return False
+
+
+def commit_type(title):
+    """Return the commit type"""
+    if title.startswith("UBUNTU: SAUCE:"):
+        return "sauce"
+    if title.startswith("UBUNTU:"):
+        return "ubuntu"
+    return "other"
+
+
 class Commit:
     """Simple commit class"""
 
@@ -71,6 +96,7 @@ class Commit:
         self.title, _, self.body = commit.message.partition("\n")
         self.buglinks = get_buglinks(self.body)
         self.sob = get_sob(self.body)
+        self.cherrypick = get_cherrypick(self.body)
 
     def check_buglinks(self):
         """Check BugLinks"""
@@ -84,10 +110,8 @@ class Commit:
                 res = False
             return res
 
-        if self.title.startswith("UBUNTU: [Packaging]") or self.title.startswith(
-            "UBUNTU: [Workflow]"
-        ):
-            # Some specific commits don't require a BugLink
+        if commit_type(self.title) == "ubuntu":
+            # Some commits don't require a BugLink
             pr_pass("No BugLink found (not required)")
             return True
 
@@ -107,12 +131,30 @@ class Commit:
         pr_fail(f"Invalid SOB: {self.sob}")
         return False
 
+    def check_cherrypick(self):
+        """Check cherry-pick tag"""
+        if self.cherrypick:
+            if validate_cherrypick(self.cherrypick):
+                pr_pass(f"Valid cherry-pick tag: {self.cherrypick}")
+                return True
+            pr_fail(f"Invalid cherry-pick tag: {self.cherrypick}")
+            return False
+
+        if commit_type(self.title) == "ubuntu":
+            # Some commits don't require a cherry-pick tag
+            pr_pass("No cherry-pick tag found (not required)")
+            return True
+
+        pr_fail("No cherry-pick tag found")
+        return False
+
     def check(self):
         """Perform all commit checks"""
         pr_info(f'Check commit {self.sha[:12]} ("{self.title}")')
         res = True
         res = self.check_buglinks() and res
         res = self.check_sob() and res
+        res = self.check_cherrypick() and res
         return res
 
 
