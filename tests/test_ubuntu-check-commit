@@ -72,5 +72,27 @@ class Test(unittest.TestCase):
         commit = load_commit("data/sob-good")
         self.assertTrue(commit.check_sob())
 
+    # Cherry-picked from ... tests
+
+    def test_cherrypick_missing(self):
+        commit = load_commit("data/cherrypick-missing")
+        self.assertFalse(commit.check_cherrypick())
+
+    def test_cherrypick_missing_sauce(self):
+        commit = load_commit("data/cherrypick-missing-sauce")
+        self.assertFalse(commit.check_cherrypick())
+
+    def test_cherrypick_missing_ubuntu(self):
+        commit = load_commit("data/cherrypick-missing-ubuntu")
+        self.assertTrue(commit.check_cherrypick())
+
+    def test_cherrypick_good(self):
+        commit = load_commit("data/cherrypick-good")
+        self.assertTrue(commit.check_cherrypick())
+
+    def test_cherrypick_bad(self):
+        commit = load_commit("data/cherrypick-bad")
+        self.assertFalse(commit.check_cherrypick())
+
 if __name__ == "__main__":
     unittest.main()
