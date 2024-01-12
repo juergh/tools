@@ -12,6 +12,8 @@ import requests
 
 RE_SOB = re.compile(r"^Signed-off-by: .* <.*@.*\..*>$")
 RE_CHERRYPICK = re.compile(r"^\(cherry picked from commit [0-9a-f]{40}\)$")
+RE_BACKPORT = re.compile(r"^\(backported from commit [0-9a-f]{40}\)$")
+RE_BACKPORT_NOTE = re.compile(r"^\[[\S]+:.*\]$")
 
 
 def pr_info(*args, **kwargs):
@@ -48,10 +50,15 @@ def get_sob(msg):
 
 def get_cherrypick(msg):
     """Return the last cherry-picked line"""
+    backport = ""
     for line in reversed(msg.split("\n")):
+        if backport:
+            return (backport, line)
         if line.startswith("(cherry picked from"):
-            return line
-    return ""
+            return (line, "")
+        if line.startswith("(backported from"):
+            backport = line
+    return ("", "")
 
 
 def validate_buglink(buglink):
@@ -78,6 +85,20 @@ def validate_cherrypick(cherrypick):
     return False
 
 
+def validate_backport(backport):
+    """Validate a backport tag"""
+    if RE_BACKPORT.match(backport):
+        return True
+    return False
+
+
+def validate_backport_note(backport_note):
+    """Validate a backport note"""
+    if RE_BACKPORT_NOTE.match(backport_note):
+        return True
+    return False
+
+
 def commit_type(title):
     """Return the commit type"""
     if title.startswith("UBUNTU: SAUCE:"):
@@ -96,7 +117,7 @@ class Commit:
         self.title, _, self.body = commit.message.partition("\n")
         self.buglinks = get_buglinks(self.body)
         self.sob = get_sob(self.body)
-        self.cherrypick = get_cherrypick(self.body)
+        self.cherrypick, self.cherrypick_note = get_cherrypick(self.body)
 
     def check_buglinks(self):
         """Check BugLinks"""
@@ -137,6 +158,16 @@ class Commit:
             if validate_cherrypick(self.cherrypick):
                 pr_pass(f"Valid cherry-pick tag: {self.cherrypick}")
                 return True
+
+            if validate_backport(self.cherrypick):
+                pr_pass(f"Valid backport tag: {self.cherrypick}")
+                if validate_backport_note(self.cherrypick_note):
+                    pr_pass(f"Valid backport note: {self.cherrypick_note}")
+                    return True
+
+                pr_fail(f"Invalid backport note: {self.cherrypick_note}")
+                return False
+
             pr_fail(f"Invalid cherry-pick tag: {self.cherrypick}")
             return False
 
