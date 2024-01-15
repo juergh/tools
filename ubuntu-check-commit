@@ -50,15 +50,14 @@ def get_sob(msg):
 
 def get_cherrypick(msg):
     """Return the last cherry-picked line"""
-    backport = ""
+    prev_line = ""
     for line in reversed(msg.split("\n")):
-        if backport:
-            return (backport, line)
         if line.startswith("(cherry picked from"):
-            return (line, "")
+            return (line, "", "")
         if line.startswith("(backported from"):
-            backport = line
-    return ("", "")
+            return ("", line, prev_line)
+        prev_line = line
+    return ("", "", "")
 
 
 def validate_buglink(buglink):
@@ -117,7 +116,7 @@ class Commit:
         self.title, _, self.body = commit.message.partition("\n")
         self.buglinks = get_buglinks(self.body)
         self.sob = get_sob(self.body)
-        self.cherrypick, self.cherrypick_note = get_cherrypick(self.body)
+        self.cherrypick, self.backport, self.backport_note = get_cherrypick(self.body)
         self.type = commit_type(self.title)
 
     def check_buglinks(self):
@@ -160,16 +159,20 @@ class Commit:
                 pr_pass(f"Valid cherry-pick tag: {self.cherrypick}")
                 return True
 
-            if validate_backport(self.cherrypick):
-                pr_pass(f"Valid backport tag: {self.cherrypick}")
-                if validate_backport_note(self.cherrypick_note):
-                    pr_pass(f"Valid backport note: {self.cherrypick_note}")
+            pr_fail(f"Invalid cherry-pick tag: {self.cherrypick}")
+            return False
+
+        if self.backport:
+            if validate_backport(self.backport):
+                pr_pass(f"Valid backport tag: {self.backport}")
+                if validate_backport_note(self.backport_note):
+                    pr_pass(f"Valid backport note: {self.backport_note}")
                     return True
 
-                pr_fail(f"Invalid backport note: {self.cherrypick_note}")
+                pr_fail(f"Invalid backport note: {self.backport_note}")
                 return False
 
-            pr_fail(f"Invalid cherry-pick tag: {self.cherrypick}")
+            pr_fail(f"Invalid backport tag: {self.backport}")
             return False
 
         if self.type == "ubuntu":
