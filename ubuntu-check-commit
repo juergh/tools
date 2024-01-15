@@ -118,6 +118,7 @@ class Commit:
         self.buglinks = get_buglinks(self.body)
         self.sob = get_sob(self.body)
         self.cherrypick, self.cherrypick_note = get_cherrypick(self.body)
+        self.type = commit_type(self.title)
 
     def check_buglinks(self):
         """Check BugLinks"""
@@ -131,7 +132,7 @@ class Commit:
                 res = False
             return res
 
-        if commit_type(self.title) == "ubuntu":
+        if self.type == "ubuntu":
             # Some commits don't require a BugLink
             pr_pass("No BugLink found (not required)")
             return True
@@ -171,7 +172,7 @@ class Commit:
             pr_fail(f"Invalid cherry-pick tag: {self.cherrypick}")
             return False
 
-        if commit_type(self.title) == "ubuntu":
+        if self.type == "ubuntu":
             # Some commits don't require a cherry-pick tag
             pr_pass("No cherry-pick tag found (not required)")
             return True
