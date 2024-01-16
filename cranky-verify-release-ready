@@ -168,7 +168,7 @@ function verify_current()
 	if [ -e "${KTEAM_TOOLS}"/maintscripts/verify-release-ready ] ; then
 		"${KTEAM_TOOLS}"/maintscripts/verify-release-ready || true
 	else
-		"${CRANKY}" verify-release-ready || true
+		"${CRANKY}" verify-release-ready --current || true
 	fi
 }
 
