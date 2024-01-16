@@ -165,7 +165,11 @@ function verify_current()
 	check_cycle
 	check_scycle
 	check_emails
-	"${KTEAM_TOOLS}"/maintscripts/verify-release-ready || true
+	if [ -e "${KTEAM_TOOLS}"/maintscripts/verify-release-ready ] ; then
+		"${KTEAM_TOOLS}"/maintscripts/verify-release-ready || true
+	else
+		"${CRANKY}" verify-release-ready || true
+	fi
 }
 
 function usage()
