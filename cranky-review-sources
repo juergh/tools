@@ -159,7 +159,8 @@ Review the differences between the current kernel source packages and
 previous source packages.
 
 Positional arguments:
-  POCKET         Get the previous package versions from pocket POCKET.
+  POCKET         Get the previous package versions from pocket POCKET. Valid
+                 pockets: release,security,updates,proposed,proposed#2,build#2.
   OFFSET         Get the previous package versions from the changelogs using
                  changelog entry offset OFFSET (1 == previous changelog entry).
   VERSION        Use VERSION as the previous package version.
@@ -190,7 +191,7 @@ while [ ${#} -gt 0 ] ; do
 			usage
 			exit
 			;;
-		release|security|updates|proposed|proposed#2)
+		release|security|updates|proposed|proposed#2|build#2)
 			if [ -n "${PREV_TYPE}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
