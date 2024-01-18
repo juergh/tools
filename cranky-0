@@ -121,7 +121,10 @@ function do_configs()
 # shellcheck disable=SC2034
 link_opt_args=(
 	"[-r] || -r, --rerun || Rerun the commands."
-	"[-s SRU_CYCLE] || -s, --sru-cycle SRU_CYCLE || SRU cycle name (2022.05.30-1, d2022.10.12-2, ...)."
+)
+# shellcheck disable=SC2034
+link_pos_args=(
+	"SRU_CYCLE || SRU_CYCLE || SRU cycle name (2022.05.30, d2022.10.12, ...)."
 )
 
 function do_link()
@@ -328,7 +331,6 @@ fi
 
 DRY_RUN=0
 help=0
-SRU_CYCLE=
 RERUN=0
 REBASE=0
 TAG=
@@ -340,10 +342,6 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-h|--help)
 			help=1
-			;;
-		-s|--sru-cycle)
-			shift
-			SRU_CYCLE=${1}
 			;;
 		-r)
 			REBASE=1
@@ -416,6 +414,13 @@ for arg in "${POS_ARGS[@]}" ; do
 				exit 2
 			fi
 			PPA=${1}
+			;;
+		SRU_CYCLE)
+			if [ ${#} -eq 0 ] ; then
+				usage
+				exit 2
+			fi
+			SRU_CYCLE=${1}
 			;;
 		"[-- CBD_ARGS...]")
 			CBD_ARGS=("${@}")
