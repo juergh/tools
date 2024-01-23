@@ -3,15 +3,57 @@
 # Drop an arbitraty commit
 #
 
-commit=${1::8}
+function usage()
+{
+	cat <<EOF
+Usage: git-drop [-h] [-n] COMMIT [COMMIT ..]
+
+Drop commits from the git log.
+
+Optional arguments:
+  -h, --help     Show this help text and exit.
+  -n, --dry-run
+EOF
+}
+
+dry_run=0
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-n|--dry-run)
+			dry_run=1
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
+
+if [ ${#} -eq 0 ] ; then
+	usage
+	exit 2
+fi
 
 script=$(mktemp)
+# shellcheck disable=SC2064
 trap "rm -f ${script}" EXIT INT TERM HUP
 
-cat <<EOF >"${script}"
-#!/bin/bash
-sed -ie 's/^pick ${commit}/drop ${commit}/' "\${1}"
-EOF
+{
+	echo "#!/bin/bash"
+	for c in "${@}" ; do
+		echo "sed -ie 's/^pick ${c::8}.*/drop ${c::8}/' \"\${1}\""
+	done
+} >"${script}"
 chmod 755 "${script}"
 
-GIT_SEQUENCE_EDITOR="${script}" git rebase -i "${commit}"~1
+if [ ${dry_run} -eq 1 ] ; then
+	cat "${script}"
+	echo "--Dry-run, exiting..."
+else
+	GIT_SEQUENCE_EDITOR="${script}" git rebase -i "${1}"~1
+fi
