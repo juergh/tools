@@ -93,6 +93,12 @@ function unmount_image()
 	rm -f "${mountp}.pid"
 	IMG_MOUNTP=
 }
+function url_valid()
+{
+	local url=${1}
+
+	curl --head --silent --fail "${url}" 2>/dev/null
+}
 
 function download_image()
 {
@@ -188,10 +194,24 @@ function download_ubuntu_image()
 	relnum=$(ubuntu-distro-info --series "${RELEASE}" --release)
 	relnum=${relnum%% *}
 
+	# Release image
 	name=ubuntu-${relnum}-server-cloudimg-${ARCH}${suffix}.img
 	url=https://cloud-images.ubuntu.com/releases/${RELEASE}/release/${name}
+	if url_valid "${url}" ; then
+		download_image "${url}"
+		return
+	fi
 
-	download_image "${url}"
+	# Daily image
+	name=${RELEASE}-server-cloudimg-${ARCH}${suffix}.img
+	url=https://cloud-images.ubuntu.com/daily/server/${RELEASE}/current/${name}
+	if url_valid "${url}" ; then
+		download_image "${url}"
+		return
+	fi
+
+	pr_error "Faild to download image"
+	exit 1
 }
 
 function download_core_image()
@@ -701,12 +721,6 @@ case "${RELEASE}/${ARCH}/${BOOT_MODE}" in
 		exit 1
 		;;
 	*/arm64/*)
-		if [ "${BOOT_MODE}" != "uefi" ] ; then
-			pr_warn "Force boot mode to: uefi"
-			BOOT_MODE="uefi"
-		fi
-		;;
-	xenial/arm64/*)
 		if [ "${BOOT_MODE}" != "uefi" ] ; then
 			pr_warn "Force boot mode to: uefi"
 			BOOT_MODE="uefi"
