@@ -1,0 +1,122 @@
+#!/bin/bash -eu
+#
+# Rebase onto a parent kernel
+#
+
+C=${C:-cranky}
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "-- Rebase failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: ${C} rebase-onto [-h] PARENT [REFSPEC]
+
+Rebase onto parent kernel.
+
+Positional arguments:
+  PARENT         Name of the parent kernel. A local directory with the name
+                 debian.PARENT must exist.
+  REFSPEC        Rebase onto REFSPEC. If not provided, determines the new
+                 base automatically.
+
+Optional arguments:
+  -d, --dry-run
+  -h, --help     Show this help text and exit.
+EOF
+}
+
+dry_run=0
+parent=
+refspec=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-d|--dry-run)
+			dry_run=1
+			;;
+		*)
+			if [ -z "${parent}" ] ; then
+				parent=${1}
+			elif [ -z "${refspec}" ] ; then
+				refspec=${1}
+			else
+				echo "Invalid argument; ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${parent}" ] ; then
+	usage
+	exit 2
+fi
+
+trap out EXIT INT TERM HUP
+
+if ! [ -d debian."${parent}" ] ; then
+	echo "No such directory: debian.${parent}" >&2
+fi
+
+changelog=debian."${parent}"/changelog
+ser=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
+src=$(dpkg-parsechangelog -l "${changelog}" -S Source)
+parent=${ser}:${src}
+
+# Get the git URL/branch of the parent's main package
+read -r _series _type url branch < <("$C" list-repos --include main "${parent}")
+if [ -z "${url}" ] || [ -z "${branch}" ] ; then
+	echo "Failed to determine git repo URL and branch for ${parent}"
+	exit 1
+fi
+
+if [ -z "${refspec}" ] ; then
+	refspec=${branch}
+fi
+
+echo "Fetch ${url} ${refspec}"
+git fetch "${url}" "${refspec}"
+
+# Find the remote parent commit to rebase onto
+new_base=$(git log --format='%H %s' FETCH_HEAD | grep -m1 -E '[0-9a-f]{40} UBUNTU: Ubuntu-' || true)
+if [ -z "${new_base}" ] ; then
+	echo "Failed to find remote parent commit ('UBUNTU: Ubuntu-...')" >&2
+	exit 1
+fi
+echo "Remote parent commit (new base):    ${new_base}"
+
+# Find the latest local parent commit
+cur_base=$(git log --format='%H %s' -- "${changelog}" | grep -m1 -E '[0-9a-f]{40} UBUNTU: Ubuntu-' || true)
+if [ -z "${cur_base}" ] ; then
+	echo "Failed to find local parent commit ('UBUNTU: Ubuntu-...')" >&2
+	exit 1
+fi
+echo "Local parent commit (current base): ${cur_base}"
+
+if [ "${cur_base}" = "${new_base}" ] ; then
+	echo "Already up-to-date"
+	exit 0
+fi
+
+echo "Rebase needed from '${cur_base#* UBUNTU: }' onto '${new_base#* UBUNTU: }'"
+
+echo "git rebase --onto ${new_base%% *} ${cur_base%% *}"
+if [ ${dry_run} -eq 1 ] ; then
+	echo "Dry-run, exiting..."
+	exit
+fi
+
+git rebase --onto "${new_base%% *}" "${cur_base%% *}"
