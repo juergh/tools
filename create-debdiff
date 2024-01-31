@@ -6,7 +6,7 @@
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] [PREVIOUS_VERSION]
+Usage: $(basename "${0}") [-h] [PREVIOUS_VERSION|OFFSET]
 
 Create a debdiff file.
 
@@ -15,7 +15,7 @@ Optional arguments:
 EOF
 }
 
-prev_version=
+prev_version_offset=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -24,24 +24,40 @@ while [ ${#} -gt 0 ] ; do
 			exit
 			;;
 		*)
-			if [ -n "${prev_version}" ] ; then
+			if [ -n "${prev_version_offset}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
-			prev_version=${1}
+			prev_version_offset=${1}
 			;;
 	esac
 	shift
 done
 
-name=$(dpkg-parsechangelog -S Source)
+curr_name=$(dpkg-parsechangelog -S Source)
 curr_version=$(dpkg-parsechangelog -S Version)
-curr_base=../${name}_${curr_version}
+curr_base=../${curr_name}_${curr_version}
 
-if [ -z "${prev_version}" ] ; then
-	prev_version=$(dpkg-parsechangelog -S Version -o 1 -c 1)
-fi
-prev_base=../${name}_${prev_version}
+case "${prev_version_offset}" in
+	"")
+		prev_name=$(dpkg-parsechangelog -S Source -o 1 -c 1)
+		prev_version=$(dpkg-parsechangelog -S Version -o 1 -c 1)
+		;;
+	-*)
+		offset=${prev_version_offset#-}
+		prev_name=$(dpkg-parsechangelog -S Source -o "${offset}" -c 1)
+		prev_version=$(dpkg-parsechangelog -S Version -o "${offset}" -c 1)
+		;;
+	*)
+		prev_name=${curr_name}
+		prev_version=${prev_version_offset}
+		;;
+esac
+prev_base=../${prev_name}_${prev_version}
+
+
+echo "Current base:  ${curr_base}"
+echo "Previous base: ${prev_base}"
 
 if [ -e "${prev_base}".dsc ] && [ -e "${curr_base}".dsc ] ; then
 	prev=${prev_base}.dsc
