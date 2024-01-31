@@ -11,6 +11,12 @@ function out()
 
 	trap - EXIT INT TERM HUP
 
+	if [ -n "${TMP_BRANCH}" ] ; then
+		git reset --hard
+		git checkout -f "${CUR_BRANCH}"
+		git branch -D "${TMP_BRANCH}"
+	fi
+
 	if [ "${rc}" -ne 0 ] ; then
 		echo "-- Rebase failed" >&2
 	fi
@@ -23,21 +29,26 @@ function usage()
 	cat <<EOF
 Usage: ${C} rebase-onto [-h] PARENT [REFSPEC]
 
-Rebase onto parent kernel.
+Rebase onto (or cherry-pick from) a parent kernel.
 
 Positional arguments:
-  PARENT         Name of the parent kernel. A local directory with the name
-                 debian.PARENT must exist.
-  REFSPEC        Rebase onto REFSPEC. If not provided, determines the new
-                 base automatically.
+  PARENT   Name of the parent kernel. A local directory with the name
+           debian.<PARENT> must exist.
+  REFSPEC  Rebase onto (or cherry-pick up to) REFSPEC. If not provided,
+           determines REFSPEC automatically.
 
 Optional arguments:
   -d, --dry-run
-  -h, --help     Show this help text and exit.
+  --force
+  -h, --help               Show this help text and exit.
+  -s, --strategy STRATEGY  Valid values: rebase, cherry-pick. If not provided,
+                           defaults to rebase.
 EOF
 }
 
 dry_run=0
+force=0
+strategy=rebase
 parent=
 refspec=
 
@@ -45,6 +56,17 @@ while [ ${#} -gt 0 ] ; do
 	case "${1}" in
 		-d|--dry-run)
 			dry_run=1
+			;;
+		--force)
+			force=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-s|--strategy)
+			shift
+			strategy=${1}
 			;;
 		*)
 			if [ -z "${parent}" ] ; then
@@ -65,6 +87,16 @@ if [ -z "${parent}" ] ; then
 	exit 2
 fi
 
+case "${strategy}" in
+	rebase|cherry-pick) ;;
+	*)
+		echo "Invalid strategy: ${strategy}" >&2
+		exit 2
+		;;
+esac
+
+TMP_BRANCH=
+CUR_BRANCH=
 trap out EXIT INT TERM HUP
 
 if ! [ -d debian."${parent}" ] ; then
@@ -77,7 +109,7 @@ src=$(dpkg-parsechangelog -l "${changelog}" -S Source)
 parent=${ser}:${src}
 
 # Get the git URL/branch of the parent's main package
-read -r _series _type url branch < <("$C" list-repos --include main "${parent}")
+read -r _series _type url branch < <("$C" list-repos --git-url --include main "${parent}")
 if [ -z "${url}" ] || [ -z "${branch}" ] ; then
 	echo "Failed to determine git repo URL and branch for ${parent}"
 	exit 1
@@ -91,7 +123,7 @@ echo "Fetch ${url} ${refspec}"
 git fetch "${url}" "${refspec}"
 
 # Find the remote parent commit to rebase onto
-new_base=$(git log --format='%H %s' FETCH_HEAD | grep -m1 -E '[0-9a-f]{40} UBUNTU: Ubuntu-' || true)
+new_base=$(git log --format='%H %s' FETCH_HEAD | grep -m1 -E '^[0-9a-f]{40} UBUNTU: Ubuntu-' || true)
 if [ -z "${new_base}" ] ; then
 	echo "Failed to find remote parent commit ('UBUNTU: Ubuntu-...')" >&2
 	exit 1
@@ -99,24 +131,82 @@ fi
 echo "Remote parent commit (new base):    ${new_base}"
 
 # Find the latest local parent commit
-cur_base=$(git log --format='%H %s' -- "${changelog}" | grep -m1 -E '[0-9a-f]{40} UBUNTU: Ubuntu-' || true)
+cur_base=$(git log --format='%H %s' -- "${changelog}" | grep -m1 -E '^[0-9a-f]{40} UBUNTU: Ubuntu-' || true)
 if [ -z "${cur_base}" ] ; then
 	echo "Failed to find local parent commit ('UBUNTU: Ubuntu-...')" >&2
 	exit 1
 fi
 echo "Local parent commit (current base): ${cur_base}"
 
-if [ "${cur_base}" = "${new_base}" ] ; then
-	echo "Already up-to-date"
-	exit 0
+new_base_hash=${new_base%% *}
+new_base_subject=${new_base#* }
+
+cur_base_hash=${cur_base%% *}
+cur_base_subject=${cur_base#* }
+
+if [ "${strategy}" = "rebase" ] ; then
+	if [ "${cur_base}" = "${new_base}" ] ; then
+		echo "Already up-to-date (no rebase necessary)"
+		exit 0
+	fi
+	echo "Rebase needed from '${cur_base_subject}' onto '${new_base_subject}'"
+
+	if [ "${cur_base_subject}" = "${new_base_subject}" ] ; then
+		echo "WARNING: Commit subjects are identical! Did you mean to use --strategy cherry-pick?"
+		if [ ${force} -eq 0 ] ; then
+			echo "Use --force to continue with the rebase"
+			exit 1
+		fi
+	fi
+
+	echo "git rebase --onto ${new_base_hash} ${cur_base_hash}"
+	if [ ${dry_run} -eq 1 ] ; then
+		echo "Dry-run, exiting..."
+		exit
+	fi
+	git rebase --onto "${new_base_hash}" "${cur_base_hash}"
 fi
 
-echo "Rebase needed from '${cur_base#* UBUNTU: }' onto '${new_base#* UBUNTU: }'"
+if [ "${strategy}" = "cherry-pick" ] ; then
+	if [ "${cur_base_subject}" = "${new_base_subject}" ] ; then
+		echo "Already up-to-date (no cherry-picking necessary)"
+		exit 0
+	fi
+	echo "Cherry-picking needed from '${cur_base_subject}' to '${new_base_subject}'"
 
-echo "git rebase --onto ${new_base%% *} ${cur_base%% *}"
-if [ ${dry_run} -eq 1 ] ; then
-	echo "Dry-run, exiting..."
-	exit
+	# Construct the list of commits to cherry-pick
+	new_cur_base=$(git log --format='%H %s' FETCH_HEAD | grep -m1 -E "^[0-9a-f]{40} ${cur_base_subject}$" || true)
+	if [ -z "${new_cur_base}" ] ; then
+		echo "Failed to find remote parent commit ('${cur_base_subject}')" >&2
+		exit 1
+	fi
+	new_cur_base_hash=${new_cur_base%% *}
+
+	echo "Cherry-picking the following commits:"
+	{
+		git log --oneline --no-merges "${new_cur_base_hash}".."${new_base_hash}"
+		git log --oneline --no-merges "${cur_base_hash}"..
+	} | tac
+
+	if [ ${dry_run} -eq 1 ] ; then
+		echo "Dry-run, exiting..."
+		exit
+	fi
+
+	# Switch to a temporary branch to do all the work on
+	CUR_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+	TMP_BRANCH=cranky-rebase-$$
+	git checkout -b "${TMP_BRANCH}" "${cur_base_hash}"
+
+	# Cherry-pick the new parent commits
+	git cherry-pick "${new_cur_base_hash}".."${new_base_hash}"
+
+	# Cherry-pick the remaining current local commits
+	git cherry-pick "${cur_base_hash}".."${CUR_BRANCH}"
+
+	# All done, reset the original branch to the new one
+	git checkout "${CUR_BRANCH}"
+	git reset --hard "${TMP_BRANCH}"
+	git branch -D "${TMP_BRANCH}"
+	TMP_BRANCH=
 fi
-
-git rebase --onto "${new_base%% *}" "${cur_base%% *}"
