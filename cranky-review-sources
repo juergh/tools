@@ -124,7 +124,7 @@ function review_src()
 		esac
 
 		prev_dsc="${src}"_"${prev_version}".dsc
-		if ! [ -e ../"${prev_dsc}" ] ; then
+		if ! [ -e "${PREV_DIR}/${prev_dsc}" ] ; then
 			echo "No previous .dsc found: ${prev_dsc}" >&2
 			return
 		fi
@@ -132,7 +132,7 @@ function review_src()
 		echo "Diffing against ${prev_dsc}"
 
 		# Populate TMPD with symlinks to the previous package files
-		( cd "${TMPD}" && dcmd "${cwd}"/../"${prev_dsc}" | \
+		( cd "${TMPD}" && dcmd "${PREV_DIR}/${prev_dsc}" | \
 			while read -r f ; do ln -sf "${f}" . ; done )
 
 		# Finally call cranky review against TMPD
@@ -153,7 +153,7 @@ function review_src()
 function usage()
 {
 	cat <<EOF
-Usage: cranky-review-sources [-c] [-h] [POCKET|OFFSET|VERSION|ABI]
+Usage: cranky-review-sources [-c] [-d DIR] [-h] [POCKET|OFFSET|VERSION|ABI]
 
 Review the differences between the current kernel source packages and
 previous source packages.
@@ -170,15 +170,18 @@ Positional arguments:
   If no positional argument is provided, process the existing debdiff.
 
 Optional arguments:
-  -c, --current  Only review the source package built from the current
-                 directory.
-  -h, --help     Show this help message and exit.
+  -c, --current       Only review the source package built from the current
+                      directory.
+  -d, --prev-dir DIR  Directory that contains the previous source packages.
+                      If not provided, defaults to ../.
+  -h, --help          Show this help message and exit.
 EOF
 }
 
 CRANKY=${CRANKY:-cranky}
 
 current=0
+PREV_DIR=..
 PREV_TYPE=
 PREV_VAL=
 
@@ -186,6 +189,10 @@ while [ ${#} -gt 0 ] ; do
 	case "${1}" in
 		-c|--current)
 			current=1
+			;;
+		-d|--prev-dir)
+			shift
+			PREV_DIR=${1}
 			;;
 		-h|--help)
 			usage
@@ -230,6 +237,9 @@ while [ ${#} -gt 0 ] ; do
 	esac
 	shift
 done
+
+# Need an absolute path
+PREV_DIR=$(realpath "${PREV_DIR}")
 
 TMPD=
 trap out EXIT
