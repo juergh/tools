@@ -6,22 +6,32 @@
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] [PREVIOUS_VERSION|OFFSET]
+Usage: $(basename "${0}") [-h] [-p] [PREVIOUS_VERSION|OFFSET]
 
 Create a debdiff file.
 
+Positional argument:
+  PREVIOUS_VERSION  Previous source package version.
+  OFFSET            debian/changelog package entry offset.
+                    -1 is the previous entry.
+
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -h, --help   Show this help text and exit.
+  -p, --plain  Generate a plain debdiff without a custom header.
 EOF
 }
 
 prev_version_offset=
+plain=0
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
 		-h|--help)
 			usage
 			exit
+			;;
+		-p|--plain)
+			plain=1
 			;;
 		*)
 			if [ -n "${prev_version_offset}" ] ; then
@@ -71,9 +81,11 @@ else
 fi
 
 {
-	# Add a 'header' that identifies the previous and current dsc
-	echo "# HEADER Current:  ${curr##*/}"
-	echo "# HEADER Previous: ${prev##*/}"
+	if [ ${plain} -eq 0 ] ; then
+		# Add a 'header' that identifies the previous and current dsc
+		echo "# HEADER Current:  ${curr##*/}"
+		echo "# HEADER Previous: ${prev##*/}"
+	fi
 
 	# Generate the debdiff
 	debdiff "${prev}" "${curr}"
