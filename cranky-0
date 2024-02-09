@@ -175,21 +175,9 @@ function do_close()
 
 # dependents ------------------------------------------------------------------
 
-# shellcheck disable=SC2034
-dependents_opt_args=(
-	"[-r] || -r, --rerun || Rerun the commands."
-)
-
 function do_dependents()
 {
-	local args
-
-	args=()
-	if [ "${RERUN}" -eq 1 ] ; then
-		args+=("--force")
-	fi
-
-	run cranky-update-dependents "${args[@]}"
+	run cranky-update-dependents -f
 }
 
 # verify ----------------------------------------------------------------------

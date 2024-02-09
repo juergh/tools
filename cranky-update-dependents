@@ -16,22 +16,19 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: cranky-update-dependents [-f] [-h] [-r]
+Usage: cranky-update-dependents [-f] [-h]
 
 Update all dependent kernel packages.
 
 Optional arguments:
-  -f, --force   Update existing tags.
-  -h, --help    Show this help text and exit.
-  -r, --re-run  Do a re-run, i.e., reset HEAD to the latest remote tag before
-                running 'cranky update-dependent'.
+  -f, --force  Update existing tags.
+  -h, --help   Show this help text and exit.
 EOF
 }
 
 CRANKY=${CRANKY:-cranky}
 
 tag_opts=()
-re_run=0
 
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
@@ -41,9 +38,6 @@ while [ "${#}" -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
-			;;
-		-r|--re-run)
-			re_run=1
 			;;
 		*)
 			echo "Invalid argument: ${1}" >&2
@@ -90,49 +84,15 @@ for path in "${paths[@]}" ; do
 		fi
 	fi
 
-	git fetch --tags
-
-	if [ ${re_run} -eq 0 ] && \
-	   ! git ls-remote --tags origin | grep -q "refs/tags/${tag}$" ; then
-		echo "HEAD tag does not exist remotely" >&2
-		exit 1
-	fi
-
-	tag_prefix=$(echo "${tag}" | \
-					 sed -e 's/_[0-9.]*$//' \
-						 -e 's/+[0-9]*$//' \
-						 -e 's/+signed[0-9]*$//' \
-						 -e 's/[0-9]*\.[0-9]*$//')
-	if [ -z "${tag_prefix}" ] ; then
-		echo "Failed to parse tag ${tag}" >&2
-		exit 1
-	fi
-	tag_latest=$(git ls-remote --tags | grep -o "${tag_prefix}.*[0-9]$" | \
-					 sort -V | tail -1)
-	if [ -z "${tag_latest}" ] ; then
-		echo "Failed to find latest remote tag (tag prefix: ${tag_prefix})" >&2
-		exit 1
-	fi
-
-	tracking_branch=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}')
+	head=$(git rev-parse HEAD)
 
 	git clean -dxf
-	if [ ${re_run} -eq 1 ] ; then
-		git reset --hard "${tracking_branch}"
-	fi
-	git merge --ff-only "${tag_latest}"
-
 	"${CRANKY}" update-dependent
-	if [ ${re_run} -eq 1 ] ; then
-		"${CRANKY}" tag -f "${tag_opts[@]}"
-	else
-		"${CRANKY}" tag "${tag_opts[@]}"
-	fi
+	"${CRANKY}" tag "${tag_opts[@]}"
 
 	echo
-	git --no-pager log "${tracking_branch}"~1..
+	git --no-pager log "${head}"~1..
 	echo
-
 done
 
 echo "Success: Updated all dependents"
