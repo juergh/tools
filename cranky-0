@@ -191,7 +191,7 @@ function do_verify()
 
 # shellcheck disable=SC2034
 build_pos_args=(
-	"POCKET|OFFSET|ABI || POCKET|OFFSET|ABI || Pocket containing the previous source package or changelog entry offset (1 == previous entry) or previous ABI."
+	"POCKET|OFFSET|ABI || POCKET|OFFSET|ABI || Pocket containing the previous source package or changelog entry offset (-1 == previous entry) or previous ABI."
 )
 
 function do_build()

@@ -162,7 +162,7 @@ Positional arguments:
   POCKET         Get the previous package versions from pocket POCKET. Valid
                  pockets: release,security,updates,proposed,proposed#2,build#2.
   OFFSET         Get the previous package versions from the changelogs using
-                 changelog entry offset OFFSET (1 == previous changelog entry).
+                 changelog entry offset OFFSET (-1 == previous changelog entry).
   VERSION        Use VERSION as the previous package version.
   ABI            Get the previous package versions from the changelogs using
                  the newest changelog entry with abi ABI.
@@ -206,13 +206,13 @@ while [ ${#} -gt 0 ] ; do
 			PREV_TYPE=pocket
 			PREV_VAL=${1}
 			;;
-		[1-9])
+		-[1-9])
 			if [ -n "${PREV_TYPE}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
 			fi
 			PREV_TYPE=offset
-			PREV_VAL=${1}
+			PREV_VAL=${1#-}
 			;;
 		[1-9]*.[0-9]*.0-[0-9]*.[0-9]*)
 			if [ -n "${PREV_TYPE}" ] ; then
