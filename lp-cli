@@ -181,16 +181,18 @@ def do_pull_binaries(args):
             fh.write(r.content)
 
 @add_help("Search bugs")
-@add_arg("source", help="Spurce package name")
+@add_arg("source", help="Source package name")
 @add_arg("-d", "--show-duplicates", action="store_true")
 @add_arg("-s", "--status", default="New,Confirmed")
 @add_arg("-u", "--subject", help="Subject search regex")
+@add_arg("-c", "--created-since", help="Bugs created x days ago and newer")
 def do_search_bugs(args):
     lp_dist = args.lp.distributions["ubuntu"]
     lp_source = lp_dist.getSourcePackage(name=args.source)
 
-    # FIXME: Make this an argument
-    created_since = datetime.datetime.utcnow() - datetime.timedelta(days=45)
+    created_since = None
+    if args.created_since:
+        created_since = datetime.datetime.utcnow() - datetime.timedelta(days=args.created_since)
 
     lp_tasks = lp_source.searchTasks(status=args.status.split(","),
                                      created_since=created_since,
@@ -205,7 +207,7 @@ def do_search_bugs(args):
     for task in lp_tasks:
         bug = task.bug
         if not re_subject or re_subject.search(bug.title):
-            print(f"LP: #{bug.id} - {bug.title}")
+            print(f"LP: #{bug.id:<7} - {bug.title}")
 
 @add_help("Tag bug", help="Show bug tags or add tag(s) to a bug")
 @add_arg("bug", help="Bug ID")
