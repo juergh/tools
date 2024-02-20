@@ -1,0 +1,16 @@
+#!/bin/bash -eu
+#
+# Mount an Android image
+#
+
+image=${1}
+mntpoint=${2}
+
+# Find the offset of the magic filesystem identifier 53ef
+magic_hex=$(xxd -c 1 "${image}" | grep -A1 ' 53 ' | grep  -m1 -B1 ' ef ' | head -1 | \
+            awk -F: '{ print $1 }')
+magic_dec=$(printf "%d" "0x${magic_hex}")
+offset=$((magic_dec - 1080))
+
+set -x
+mount -o ro,offset="${offset}" "${image}" "${mntpoint}"
