@@ -20,7 +20,8 @@ print('summary ' + summary)
 found = False
 for comment in reversed(issue.fields.comment.comments):
     for line in comment.body.split('\n'):
-        m = re.search(r'(git\+ssh://[^ }]+).*(Ubuntu-[a-z0-9-._+]+)', line)
+        line = line.replace('{noformat}', '')
+        m = re.search(r'((?:git\+)?ssh://[^ }]+).*(Ubuntu-[a-z0-9-._+]+)', line)
         if m:
             found = True
             print('fetch ' + m.group(1) + ' ' + m.group(2))
