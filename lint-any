@@ -80,8 +80,10 @@ if [ ${#python_scripts[@]} -gt 0 ] ; then
 	echo "-- Run flake8"
 	flake8 "${flake_ignore}" "${python_scripts[@]}" || true
 
-	echo "-- Run ruff"
-	ruff check "${ruff_ignore}" "${python_scripts[@]}" || true
+	if [ -n "$(which ruff)" ] ; then
+		echo "-- Run ruff"
+		ruff check "${ruff_ignore}" "${python_scripts[@]}" || true
+	fi
 
 	echo "-- Run pylint"
 	pylint "${pylint_disable}" "${python_scripts[@]}" || true
