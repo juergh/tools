@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+
+import imaplib
+
+from subprocess import check_output
+
+OK_RESPONSE = {
+    "logout": "BYE",
+}
+
+def get_password(pass_name):
+    """Return a password from the password store"""
+    return check_output(["pass", "show", pass_name]).decode().split("\n", 1)[0]
+
+class ImapException(Exception):
+    pass
+
+class Imap:
+    def __init__(self, imap_ssl_host, imap_ssl_port):
+        self.m = imaplib.IMAP4_SSL(host=imap_ssl_host, port=imap_ssl_port, timeout=5)
+
+    # -------------------------------------------------------------------------
+    # private
+
+    def _wrapper(self, func_name, *args, **kwargs):
+        """Wrap an IMAP call and check the response"""
+        print(f"-- {func_name:<7}: ", end="")
+
+        try:
+            func = getattr(self.m, func_name)
+            resp, data = func(*args, **kwargs)
+        except Exception as e:
+            print()
+            raise e
+
+        if data and data[0]:
+            txt = data[0].decode()
+            if len(txt) > 70:
+                txt = txt[:67] + "..."
+        else:
+            txt = ""
+        print(f"{resp:<3} : {txt}")
+
+        if resp != OK_RESPONSE.get(func_name, "OK"):
+            raise ImapException(f"IMAP call failed: {resp, data}")
+        return data
+
+    # -------------------------------------------------------------------------
+    # plumbing
+
+    def close(self):
+        return self._wrapper("close")
+
+    def copy(self, message_set, new_mailbox):
+        return self._wrapper("copy", message_set, new_mailbox)
+
+    def expunge(self):
+        m = self._wrapper("expunge")
+        return m[0].decode().split() if m[0] else []
+
+    def login(self, user, password):
+        return self._wrapper("login", user, password)
+
+    def logout(self):
+        return self._wrapper("logout")
+
+    def search(self, *criteria):
+        m = self._wrapper("search", "utf-8", *criteria)
+        return m[0].decode().split() if m[0] else []
+
+    def select(self, mailbox, readonly=False):
+        return self._wrapper("select", mailbox=mailbox, readonly=readonly)
+
+    def store(self, message_set, command, flag_list):
+        return self._wrapper("store", message_set, command, flag_list)
+
+    # -------------------------------------------------------------------------
+    # porcelain
+
+    def move(self, msg_ids, mailbox):
+        """Move messages to a new mailbox"""
+        for msg_id in msg_ids:
+            self.copy(msg_id, mailbox)
+            self.store(msg_id, "+FLAGS", "\\Deleted")
+            self.expunge()
+
+    def search_body(self, text, mailbox=None):
+        """Search message bodies"""
+        if mailbox:
+            self.select(mailbox=f'"{mailbox}"')
+        return self.search("BODY", f'"{text}"')
+
+    def search_subject(self, text, mailbox=None):
+        """Search message subjects"""
+        if mailbox:
+            self.select(mailbox=f'"{mailbox}"')
+        return self.search("SUBJECT", f'"{text}"')
+
+imap_ssl_host = "imap.gmail.com"
+imap_ssl_port = 993
+username = "juerg.haefliger@canonical.com"
+password = get_password(f"{imap_ssl_host}/{username}")
+
+print()
+print("-- Login")
+imap = Imap(imap_ssl_host, imap_ssl_port)
+imap.login(username, password)
+
+# Move ACTIVITY mail
+print()
+print("-- Move ACTIVITY mail")
+msgs = imap.search_subject("[ACTIVITY]", "Mailing List/Canonical/canonical-kernel-team")
+msgs += imap.search_subject("[ACTIVITY]", "Mailing List/Canonical/core-canonical-kernel-team")
+imap.move(msgs, "Canonical/Activity")
+
+# Move 'The Daily Bug Report' mail
+print()
+print("-- Move 'The Daily Bug Report' mail")
+msgs = imap.search_subject("The Daily Bug Report for ", "Mailing List/Ubuntu/kernel-team")
+imap.move(msgs, "Canonical/Bugs")
+
+# Move SalesForce mail
+print()
+print("-- Move SalesForce mail")
+msgs = imap.search_subject("SFDC", "Mailing List/Canonical/canonical-kernel-team")
+imap.move(msgs, "Canonical/SalesForce")
+
+# Move linux-firmware mail
+print()
+print("-- Move linux-firmware mail")
+msgs = imap.search_subject("linux-firmware", "Mailing List/Ubuntu/kernel-team")
+imap.move(msgs, "Mailing List/Ubuntu/kernel-team/linux-firmware")
+msgs = imap.search_body("Launchpad-Subscription: linux-firmware", "Launchpad-Message-For/canonical-kernel-team")
+imap.move(msgs, "Launchpad-Message-For/juergh")
+
+# Move kernel-snaps mail
+print()
+print("-- Move kernel-snaps mail")
+msgs = imap.search_subject("kernel-snaps", "Mailing List/Ubuntu/kernel-team")
+imap.move(msgs, "Mailing List/Ubuntu/kernel-team/kernel-snaps")
+
+print()
+print("-- Close and logout")
+imap.close()
+imap.logout()
