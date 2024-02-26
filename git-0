@@ -75,7 +75,8 @@ trap "rm -f ${script}" EXIT INT TERM HUP
 {
 	echo "#!/bin/bash"
 	for c in "${@}" ; do
-		echo "sed -ie 's/^pick ${c::8}.*/${CMD} ${c::8}/' \"\${1}\""
+		h=$(git rev-parse "${c}")
+		echo "sed -ie 's/^pick ${h::8}.*/${CMD} ${h::8}/' \"\${1}\""
 	done
 } >"${script}"
 chmod 755 "${script}"
