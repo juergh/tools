@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
+#
+# Filter IMAP mail
+#
 
+import argparse
 import imaplib
+import sys
 
 from subprocess import check_output
 
@@ -96,50 +101,65 @@ class Imap:
             self.select(mailbox=f'"{mailbox}"')
         return self.search("SUBJECT", f'"{text}"')
 
-imap_ssl_host = "imap.gmail.com"
-imap_ssl_port = 993
-username = "juerg.haefliger@canonical.com"
-password = get_password(f"{imap_ssl_host}/{username}")
+def filter_canonical(username):
+    """Filter canonical mail"""
+    imap_ssl_host = "imap.gmail.com"
+    imap_ssl_port = 993
+    password = get_password(f"{imap_ssl_host}/{username}")
 
-print()
-print("-- Login")
-imap = Imap(imap_ssl_host, imap_ssl_port)
-imap.login(username, password)
+    print("-- Login")
+    imap = Imap(imap_ssl_host, imap_ssl_port)
+    imap.login(username, password)
 
-# Move ACTIVITY mail
-print()
-print("-- Move ACTIVITY mail")
-msgs = imap.search_subject("[ACTIVITY]", "Mailing List/Canonical/canonical-kernel-team")
-msgs += imap.search_subject("[ACTIVITY]", "Mailing List/Canonical/core-canonical-kernel-team")
-imap.move(msgs, "Canonical/Activity")
+    # Move ACTIVITY mail
+    print()
+    print("-- Move ACTIVITY mail")
+    msgs = imap.search_subject("[ACTIVITY]", "Mailing List/Canonical/canonical-kernel-team")
+    msgs += imap.search_subject("[ACTIVITY]", "Mailing List/Canonical/core-canonical-kernel-team")
+    imap.move(msgs, "Canonical/Activity")
 
-# Move 'The Daily Bug Report' mail
-print()
-print("-- Move 'The Daily Bug Report' mail")
-msgs = imap.search_subject("The Daily Bug Report for ", "Mailing List/Ubuntu/kernel-team")
-imap.move(msgs, "Canonical/Bugs")
+    # Move 'The Daily Bug Report' mail
+    print()
+    print("-- Move 'The Daily Bug Report' mail")
+    msgs = imap.search_subject("The Daily Bug Report for ", "Mailing List/Ubuntu/kernel-team")
+    imap.move(msgs, "Canonical/Bugs")
 
-# Move SalesForce mail
-print()
-print("-- Move SalesForce mail")
-msgs = imap.search_subject("SFDC", "Mailing List/Canonical/canonical-kernel-team")
-imap.move(msgs, "Canonical/SalesForce")
+    # Move SalesForce mail
+    print()
+    print("-- Move SalesForce mail")
+    msgs = imap.search_subject("SFDC", "Mailing List/Canonical/canonical-kernel-team")
+    imap.move(msgs, "Canonical/SalesForce")
 
-# Move linux-firmware mail
-print()
-print("-- Move linux-firmware mail")
-msgs = imap.search_subject("linux-firmware", "Mailing List/Ubuntu/kernel-team")
-imap.move(msgs, "Mailing List/Ubuntu/kernel-team/linux-firmware")
-msgs = imap.search_body("Launchpad-Subscription: linux-firmware", "Launchpad-Message-For/canonical-kernel-team")
-imap.move(msgs, "Launchpad-Message-For/juergh")
+    # Move linux-firmware mail
+    print()
+    print("-- Move linux-firmware mail")
+    msgs = imap.search_subject("linux-firmware", "Mailing List/Ubuntu/kernel-team")
+    imap.move(msgs, "Mailing List/Ubuntu/kernel-team/linux-firmware")
+    msgs = imap.search_body("Launchpad-Subscription: linux-firmware", "Launchpad-Message-For/canonical-kernel-team")
+    imap.move(msgs, "Launchpad-Message-For/juergh")
 
-# Move kernel-snaps mail
-print()
-print("-- Move kernel-snaps mail")
-msgs = imap.search_subject("kernel-snaps", "Mailing List/Ubuntu/kernel-team")
-imap.move(msgs, "Mailing List/Ubuntu/kernel-team/kernel-snaps")
+    # Move kernel-snaps mail
+    print()
+    print("-- Move kernel-snaps mail")
+    msgs = imap.search_subject("kernel-snaps", "Mailing List/Ubuntu/kernel-team")
+    imap.move(msgs, "Mailing List/Ubuntu/kernel-team/kernel-snaps")
 
-print()
-print("-- Close and logout")
-imap.close()
-imap.logout()
+    print()
+    print("-- Close and logout")
+    imap.close()
+    imap.logout()
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("username", help="IMAP username")
+    args = parser.parse_args()
+
+    if args.username.endswith("@canonical.com"):
+        filter_canonical(args.username)
+        return 0
+
+    print(f"-- Invalid username: {args.username}", file=sys.stderr)
+    return 1
+
+if __name__ == "__main__":
+    sys.exit(main())
