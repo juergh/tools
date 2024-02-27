@@ -5,9 +5,12 @@
 
 import argparse
 import imaplib
+import os
 import sys
 
 from subprocess import check_output
+
+COLS = os.get_terminal_size()[0]
 
 OK_RESPONSE = {
     "logout": "BYE",
@@ -39,9 +42,12 @@ class Imap:
             raise e
 
         if data and data[0]:
-            txt = data[0].decode()
-            if len(txt) > 70:
-                txt = txt[:67] + "..."
+            if isinstance(data[0], tuple):
+                txt = str([d.decode() for d in data[0]])
+            else:
+                txt = data[0].decode()
+            if len(txt) > (COLS - 18):
+                txt = txt[:(COLS - 21)] + "..."
         else:
             txt = ""
         print(f"{resp:<3} : {txt}")
