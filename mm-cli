@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+#
+# Mattermost CLI
+#
+
+import argparse
+import os
+import sys
+
+from subprocess import check_output
+
+from datetime import datetime
+from mattermostdriver import Driver
+
+def get_token(pass_name):
+    """Return a token from the password store"""
+    return check_output(["pass", "show", pass_name]).decode().split("\n", 1)[0]
+
+class MmException(Exception):
+    pass
+
+class MM():
+    def __init__(self, url, token):
+        self.mm = Driver({"url": url, "port": 443, "token": token})
+        self.user = None
+        self.team = None
+        self.channel = None
+        self.users = {}
+        self.mm.login()
+
+    def get_user(self, user_id):
+        """Get (and cache) a single user"""
+        if user_id not in self.users:
+            self.users[user_id] = self.mm.users.get_user(user_id)
+        return self.users[user_id]
+
+    def get_channels(self):
+        """Get all channels"""
+        channels = self.mm.channels.get_channels_for_user(self.user["id"], self.team["id"])
+        for channel in channels:
+            if channel["type"] == "D":
+                # Direct messages
+                # Channel names of direct message are in the form of "<user_id>__<user_id>".
+                # The first ID is the ID of the user who initiated the conversation.
+                user_ids = channel["name"].split("__")
+                other_id = user_ids[1] if user_ids[0] == self.user["id"] else user_ids[0]
+                name = self.get_user(other_id)["username"]
+            else:
+                name = channel["name"]
+            channel["prettyname"] = name
+            yield channel
+
+    def get_posts(self):
+        """Get channel posts"""
+        page = 0
+        while True:
+            resp = self.mm.posts.get_posts_for_channel(
+                self.channel["id"], params={"per_page": 50, "page": page})
+            if not resp["posts"]:
+                break
+            for o in resp["order"]:
+                yield resp["posts"][o]
+            page += 1
+
+    def select_me(self):
+        """Select me"""
+        self.user = self.get_user("me")
+
+    def select_team(self, name):
+        """Select team"""
+        teams = self.mm.teams.get_user_teams(self.user["id"])
+        for team in teams:
+            if team["name"] == name:
+                self.team = team
+                return
+        # Team not found
+        raise MmException(f"Team '{name}' not found")
+
+    def select_channel(self, name):
+        """Select channel"""
+        for channel in self.get_channels():
+            if channel["prettyname"] == name:
+                self.channel = channel
+                return
+        # Channel not found
+        raise MmException(f"Channel '{name}' not found")
+
+    def list_channels(self):
+        """List all channels"""
+        for channel in self.get_channels():
+            print(f"{channel['id']}|{channel['prettyname']}|{channel['name']}|{channel['display_name']}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--token", help="Personal access token")
+    parser.add_argument("--pass-name", help="Password store name of personal access token")
+    parser.add_argument("channel", help="Channel name")
+    args = parser.parse_args()
+
+    if args.pass_name:
+        args.token = get_token(args.pass_name)
+    if not args.token:
+        print("--token or --pass-name is required", file=sys.stderr)
+        sys.exit(2)
+
+    host = "chat.canonical.com"
+    mm = MM(host, args.token)
+
+    mm.select_me()
+    mm.select_team("canonical")
+    mm.select_channel(args.channel)
+
+    outfile = args.channel + ".txt"
+    tmpfile = args.channel + ".new.txt"
+
+    old_post_id = None
+    if os.path.exists(outfile):
+        with open(outfile, encoding="utf-8") as fh:
+            old_post_id = fh.readline().rstrip("\n")
+
+    with open(tmpfile, "w", encoding="utf-8") as fho:
+        first = True
+        for post in mm.get_posts():
+            post_id = post["id"]
+            if old_post_id and post_id == old_post_id:
+                break
+
+            created = datetime.fromtimestamp(post["create_at"] / 1000).strftime("%Y-%m-%d %I:%M:%S")
+            user = mm.get_user(post["user_id"])
+            txt = f"{created} : {user['username']:<15} : {post['message']}"
+            print(txt)
+
+            if first:
+                frst = False
+                fho.write(post_id + "\n")
+            fho.write(txt + "\n")
+
+        if os.path.exists(outfile):
+            with open(outfile, encoding="utf-8") as fhi:
+                first = True
+                for line in fhi:
+                    if first:
+                        first = False
+                        continue
+                    fho.write(line)
+
+    os.rename(tmpfile, outfile)
