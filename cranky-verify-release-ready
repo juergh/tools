@@ -17,9 +17,18 @@ function get_abi()
 		. debian/debian.env
 	fi
 
-	readarray -t v < <(dpkg-parsechangelog -l"${DEBIAN}"/changelog \
-										   -SVersion | tr ".-" "\n")
-	echo "${v[0]}.${v[1]}.${v[2]}-${v[3]}"
+	v=$(dpkg-parsechangelog -l"${DEBIAN}"/changelog -SVersion)
+
+	# Drop the upload number
+	v=${v%.*}
+
+	# Replace 3rd '.' with '-'
+	a=${v#*.0}
+	a=${a#.}
+	a=${a#-}
+	v=${v%%.0*}.0-${a}
+
+	echo "${v}"
 }
 
 function check_abi()
