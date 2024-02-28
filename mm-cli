@@ -131,7 +131,7 @@ if __name__ == "__main__":
             print(txt)
 
             if first:
-                frst = False
+                first = False
                 fho.write(post_id + "\n")
             fho.write(txt + "\n")
 
