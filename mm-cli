@@ -4,6 +4,7 @@
 #
 
 import argparse
+import json
 import os
 import sys
 
@@ -11,10 +12,6 @@ from subprocess import check_output
 
 from datetime import datetime
 from mattermostdriver import Driver
-
-def get_token(pass_name):
-    """Return a token from the password store"""
-    return check_output(["pass", "show", pass_name]).decode().split("\n", 1)[0]
 
 MM_CACHE = os.path.expanduser("~/.cache/mm-cli.json")
 
@@ -29,10 +26,6 @@ class MM():
         self.team = None
         self.channel = None
         self.users = {}
-        self.load_cache()
-
-    def __del__(self):
-        self.save_cache()
 
     def load_cache(self):
         """Load cache"""
@@ -106,27 +99,60 @@ class MM():
         # Channel not found
         raise MmException(f"Channel '{name}' not found")
 
-    def list_channels(self):
-        """List all channels"""
-        for channel in self.get_channels():
-            print(f"{channel['id']}|{channel['prettyname']}|{channel['name']}|{channel['display_name']}")
+# ----------------------------------------------------------------------
+# helpers
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--token", help="Personal access token")
-    parser.add_argument("--pass-name", help="Password store name of personal access token")
-    parser.add_argument("channel", help="Channel name")
-    args = parser.parse_args()
+def get_token(pass_name):
+    """Return a token from the password store"""
+    return check_output(["pass", "show", pass_name]).decode().split("\n", 1)[0]
 
-    if args.pass_name:
-        args.token = get_token(args.pass_name)
-    if not args.token:
-        print("--token or --pass-name is required", file=sys.stderr)
-        sys.exit(2)
+def _dec(name, *args, **kwargs):
+    def _decorator(func):
+        # Because of the sematics of decorator composition if we just append
+        # to the options list positional options will appear to be backwards.
+        func.__dict__.setdefault(name, []).insert(0, (args, kwargs))
+        return func
+    return _decorator
 
-    host = "chat.canonical.com"
-    mm = MM(host, args.token)
+def add_help(*args, **kwargs):
+    return _dec('help', *args, **kwargs)
 
+def add_arg(*args, **kwargs):
+    return _dec('arg', *args, **kwargs)
+
+def add_subparsers(parser):
+    subparsers = parser.add_subparsers(dest="subcommand", title="subcommands",
+                                       required=True)
+    module = sys.modules[__name__]
+    for attr in (a for a in dir(module) if a.startswith("do_")):
+        cmd_name = attr[3:].replace("_", "-")
+        cmd_cb = getattr(module, attr)
+        cmd_desc = cmd_cb.__doc__ or ""
+        cmd_help = getattr(cmd_cb, "help", [])
+        cmd_args = getattr(cmd_cb, "arg", [])
+
+        sparser = subparsers.add_parser(cmd_name, help=cmd_help[0][0][0],
+                                        description=cmd_desc, add_help=False)
+        sparser.add_argument("-h", "--help", action="help")
+        for (args, kwargs) in cmd_args:
+            sparser.add_argument(*args, **kwargs)
+        sparser.set_defaults(func=cmd_cb)
+
+# ----------------------------------------------------------------------
+# subcommands
+
+@add_help("List channels")
+def do_list_channels(mm, _args):
+    """List channels"""
+    mm.select_me()
+    mm.select_team("canonical")
+    for channel in mm.get_channels():
+        print(f"{channel['id']}|{channel['prettyname']}|{channel['name']}|{channel['display_name']}")
+
+@add_help("Get and save channel posts")
+@add_arg("channel", help="Channel name")
+def do_get_posts(mm, args):
+    """Get and save channel posts"""
     mm.select_me()
     mm.select_team("canonical")
     mm.select_channel(args.channel)
@@ -166,3 +192,26 @@ if __name__ == "__main__":
                     fho.write(line)
 
     os.rename(tmpfile, outfile)
+
+# ----------------------------------------------------------------------
+# main entry point
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--token", help="Personal access token")
+    parser.add_argument("--pass-name", help="Password store name of personal access token")
+    add_subparsers(parser)
+    args = parser.parse_args()
+
+    if args.pass_name:
+        args.token = get_token(args.pass_name)
+    if not args.token:
+        print("--token or --pass-name is required", file=sys.stderr)
+        sys.exit(2)
+
+    host = "chat.canonical.com"
+    mm = MM(host, args.token)
+
+    mm.load_cache()
+    args.func(mm, args)
+    mm.save_cache()
