@@ -172,7 +172,7 @@ def do_get_posts(mm, args):
             if old_post_id and post_id == old_post_id:
                 break
 
-            created = datetime.fromtimestamp(post["create_at"] / 1000).strftime("%Y-%m-%d %H:%M:%S")
+            created = datetime.utcfromtimestamp(post["create_at"] / 1000).strftime("%Y-%m-%d %H:%M:%S UTC")
             user = mm.get_user(post["user_id"])
             txt = f"{created} : {user['username']:<15} : {post['message']}"
             print(txt)
