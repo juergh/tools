@@ -147,7 +147,12 @@ def do_list_channels(mm, _args):
     mm.select_me()
     mm.select_team("canonical")
     for channel in mm.get_channels():
-        print(f"{channel['id']}|{channel['prettyname']}|{channel['name']}|{channel['display_name']}")
+        print(" : ".join([
+            channel['id'],
+            channel['prettyname'],
+            channel['name'],
+            channel['display_name'],
+        ]))
 
 @add_help("Get and save channel posts")
 @add_arg("channel", help="Channel name")
