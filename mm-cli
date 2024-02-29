@@ -16,17 +16,38 @@ def get_token(pass_name):
     """Return a token from the password store"""
     return check_output(["pass", "show", pass_name]).decode().split("\n", 1)[0]
 
+MM_CACHE = os.path.expanduser("~/.cache/mm-cli.json")
+
 class MmException(Exception):
     pass
 
 class MM():
     def __init__(self, url, token):
         self.mm = Driver({"url": url, "port": 443, "token": token})
+        self.mm.login()
         self.user = None
         self.team = None
         self.channel = None
         self.users = {}
-        self.mm.login()
+        self.load_cache()
+
+    def __del__(self):
+        self.save_cache()
+
+    def load_cache(self):
+        """Load cache"""
+        if os.path.exists(MM_CACHE):
+            with open(MM_CACHE, encoding="utf-8") as fh:
+                cache = json.load(fh)
+            self.users = cache["users"]
+
+    def save_cache(self):
+        """Save cache"""
+        cache = {
+            "users": self.users,
+        }
+        with open(MM_CACHE, "w", encoding="utf-8") as fh:
+            json.dump(cache, fh)
 
     def get_user(self, user_id):
         """Get (and cache) a single user"""
