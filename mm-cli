@@ -160,35 +160,39 @@ def do_get_posts(mm, args):
     outfile = args.channel + ".txt"
     tmpfile = args.channel + ".new.txt"
 
-    old_post_id = None
+    # Read first line from existing file
+    first_line = ""
     if os.path.exists(outfile):
         with open(outfile, encoding="utf-8") as fh:
-            old_post_id = fh.readline().rstrip("\n")
+            first_line = fh.readline().rstrip("\n")
 
     with open(tmpfile, "w", encoding="utf-8") as fho:
-        first = True
         for post in mm.get_posts():
-            post_id = post["id"]
-            if old_post_id and post_id == old_post_id:
-                break
-
             created = datetime.utcfromtimestamp(post["create_at"] / 1000).strftime("%Y-%m-%d %H:%M:%S UTC")
             user = mm.get_user(post["user_id"])
-            txt = f"{created} : {user['username']:<15} : {post['message']}"
-            print(txt)
+            prefix = f"{created} : {user['username']:<15}"
 
-            if first:
-                first = False
-                fho.write(post_id + "\n")
-            fho.write(txt + "\n")
+            # Split the message into individual lines and prefix the first line with date & user
+            done = False
+            for line in post["message"].splitlines():
+                line = prefix + " : " + line
+                if first_line and line == first_line:
+                    done = True
+                    break
 
+                print(line)
+                fho.write(line + "\n")
+
+                if not prefix.startswith("    "):
+                    prefix = " " * len(prefix)
+
+            if done:
+                break
+
+        # Append existing file
         if os.path.exists(outfile):
             with open(outfile, encoding="utf-8") as fhi:
-                first = True
                 for line in fhi:
-                    if first:
-                        first = False
-                        continue
                     fho.write(line)
 
     os.rename(tmpfile, outfile)
