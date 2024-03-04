@@ -1,6 +1,6 @@
 #!/bin/bash -eu
 #
-# Rebase onto a parent kernel
+# Update to a parent kernel
 #
 
 C=${C:-cranky}
@@ -18,7 +18,7 @@ function out()
 	fi
 
 	if [ "${rc}" -ne 0 ] ; then
-		echo "-- Rebase failed" >&2
+		echo "-- Update failed" >&2
 	fi
 
 	exit "${rc}"
@@ -27,7 +27,7 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: ${C} rebase-onto [-h] PARENT [REFSPEC]
+Usage: ${C} update-to [-h] PARENT [REFSPEC]
 
 Rebase onto (or cherry-pick from) a parent kernel.
 
@@ -195,7 +195,7 @@ if [ "${strategy}" = "cherry-pick" ] ; then
 
 	# Switch to a temporary branch to do all the work on
 	CUR_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-	TMP_BRANCH=cranky-rebase-$$
+	TMP_BRANCH=cranky-update-to-$$
 	git checkout -b "${TMP_BRANCH}" "${cur_base_hash}"
 
 	# Cherry-pick the new parent commits
