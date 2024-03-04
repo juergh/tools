@@ -360,6 +360,11 @@ echo "-- Package version: ${pkg_version}"
 # ----------------------------------------------------------------------------
 # Do the build
 
+if [ "${config}" = "UBUNTU" ] ; then
+	# Generate signing and revocation certs
+	run fakeroot debian/rules clean
+fi
+
 make_opts=(
 	"O=${buildd}"
 	"LOCALVERSION=${local_version}"
