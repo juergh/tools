@@ -20,12 +20,20 @@ def get_password(pass_name):
     """Return a password from the password store"""
     return check_output(["pass", "show", pass_name]).decode().split("\n", 1)[0]
 
+def list_to_set(inlist, n):
+    """Convert a list to n-sized message sets"""
+    if not isinstance(inlist, list):
+        inlist = [inlist]
+    for i in range(0, len(inlist), n):
+        yield " ".join(inlist[i:(i + n)])
+
 class ImapException(Exception):
     pass
 
 class Imap:
-    def __init__(self, imap_ssl_host, imap_ssl_port):
-        self.m = imaplib.IMAP4_SSL(host=imap_ssl_host, port=imap_ssl_port, timeout=5)
+    def __init__(self, imap_ssl_host, imap_ssl_port, timeout=5, limit=50):
+        self.m = imaplib.IMAP4_SSL(host=imap_ssl_host, port=imap_ssl_port, timeout=timeout)
+        self.limit = limit
 
     # -------------------------------------------------------------------------
     # private
@@ -62,8 +70,11 @@ class Imap:
     def close(self):
         return self._wrapper("close")
 
-    def copy(self, message_set, new_mailbox):
-        return self._wrapper("copy", message_set, new_mailbox)
+    def copy(self, messages, new_mailbox):
+        m = None
+        for message_set in list_to_set(messages, self.limit):
+            m = self._wrapper("copy", message_set, new_mailbox)
+        return m
 
     def expunge(self):
         m = self._wrapper("expunge")
@@ -82,18 +93,22 @@ class Imap:
     def select(self, mailbox, readonly=False):
         return self._wrapper("select", mailbox=mailbox, readonly=readonly)
 
-    def store(self, message_set, command, flag_list):
-        return self._wrapper("store", message_set, command, flag_list)
+    def store(self, messages, command, flag_list):
+        m = None
+        for message_set in list_to_set(messages, self.limit):
+            m = self._wrapper("store", message_set, command, flag_list)
+        return m
 
     # -------------------------------------------------------------------------
     # porcelain
 
     def move(self, msg_ids, mailbox):
         """Move messages to a new mailbox"""
-        for msg_id in msg_ids:
-            self.copy(msg_id, mailbox)
-            self.store(msg_id, "+FLAGS", "\\Deleted")
-            self.expunge()
+        if not msg_ids:
+            return
+        self.copy(msg_ids, mailbox)
+        self.store(msg_ids, "+FLAGS", "\\Deleted")
+        self.expunge()
 
     def search_body(self, text, mailbox=None):
         """Search message bodies"""
