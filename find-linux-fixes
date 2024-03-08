@@ -3,9 +3,6 @@
 # Search the linux 'Fixes:' file for commits that fix the given commit(s).
 #
 
-LINUX_FIXES=/data/git/linux.fixes
-LINUX_REPO=/data/git/linux.git
-
 function pr_error()
 {
 	echo -e "\033[31m${*}\033[0m" 1>&2
