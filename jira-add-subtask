@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+#
+# Add a subtask to a Jira issue
+#
+
+import argparse
+import sys
+
+from jira import JIRA
+
+def main():
+    parser = argparse.ArgumentParser(description="Add a subtask to a Jira issue")
+    parser.add_argument("-t", "--title", required=True, help="Subtask title.")
+    parser.add_argument("issue", help="Jira issue to add the subtask to.")
+    args = parser.parse_args()
+
+    # Note: Python JIRA uses ~/.netrc for authentication
+    jira_server = "https://warthogs.atlassian.net"
+    jira = JIRA(server=jira_server)
+
+    issue = jira.issue(args.issue)
+    print(f"Parent:  {jira_server}/browse/{issue.key} ({issue.fields.summary})")
+
+    subtask_fields = {
+        "summary": args.title,
+        "parent": {
+            "key": issue.key,
+        },
+        "issuetype": {
+            "name": "Sub-task",
+        },
+        "components": [{"name": c.name} for c in issue.fields.components],
+        "project": {
+            "key": issue.fields.project.key,
+        },
+    }
+
+    subtask = jira.create_issue(fields=subtask_fields)
+    print(f"Subtask: {jira_server}/browse/{subtask.key} ({subtask.fields.summary})")
+
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
