@@ -25,7 +25,7 @@ def list_to_set(inlist, n):
     if not isinstance(inlist, list):
         inlist = [inlist]
     for i in range(0, len(inlist), n):
-        yield " ".join(inlist[i:(i + n)])
+        yield ",".join(inlist[i:(i + n)])
 
 class ImapException(Exception):
     pass
@@ -70,9 +70,10 @@ class Imap:
     def close(self):
         return self._wrapper("close")
 
-    def copy(self, messages, new_mailbox):
-        m = None
-        for message_set in list_to_set(messages, self.limit):
+    def copy(self, msg_ids, new_mailbox):
+        if not msg_ids:
+            return None
+        for message_set in list_to_set(msg_ids, self.limit):
             m = self._wrapper("copy", message_set, new_mailbox)
         return m
 
@@ -93,9 +94,11 @@ class Imap:
     def select(self, mailbox, readonly=False):
         return self._wrapper("select", mailbox=mailbox, readonly=readonly)
 
-    def store(self, messages, command, flag_list):
-        m = None
-        for message_set in list_to_set(messages, self.limit):
+    def store(self, msg_ids, command, flag_list):
+        if not msg_ids:
+            return None
+        for message_set in list_to_set(msg_ids, self.limit):
+            print(message_set)
             m = self._wrapper("store", message_set, command, flag_list)
         return m
 
