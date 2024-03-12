@@ -98,7 +98,6 @@ class Imap:
         if not msg_ids:
             return None
         for message_set in list_to_set(msg_ids, self.limit):
-            print(message_set)
             m = self._wrapper("store", message_set, command, flag_list)
         return m
 
