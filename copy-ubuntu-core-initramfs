@@ -1,0 +1,53 @@
+#!/bin/bash
+#
+# Copy ubuntu-core-initramfs from ppa:snappy-dev/image to ppa:canonical-kernel-team/builder-extra
+#
+
+function usage()
+{
+        cat <<EOF
+Usage: ${0##*/} [-f] [-h] series
+
+Copy ubuntu-core-initramfs from ppa:snappy-dev/image to ppa:canonical-kernel-team/builder-extra
+
+Optional arguments:
+  -f, --force  Do it.
+  -h, --help   Show this help message and exit.
+EOF
+}
+
+series=
+dry_run=("--dry-run")
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-f|--force)
+			dry_run=()
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${series}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			series=${1}
+	esac
+	shift
+done
+
+if [ -z "${series}" ] ; then
+	usage
+	exit 2
+fi
+
+set -x
+~/git/ubuntu/ubuntu-archive-tools/copy-package \
+	"${dry_run[@]}" \
+	--from=~snappy-dev/ubuntu/image \
+	--to=~canonical-kernel-team/ubuntu/builder-extra \
+	-s "${series}" \
+	-b \
+	ubuntu-core-initramfs
