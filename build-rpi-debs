@@ -179,6 +179,8 @@ Positional arguments:
                           Debian packages).
 
 Optional arguments:
+  -a, --abi ABI           Base ABI number for Ubuntu kernel flavor names. If not
+                          provided defaults to 9000.
   -c, --cpus CPUS         Number of CPUs to use for compiling. If not provided,
                           defaults to the number of online CPUs.
   -d, --dbg-pkg           Also build the debug package.
@@ -208,6 +210,7 @@ EOF
 
 orig_args=("${@}")
 
+abi=9000
 cpus=$(getconf _NPROCESSORS_ONLN)
 dbg_pkg=0
 ubuntu_flavor=0
@@ -224,6 +227,10 @@ version=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-a|--abi)
+			shift
+			abi=${1}
+			;;
 		-c|--cpus)
 			shift
 			cpus=${1}
@@ -453,7 +460,7 @@ ${scmd} make O="${buildd}" olddefconfig
 
 kernel_version=$(make -k kernelversion 2>/dev/null)
 build_version=$(cat "${buildd}"/.version)
-abi_version=$((9000 + build_version))
+abi_version=$((abi + build_version))
 curr_commit=$(git rev-parse HEAD)
 
 if [ ${ubuntu_flavor} -eq 1 ] ; then
