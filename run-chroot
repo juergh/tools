@@ -207,6 +207,7 @@ esac
 
 # Generate the (base) chroot name from the session name
 chroot=${session#*-}
+chroot=${chroot#-}  # Remove double dash
 
 # Destroy an existing session if -d, --destroy is provided
 if [ "${destroy}" -eq 1 ] ; then
