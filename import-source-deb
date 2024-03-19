@@ -79,15 +79,21 @@ function import_dsc()
 function pull_source_deb()
 {
 	local name=${1} version=${2}
+	local opts
 
-	pull-lp-source -d "${name}" "${version}" || \
-		pull-debian-source -d "${name}" "${version}"
+	opts=("-d")
+	if [ -n "${MIRROR}" ] ; then
+		opts+=("-m" "${MIRROR}")
+	fi
+
+	pull-lp-source "${opts[@]}" "${name}" "${version}" || \
+		pull-debian-source "${opts[@]}" "${name}" "${version}"
 }
 
 function usage()
 {
 	cat <<EOF
-Usage: import-source-deb [-f] [-h] [-s NAME] [-t] DSC|VERSION [DSC|VERSION..]
+Usage: import-source-deb [-f] [-h] [-m MIRROR] [-s NAME] [-t] DSC|VERSION [DSC|VERSION..]
 
 Import a source package (or multiple) into the current branch of the current
 git repo. Download the source package first if a version is provided rather
@@ -98,15 +104,18 @@ Positional arguments:
   DSC                Source package (dsc) file.
 
 Optional arguments:
-  -f, --force        Force the import.
-  -h, --help         Show this help text and exit.
-  -s, --source NAME  Source package name. If not provided, retrieves the name
-                     from debian/changelog.
-  -t, --no-tag       Don't tag the import.
+  -f, --force          Force the import.
+  -h, --help           Show this help text and exit.
+  -m, --mirror MIRROR  Use the specified mirror server. Must be in the form like
+                       http://archive.ubuntu.com/ubuntu.
+  -s, --source NAME    Source package name. If not provided, retrieves the name
+                       from debian/changelog.
+  -t, --no-tag         Don't tag the import.
 EOF
 }
 
 FORCE=0
+MIRROR=
 ver_or_dsc=()
 name=
 TAG=1
@@ -119,6 +128,10 @@ while [ ${#} -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-m|--mirror)
+			shift
+			MIRROR=${1}
 			;;
 		-s|--source)
 			shift
