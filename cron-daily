@@ -7,9 +7,17 @@ fi
 d=/home/juergh/git/cron
 
 log=${d}/cron-daily.log
+mv "${log}".2 "${log}".3
+mv "${log}".1 "${log}".2
 mv "${log}" "${log}".1
 
 {
+	echo "-- Run git-update daily"
 	"${d}"/tools/git-update daily "${d}"
+
+	echo "-- Run find-fixes"
+	"${d}"/tools/find-fixes "${d}"/linux.git "${d}"/linux.fixes
+
+	echo "-- Run cranky-update-sessions"
 	"${d}"/tools/cranky-update-sessions
 } > "${log}" 2>&1

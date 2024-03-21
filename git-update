@@ -51,10 +51,6 @@ do_daily()
 		# Update the main linux mirror first (since all the others use it as a
 		# reference)
 		update_mirror linux.git
-
-		# Update the fixes file
-		echo "-- Update linux.fixes"
-		tools/find-fixes linux.git linux.fixes
 	fi
 
 	# Update the remaining mirrors
