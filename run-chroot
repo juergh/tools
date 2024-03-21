@@ -181,33 +181,24 @@ if [ -z "${chroot}" ] ; then
 fi
 
 # Generate the session name from the provided chroot name. The naming
-# convention is <user>-<name>-<arch>
-dashes="${chroot//[^-]}"
-case "${#dashes}" in
-	0)
-		# Chroot name contains no dashes
-		session=${USER}-${chroot}-$(hostarch "${chroot}")
+# convention is <user>--<name>-<arch>
+case "${chroot}" in
+	*--*-*)
+		session=${chroot}
 		;;
-	1)
-		# Chroot name contains a single dash
-		case "${chroot}" in
-			*-amd64|*-i386|*-powerpc|*-s390x|*-x86_64|*-armhf|*-arm64|*-ppc64el)
-				session=${USER}-${chroot}
-				;;
-			*)
-				session=${chroot}-$(hostarch "${chroot}")
-				;;
-		esac
+	*--*)
+		session=${chroot}-$(hostarch "${chroot#*--}")
+		;;
+	*-*)
+		session=${USER}--${chroot}
 		;;
 	*)
-		# Chroot name contains two or more dashes
-		session=${chroot}
+		session=${USER}--${chroot}-$(hostarch "${chroot}")
 		;;
 esac
 
 # Generate the (base) chroot name from the session name
-chroot=${session#*-}
-chroot=${chroot#-}  # Remove double dash
+chroot=${session#*--}
 
 # Destroy an existing session if -d, --destroy is provided
 if [ "${destroy}" -eq 1 ] ; then
