@@ -60,14 +60,15 @@ function create_session()
 	schroot -b -n "${session}" -c "${chroot}"
 
 	# Fixup session:
-	#   - upgrade packages
+	#   - upgrade and install packages
 	#   - add sudoer
 	#   - create /etc/hosts
+	#   - generate locales
 	cat << EOF | schroot -u root -r -c "${session}" -- bash -
 if sh -c 'command -v apt-get' &> /dev/null ; then
     apt-get update
     apt-get -y dist-upgrade
-    apt-get -y install sudo
+    apt-get -y install sudo locales
 fi
 
 echo "${USER} ALL = NOPASSWD: ALL" > /etc/sudoers.d/"${USER}"
@@ -79,6 +80,8 @@ if ! [ -e /etc/hosts ] ; then
 127.0.1.1 $(hostname)
 __EOF__
 fi
+
+locale-gen en_US.UTF-8 C.UTF-8
 EOF
 }
 
