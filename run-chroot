@@ -139,13 +139,11 @@ while [ $# -gt 0 ] ; do
 		-l|--list)
 			shift
 			case "${1:-}" in
-				c|chroot)  regex="^source:"  ;;
-				s|session) regex="^session:" ;;
-				a|all)     regex="^" ;;
-				*)
-					echo "Invalid type: ${1:-}" >&2
-					exit 2
-					;;
+				a|all|"")  echo "-- All --"; regex="^" ;;
+				c|chroot)  echo "-- Chroots --" ; regex="^source:" ;;
+				s|session) echo "-- Sessions --" ; regex="^session:" ;;
+				r|source)  echo "-- Sources --" ; regex="^source:" ;;
+				*)         echo "Invalid type: ${1}" >&2 ; exit 2 ;;
 			esac
 			schroot -l --all | sed -n "s/${regex}//p" | sort
 			exit
