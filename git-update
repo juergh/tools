@@ -39,6 +39,9 @@ do_hourly()
 {
 	# Update repos
 	for repo in * ; do
+		if [ "${repo}" = "ubuntu-cve-tracker" ] ; then
+			continue
+		fi
 		if [ -d "${repo}"/.git ] ; then
 			update_repo "${repo}"
 		fi
@@ -59,6 +62,9 @@ do_daily()
 			update_mirror "${repo}"
 		fi
 	done
+
+	# Update uct
+	update_repo ubuntu-cve-tracker
 }
 
 if [ ${#} -ne 2 ] ; then
