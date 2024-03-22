@@ -5,6 +5,7 @@
 
 import argparse
 import datetime
+import json
 import re
 import sys
 
@@ -215,7 +216,7 @@ def do_search_bugs(args):
         if not re_subject or re_subject.search(bug.title):
             print(f"LP: #{bug.id:<7} - {bug.title}")
 
-@add_help("Tag bug", help="Show bug tags or add tag(s) to a bug")
+@add_help("Show bug tags or add tag(s) to a bug")
 @add_arg("bug", help="Bug ID")
 @add_arg("tag", nargs="*")
 def do_tag_bug(args):
@@ -225,6 +226,14 @@ def do_tag_bug(args):
     if args.tag:
         lp_bug.tags += args.tag
         lp_bug.lp_save()
+
+@add_help("Show git repository rules")
+@add_arg("repo_path", help="Git repo path (for example "
+         "~canonical-kernel-snaps/+git/kernel-snaps-uc22")
+def do_show_rules(args):
+    git_repo = args.lp.git_repositories.getByPath(path=args.repo_path)
+    rules = git_repo.getRules()
+    print(json.dumps(rules, indent=4))
 
 # -----------------------------------------------------------------------------
 # Main entry point
