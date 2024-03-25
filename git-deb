@@ -54,7 +54,7 @@ function set_globals()
 		exit 1
 	fi
 
-	remote=$(git remote get-url origin)
+	remote=$(git remote get-url origin 2>/dev/null || true)
 	repo_name=${remote##*/}
 	repo_name=${repo_name%.git}
 
