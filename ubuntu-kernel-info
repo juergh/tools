@@ -36,19 +36,23 @@ PKG_FIELDS = (
 
 # Predefined package selection filters
 PKG_FILTERS = {
+    "devel": {
+        "series.devel": "true",
+        # "source.devel": "true",
+    },
     "supported": {
         "series.supported": "true",
         "source.supported": "true",
         "series.esm": "false",
     },
-    "devel": {
-        "series.devel": "true",
-        # "source.devel": "true",
-    },
     "supported-esm": {
         "series.supported": "true",
         "source.supported": "true",
         "series.esm": "true",
+    },
+    "supported-all": {
+        "series.supported": "true",
+        "source.supported": "true",
     },
     "all": {},
 }
@@ -160,7 +164,7 @@ def main():
         "selection",
         help="Select which kernels to list. "
         "Comma-separated list. "
-        "Possible values are: supported, devel, supported-esm, all (and dump).",
+        "Possible values are: devel, supported, supported-esm, supported-all, all (and dump).",
     )
     args = parser.parse_args()
 
