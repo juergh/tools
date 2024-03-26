@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+#
+# Shamelessly copied from https://gist.github.com/mwhudson/c6434df01f7b8006534f563574d12f7a
+#
+
+import json
+import argparse
+
+from launchpadlib.launchpad import Launchpad
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--ppa")
+parser.add_argument("--arch", metavar="ARCH[:SUBARCH]", default="amd64", help="E.g., arm64, arm64:x13s, ...")
+parser.add_argument("--pocket", default="Release")
+parser.add_argument("--project", metavar="PROJECT[:SUBPROJECT]", help="E.g., ubuntu, ubuntu:live, ...")
+parser.add_argument("--metadata", nargs="+", default=[])
+parser.add_argument("livefs", help="E.g., juergh/+livefs/ubuntu/noble/x13s, ...")
+
+args = parser.parse_args()
+
+owner, _, distro, series, name = args.livefs.split("/")
+owner = owner.lstrip("~")
+
+metadata_override = {}
+
+if args.project:
+    if ":" in args.project:
+        project, subproject = args.project.split(":")
+        metadata_override["subproject"] = subproject
+    else:
+        project = args.project
+    metadata_override["project"] = project
+
+if ":" in args.arch:
+    arch, subarch = args.arch.split(":")
+    metadata_override["subarch"] = subarch
+else:
+    arch = args.arch
+
+for override in args.metadata:
+    k, v = override.split("=", 1)
+    metadata_override[k] = json.loads(v)
+
+lp = Launchpad.login_with("tools", "production", version="devel")
+distro = lp.distributions[distro]
+if args.ppa:
+    archive = lp.archives.getByReference(reference=args.ppa)
+else:
+    archive = distro.main_archive
+series = distro.getSeries(name_or_version=series)
+das = series.getDistroArchSeries(archtag=arch)
+
+f = lp.livefses.getByName(distro_series=series, owner=lp.people[owner], name=name)
+build = f.requestBuild(archive=archive, distro_arch_series=das, pocket=args.pocket.title(),
+                       metadata_override=metadata_override)
+
+print(build.web_link)
