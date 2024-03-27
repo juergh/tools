@@ -1,0 +1,13 @@
+#!/bin/bash -eu
+#
+# Download all artifacts of a livefs build
+#
+
+url=${1}
+
+#url=https://launchpad.net/~juergh/+livefs/ubuntu/noble/x13s/+build/596018
+
+curl --silent "${url}" | grep -o "href=\"${url}/+files/[^\"]*" | sed 's/^href="//' | \
+	while IFS= read -r url ; do
+        wget -O "${url##*/}" "${url}"
+    done
