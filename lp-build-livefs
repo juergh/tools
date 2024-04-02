@@ -5,11 +5,12 @@
 
 import json
 import argparse
+import sys
 
 from launchpadlib.launchpad import Launchpad
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--ppa")
+parser.add_argument("--ppa", help="E.g., juergh/ubuntu-cdimage, ppa:juergh/ubuntu/ubuntu-cdimage, ...")
 parser.add_argument("--arch", metavar="ARCH[:SUBARCH]", default="amd64", help="E.g., arm64, arm64:x13s, ...")
 parser.add_argument("--pocket", default="Release")
 parser.add_argument("--project", metavar="PROJECT[:SUBPROJECT]", help="E.g., ubuntu, ubuntu:live, ...")
@@ -18,7 +19,7 @@ parser.add_argument("livefs", help="E.g., juergh/+livefs/ubuntu/noble/x13s, ..."
 
 args = parser.parse_args()
 
-owner, _, distro, series, name = args.livefs.split("/")
+owner, _, distro_n, series_n, name = args.livefs.split("/")
 owner = owner.lstrip("~")
 
 metadata_override = {}
@@ -42,12 +43,20 @@ for override in args.metadata:
     metadata_override[k] = json.loads(v)
 
 lp = Launchpad.login_with("tools", "production", version="devel")
-distro = lp.distributions[distro]
+distro = lp.distributions[distro_n]
 if args.ppa:
-    archive = lp.archives.getByReference(reference=args.ppa)
+    if args.ppa.startswith("ppa:"):
+        ppa = args.ppa
+    else:
+        o, n = args.ppa.split("/")
+        ppa = f"ppa:{o}/{distro_n}/{n}"
+    archive = lp.archives.getByReference(reference=ppa)
+    if not archive:
+        print(f"Failed to get PPA: {ppa}", file=sys.stderr)
+        sys.exit(1)
 else:
     archive = distro.main_archive
-series = distro.getSeries(name_or_version=series)
+series = distro.getSeries(name_or_version=series_n)
 das = series.getDistroArchSeries(archtag=arch)
 
 f = lp.livefses.getByName(distro_series=series, owner=lp.people[owner], name=name)
