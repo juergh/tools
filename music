@@ -130,6 +130,7 @@ def do_mp3_info(args):
 
 @add('arg', '-f', '--force', action='store_true', help='Write the tags')
 @add("arg", "-i", "--discnumber")
+@add("arg", "-d", "--date")
 @add('help', 'Set mp3 tag details')
 def do_mp3_tag_set(args):
     """
@@ -171,6 +172,9 @@ def do_mp3_tag_set(args):
 
         if args.discnumber:
             tags["DISCNUMBER"] = [args.discnumber]
+
+        if args.date:
+            tags["DATE"] = [args.date]
 
         for key, val in tags.items():
             print('  {:<12}: {}'.format(key, ' '.join(val)))
