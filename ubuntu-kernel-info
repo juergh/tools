@@ -27,6 +27,7 @@ PKG_FIELDS = (
     "source.supported",
     "source.forwardport",
     "source.backport",
+    "source.invalid-tasks",
     # Package
     "package.name",
     "package.type",
@@ -84,6 +85,7 @@ def parse_kernel_series(ks):
                 "source.supported": source_data.get("supported", True),
                 "source.forwardport": source_data.get("copy_forward", False),
                 "source.backport": source_data.get("backport", False),
+                "source.invalid-tasks": ",".join(source_data.get("invalid-tasks", ["none"])),
             }
 
             for package, package_data in source_data.get("packages", {}).items():
