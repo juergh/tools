@@ -1,0 +1,78 @@
+#!/bin/bash
+#
+# Copy packages from one PPA to another
+#
+
+function usage()
+{
+        cat <<EOF
+Usage: ${0##*/} [-b] [-f] [-h] SERIES PACKAGE FROM TO
+
+Copy packages from one PPA to another.
+
+Optional arguments:
+  -b, --binary         Copy binary packages.
+  -f, --force          Do it.
+  -h, --help           Show this help message and exit.
+
+Example:
+  $ lp-copy-packages noble linux-raspi juergh/raspi dest/name
+EOF
+}
+
+opts=()
+force=0
+series=
+package=
+from=
+to=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-b|--binary)
+			opts+=("-b")
+			;;
+		-f|--force)
+			force=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-s|--series)
+			shift
+			series=${1}
+			;;
+		*)
+			if [ -z "${series}" ] ; then
+				series=${1}
+			elif [ -z "${package}" ] ; then
+				package=${1}
+			elif [ -z "${from}" ] ; then
+				from=${1}
+			elif [ -z "${to}" ] ; then
+				to=${1}
+			else
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+	esac
+	shift
+done
+
+if [ -z "${to}" ] ; then
+	usage
+	exit 2
+fi
+
+if [ ${force} -eq 0 ] ; then
+	opts+=("--dry-run")
+fi
+
+set -x
+~/git/ubuntu/ubuntu-archive-tools/copy-package \
+	--from="~${from%/*}/ubuntu/${from#*/}" \
+	--to="~${to%/*}/ubuntu/${to#*/}" \
+	-s "${series}" \
+	"${opts[@]}" \
+	"${package}"
