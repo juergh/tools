@@ -10,4 +10,8 @@ while IFS= read -r session ; do
 
 	schroot -r -c "${session}" -u root -- apt-get update
 	schroot -r -c "${session}" -u root -- apt-get --yes --with-new-pkgs upgrade
+
+	# 2nd stage
+	schroot -r -c "${session}" -u root -- apt-get --yes dist-upgrade
+	schroot -r -c "${session}" -u root -- apt-get --yes --purge autoremove
 done < <(schroot -l --all-sessions | grep '^session:cranky-')
