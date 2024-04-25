@@ -10,7 +10,7 @@ import sys
 from launchpadlib.launchpad import Launchpad
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--ppa", help="E.g., juergh/ubuntu-cdimage, ppa:juergh/ubuntu/ubuntu-cdimage, ...")
+parser.add_argument("--archive", help="E.g., ppa:juergh/ubuntu-cdimage, ...")
 parser.add_argument("--arch", metavar="ARCH[:SUBARCH]", default="amd64", help="E.g., arm64, arm64:x13s, ...")
 parser.add_argument("--pocket", default="Release")
 parser.add_argument("--project", metavar="PROJECT[:SUBPROJECT]", help="E.g., ubuntu, ubuntu:live, ...")
@@ -44,12 +44,9 @@ for override in args.metadata:
 
 lp = Launchpad.login_with("tools", "production", version="devel")
 distro = lp.distributions[distro_n]
-if args.ppa:
-    if args.ppa.startswith("ppa:"):
-        ppa = args.ppa
-    else:
-        o, n = args.ppa.split("/")
-        ppa = f"ppa:{o}/{distro_n}/{n}"
+if args.archive:
+    o, n = args.archive.split("/")
+    ppa = f"{o}/{distro_n}/{n}"
     archive = lp.archives.getByReference(reference=ppa)
     if not archive:
         print(f"Failed to get PPA: {ppa}", file=sys.stderr)
