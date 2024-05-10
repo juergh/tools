@@ -1,0 +1,36 @@
+#!/bin/bash -eu
+
+PPA=(
+	"ppa:canonical-kernel-team/ppa        distro kernel build"
+	"ppa:canonical-kernel-team/ppa2       distro kernel build#2"
+	"ppa:canonical-kernel-team/proposed   distro kernel proposed"
+	"ppa:canonical-kernel-team/proposed2  distro kernel proposed#2"
+)
+
+echo "Idx  PPA                              Description"
+echo "--------------------------------------------------------------"
+
+idx=1
+for ppa in "${PPA[@]}" ; do
+	printf "%2d:  %s\n" "${idx}" "${ppa#ppa:}"
+	idx=$((idx + 1))
+done
+
+echo "--------------------------------------------------------------"
+
+echo
+while true ; do
+	echo -n "Choice: "
+	read -r choice
+	idx=$((choice - 1))
+	if [ $idx -ge 0 ] && [ $idx -lt ${#PPA[@]} ] ; then
+		break
+	fi
+done
+
+ppa=${PPA[${idx}]}
+ppa=${ppa%% *}
+echo
+echo "Add PPA ${ppa}"
+set -x
+apt-add-repository -P "${ppa}"
