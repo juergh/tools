@@ -1,0 +1,16 @@
+#!/bin/bash -eu
+#
+# Disable HP direct print
+#
+
+ip=${1}
+
+url="https://${ip}/hp/device/set_config_directPrint.html/config"
+
+data=(
+	"--data-urlencode" "dp_status=OFF_"
+	"--data-urlencode" "Apply=Apply"
+)
+
+set -x
+curl --verbose --insecure "${data[@]}" "${url}"
