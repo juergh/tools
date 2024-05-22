@@ -85,7 +85,9 @@ def parse_kernel_series(ks):
                 "source.supported": source_data.get("supported", True),
                 "source.forwardport": source_data.get("copy_forward", False),
                 "source.backport": source_data.get("backport", False),
-                "source.invalid-tasks": ",".join(source_data.get("invalid-tasks", ["none"])),
+                "source.invalid-tasks": ",".join(
+                    source_data.get("invalid-tasks", ["none"])
+                ),
             }
 
             for package, package_data in source_data.get("packages", {}).items():
@@ -160,6 +162,16 @@ def main():
         "Possible values are: main, meta, signed, lrm.",
     )
     parser.add_argument(
+        "--pkg-name",
+        help="List only packages with the provided package name. "
+        "If not provided, lists all packages. ",
+    )
+    parser.add_argument(
+        "--src-name",
+        help="List only packages with the provided source name. "
+        "If not provided, lists all packages. ",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose output."
     )
     parser.add_argument(
@@ -186,6 +198,10 @@ def main():
             f = PKG_FILTERS[sel]
             if args.pkg_type:
                 f["package.type"] = args.pkg_type
+            if args.pkg_name:
+                f["package.name"] = args.pkg_name
+            if args.src_name:
+                f["source.name"] = args.src_name
             pkg_filters.append(f)
 
     # Download and gunzip kernel-series.json
