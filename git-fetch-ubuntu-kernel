@@ -1,0 +1,90 @@
+#!/bin/bash -eu
+#
+# To initialize the repo:
+#   git clone --bare --reference linux.git linux.git linux-ubuntu.git
+#
+
+function print_kernel_info()
+{
+	local pkg=${1} selection=${2}
+
+	ubuntu-kernel-info \
+		-f series.name,package.name,package.repo.url,package.repo.branch \
+		--pkg-name "${pkg}" "${selection}"
+}
+
+function print_remote()
+{
+	local remote=${1} url=${2} heads=${3} tags=${4}
+	local head tag
+
+	cat <<EOF
+[remote "${remote}"]
+	url = ${url}
+	pushurl = (no push)
+	tagopt = --no-tags
+EOF
+
+	for head in ${heads} ; do
+		cat <<EOF
+	fetch = +refs/heads/${head}:refs/remotes/${remote}/${head}
+EOF
+	done
+
+	for tag in ${tags} ; do
+		cat <<EOF
+	fetch = +refs/tags/${tag}:refs/tags/${tag}
+EOF
+	done
+}
+
+if ! [ -e config ] ; then
+	echo "No such file: config" >&2
+	exit 1
+fi
+
+# Just in case
+git config remote.origin.pushurl "(no push)"
+
+# FIXME; No hard-coding of kernel versions!
+declare -A versions=(
+	[unstable]="*"
+	[noble]="6.8.* hwe-*"
+	[mantic]="6.5.*"
+	[jammy]="5.15.* hwe-*"
+	[focal]="5.4.* hwe-*"
+	[bionic]="4.15.* hwe-*"
+	[xenial]="4.4.* hwe-*"
+	[trusty]="3.13.* hwe-*"
+)
+
+# Remove all remotes (except origin)
+while IFS= read -r remote ; do
+	if [ "${remote}" != "origin" ] ; then
+		git remote remove "${remote}"
+	fi
+done < <(git remote)
+
+# Add remotes
+while IFS=" " read -r ktype series package url branch ; do
+	if [ "${package}" = "linux-unstable" ] ; then
+		series=unstable
+	fi
+
+	remote=${ktype}/${series}/${package}
+	heads=${branch}
+	tag_prefix=Ubuntu${package#linux}-
+
+	set -f
+	tags=""
+	for v in ${versions["${series}"]} ; do
+		tags="${tags} ${tag_prefix}$v"
+	done
+	set +f
+
+	print_remote "${remote}" "${url}" "${heads}" "${tags}"
+done < <(
+	print_kernel_info linux supported | sed 's/^/public /'
+	print_kernel_info linux-unstable devel | sed 's/^/public /'
+	print_kernel_info linux supported-esm | sed 's/^/esm /'
+) >> config
