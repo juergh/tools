@@ -20,7 +20,8 @@ function out()
 function ubuntu_kernel_info()
 {
 	ubuntu-kernel-info \
-		-f series.name,package.name,package.repo.url,package.repo.branch \
+		--field series.name,package.name,package.repo.url,package.repo.branch \
+		--pkg-type main \
 		"${@}"
 }
 
@@ -128,9 +129,10 @@ while IFS=" " read -r ktype series package url branch ; do
 
 	print_remote_section "${remote}" "${url}" "${heads}" "${tags}"
 done < <(
-	ubuntu_kernel_info --pkg-name linux supported      | sed 's/^/public /'
-	ubuntu_kernel_info --pkg-name linux-unstable devel | sed 's/^/public /'
-	ubuntu_kernel_info --pkg-name linux supported-esm  | sed 's/^/esm /'
+#	ubuntu_kernel_info --pkg-name linux supported      | sed 's/^/ubuntu /'
+	ubuntu_kernel_info supported                       | sed 's/^/ubuntu /'
+	ubuntu_kernel_info --src-name linux-unstable devel | sed 's/^/ubuntu /'
+	ubuntu_kernel_info --src-name linux supported-esm  | sed 's/^/esm /'
 ) >> config
 
 # Fetch everything
