@@ -17,7 +17,7 @@ Positional parameters:
 
 Optional arguments:
   -c, --compress METHOD  Compression method. If not provided, defaults to
-                         'gzip'.
+                         'zstd'.
   -f, --force            Overwrite an existing output file/directory.
   -h, --help             Show this help text and exit
 EOF
@@ -86,9 +86,9 @@ if [ -d "${in}" ] ; then
 	# Compression method (command arguments shamelessly stolen from
 	# /usr/sbin/mkinitramfs)
 	case "${compress}" in
-		""|gzip)         cmd=("gzip" "-n") ;;
+		gzip)            cmd=("gzip" "-n") ;;
 		lz4)             cmd=("lz4" "-2" "-l") ;;
-		zstd)            cmd=("zstd" "-q" "-1" "-T0");;
+		""|zstd)         cmd=("zstd" "-q" "-1" "-T0");;
 		xz)              cmd=("xz" "--check=crc32") ;;
 		bzip2|lzma|lzop) cmd=("compress") ;;
 		*)
@@ -98,26 +98,20 @@ if [ -d "${in}" ] ; then
 	esac
 
 	# Create initrd
-	( cd "${in}" && find . | cpio -H newc -o | "${cmd[@]}" -c > "${out}" )
+	if [ -d "${in}"/early ] ; then
+		{
+			for d in "${in}"/early* ; do
+				( cd "${d}" && find . | cpio -H newc -o )
+			done
+			( cd "${in}"/main && find . | cpio -H newc -o | "${cmd[@]}" )
+		} > "${out}"
+	else
+		( cd "${in}" && find . | cpio -H newc -o | "${cmd[@]}" -c ) > "${out}"
+	fi
     echo "Created initrd: ${out}"
 
 else
-	# Compression method
-	compress=$(file "${in}")
-	compress=${compress%% compressed data*}
-	compress=${compress##*: }
-	case "${compress,,}" in
-		gzip)      cmd=("zcat") ;;
-		lz4)       cmd=("lz4cat") ;;
-		zstandard) cmd=("zstdcat") ;;
-		*)
-			echo "Unsupported compression method: ${compress}" >&2
-			exit 1
-			;;
-	esac
-
 	# Extract initrd
-	mkdir -p "${out}"
-	( cd "${out}" && "${cmd[@]}" "${in}" | cpio --extract )
+	unmkinitramfs "${in}" "${out}"
 	echo "Extracted initrd: ${out}"
 fi
