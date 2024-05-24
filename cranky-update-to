@@ -184,8 +184,8 @@ if [ "${strategy}" = "cherry-pick" ] ; then
 
 	echo "Cherry-picking the following commits:"
 	{
-		git log --oneline --no-merges "${new_cur_base_hash}".."${new_base_hash}"
 		git log --oneline --no-merges "${cur_base_hash}"..
+		git log --oneline --no-merges "${new_cur_base_hash}".."${new_base_hash}"
 	} | tac
 
 	if [ ${dry_run} -eq 1 ] ; then
