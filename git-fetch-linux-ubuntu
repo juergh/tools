@@ -94,3 +94,6 @@ done < <(
 	print_kernel_info linux-unstable devel | sed 's/^/public /'
 	print_kernel_info linux supported-esm | sed 's/^/esm /'
 ) >> config
+
+# Fetch everything
+git fetch --all
