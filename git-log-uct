@@ -5,6 +5,7 @@
 
 import json
 import os
+import sys
 
 import git
 
@@ -26,6 +27,10 @@ def lgreen(text):
 def lyellow(text):
     return f"\033[93m{text}\033[00m"
 
+if len(sys.argv) > 1:
+    start = sys.argv[1]
+else:
+    start = "HEAD"
 
 with open("/home/juergh/git/juergh/tools/uct.json", encoding="UTF-8") as fh:
     uct = json.load(fh)
@@ -33,7 +38,7 @@ with open("/home/juergh/git/juergh/tools/uct.json", encoding="UTF-8") as fh:
 fixed = {}
 repo = git.Repo(os.getcwd())
 
-for commit in repo.iter_commits("HEAD"):
+for commit in repo.iter_commits(start):
     sha = commit.hexsha
     subject = commit.summary
 
