@@ -47,8 +47,9 @@ fi
 git config remote.upstream.pushurl "(no push)"
 git config remote.upstream.tagopt "--no-tags"
 git config --unset-all remote.upstream.fetch || true
-git config --add remote.upstream.fetch '+refs/heads/master:refs/heads/upstream/linux'
-git config --add remote.upstream.fetch '+refs/heads/linux-*:refs/heads/upstream/linux-*'
+#git config --add remote.upstream.fetch '+refs/heads/master:refs/heads/upstream/linux'
+#git config --add remote.upstream.fetch '+refs/heads/linux-*:refs/heads/upstream/linux-*'
+git config --add remote.upstream.fetch '+refs/heads/linux*:refs/heads/upstream/linux*'
 git config --add remote.upstream.fetch '+refs/tags/v*:refs/tags/v*'
 
 # FIXME; No hard-coding of kernel versions!
