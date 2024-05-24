@@ -4,16 +4,27 @@
 #   git clone --bare --origin upstream --reference linux.git linux.git linux-ubuntu.git
 #
 
-function print_kernel_info()
+function out()
 {
-	local pkg=${1} selection=${2}
+	local rc=${?}
 
-	ubuntu-kernel-info \
-		-f series.name,package.name,package.repo.url,package.repo.branch \
-		--pkg-name "${pkg}" "${selection}"
+	trap - EXIT INT TERM HUP
+
+	if [ ${rc} -ne 0 ] ; then
+		echo "Script failed" >&2
+	fi
+
+	exit "${rc}"
 }
 
-function print_remote()
+function ubuntu_kernel_info()
+{
+	ubuntu-kernel-info \
+		-f series.name,package.name,package.repo.url,package.repo.branch \
+		"${@}"
+}
+
+function print_remote_section()
 {
 	local remote=${1} url=${2} heads=${3} tags=${4}
 	local head tag
@@ -38,19 +49,39 @@ EOF
 	done
 }
 
+function usage()
+{
+	cat <<EOF
+Usage: git-fetch-linux-ubuntu [-h]
+
+Fetch Ubuntu (and upstream) kernels.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	# shellcheck disable=SC2317
+	shift
+done
+
 if ! [ -e config ] ; then
 	echo "No such file: config" >&2
 	exit 1
 fi
 
-# Just in case
-git config remote.upstream.pushurl "(no push)"
-git config remote.upstream.tagopt "--no-tags"
-git config --unset-all remote.upstream.fetch || true
-#git config --add remote.upstream.fetch '+refs/heads/master:refs/heads/upstream/linux'
-#git config --add remote.upstream.fetch '+refs/heads/linux-*:refs/heads/upstream/linux-*'
-git config --add remote.upstream.fetch '+refs/heads/linux*:refs/heads/upstream/linux*'
-git config --add remote.upstream.fetch '+refs/tags/v*:refs/tags/v*'
+trap out EXIT INT TERM HUP
 
 # FIXME; No hard-coding of kernel versions!
 declare -A versions=(
@@ -63,6 +94,13 @@ declare -A versions=(
 	[xenial]="4.4.* hwe-*"
 	[trusty]="3.13.* hwe-*"
 )
+
+# Just in case
+git config remote.upstream.pushurl "(no push)"
+git config remote.upstream.tagopt "--no-tags"
+git config --unset-all remote.upstream.fetch || true
+git config --add remote.upstream.fetch '+refs/heads/linux*:refs/heads/upstream/linux*'
+git config --add remote.upstream.fetch '+refs/tags/v*:refs/tags/v*'
 
 # Remove all remotes (except upstream)
 while IFS= read -r remote ; do
@@ -88,11 +126,11 @@ while IFS=" " read -r ktype series package url branch ; do
 	done
 	set +f
 
-	print_remote "${remote}" "${url}" "${heads}" "${tags}"
+	print_remote_section "${remote}" "${url}" "${heads}" "${tags}"
 done < <(
-	print_kernel_info linux supported | sed 's/^/public /'
-	print_kernel_info linux-unstable devel | sed 's/^/public /'
-	print_kernel_info linux supported-esm | sed 's/^/esm /'
+	ubuntu_kernel_info --pkg-name linux supported      | sed 's/^/public /'
+	ubuntu_kernel_info --pkg-name linux-unstable devel | sed 's/^/public /'
+	ubuntu_kernel_info --pkg-name linux supported-esm  | sed 's/^/esm /'
 ) >> config
 
 # Fetch everything
