@@ -1,7 +1,7 @@
 #!/bin/bash -eu
 #
 # To initialize the repo:
-#   git clone --bare --reference linux.git linux.git linux-ubuntu.git
+#   git clone --bare --origin upstream --reference linux.git linux.git linux-ubuntu.git
 #
 
 function print_kernel_info()
@@ -27,7 +27,7 @@ EOF
 
 	for head in ${heads} ; do
 		cat <<EOF
-	fetch = +refs/heads/${head}:refs/remotes/${remote}/${head}
+	fetch = +refs/heads/${head}:refs/heads/${remote}/${head}
 EOF
 	done
 
@@ -44,7 +44,12 @@ if ! [ -e config ] ; then
 fi
 
 # Just in case
-git config remote.origin.pushurl "(no push)"
+git config remote.upstream.pushurl "(no push)"
+git config remote.upstream.tagopt "--no-tags"
+git config --unset-all remote.upstream.fetch || true
+git config --add remote.upstream.fetch '+refs/heads/master:refs/heads/upstream/linux'
+git config --add remote.upstream.fetch '+refs/heads/linux-*:refs/heads/upstream/linux-*'
+git config --add remote.upstream.fetch '+refs/tags/v*:refs/tags/v*'
 
 # FIXME; No hard-coding of kernel versions!
 declare -A versions=(
@@ -58,9 +63,9 @@ declare -A versions=(
 	[trusty]="3.13.* hwe-*"
 )
 
-# Remove all remotes (except origin)
+# Remove all remotes (except upstream)
 while IFS= read -r remote ; do
-	if [ "${remote}" != "origin" ] ; then
+	if [ "${remote}" != "upstream" ] ; then
 		git remote remove "${remote}"
 	fi
 done < <(git remote)
