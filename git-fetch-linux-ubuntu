@@ -60,7 +60,6 @@ fi
 trap out EXIT INT TERM HUP
 
 # Just in case
-git config remote.upstream.pushurl "(no push)"
 git config remote.upstream.tagopt "--no-tags"
 git config --unset-all remote.upstream.fetch || true
 git config --add remote.upstream.fetch "+refs/heads/linux*:refs/heads/upstream/linux*"
@@ -83,7 +82,6 @@ while IFS=" " read -r ktype series package url branch ; do
 	tag_prefix=Ubuntu${package#linux}
 
 	git remote add "${remote}" "${url}"
-	git config remote."${remote}".pushurl "(no push)"
 	git config remote."${remote}".tagopt "--no-tags"
 	git config --unset-all remote."${remote}".fetch || true
 	git config --add remote."${remote}".fetch "+refs/heads/${branch}:refs/heads/${remote}"
