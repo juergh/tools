@@ -17,6 +17,8 @@ function update_repo()
 		git fetch
 		remote_branch=$(git rev-parse --abbrev-ref '@{u}')
 		git reset --hard "${remote_branch}"
+
+		echo "-- Done"
 	)
 }
 
@@ -32,6 +34,8 @@ function update_mirror()
 		echo "-- Update mirror $(pwd)"
 
 		git fetch --all --tags
+
+		echo "-- Done"
 	)
 }
 
