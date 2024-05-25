@@ -12,6 +12,9 @@ mv "${log}".1 "${log}".2
 mv "${log}" "${log}".1
 
 {
+	# shellcheck disable=SC2155
+	export SSH_AUTH_SOCK=/run/user/$(id -u)/keyring/ssh
+
 	echo "-- Run git-update daily"
 	"${d}"/tools/git-update daily "${d}"
 
