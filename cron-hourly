@@ -15,4 +15,5 @@ mv "${log}" "${log}".1
 
 	echo "-- Run git-update hourly"
 	"${d}"/tools/git-update hourly "${d}"
+
 } > "${log}" 2>&1
