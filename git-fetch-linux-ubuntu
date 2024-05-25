@@ -73,12 +73,12 @@ while IFS= read -r remote ; do
 done < <(git remote)
 
 # Add remotes
-while IFS=" " read -r ktype series package url branch ; do
+while IFS=" " read -r prefix series package url branch ; do
 	if [ "${package}" = "linux-unstable" ] ; then
 		series=unstable
 	fi
 
-	remote=${ktype}/${series}/${package}
+	remote=${prefix}/${series}/${package}
 	tag_prefix=Ubuntu${package#linux}
 
 	git remote add "${remote}" "${url}"
@@ -90,9 +90,8 @@ while IFS=" " read -r ktype series package url branch ; do
 	done
 
 done < <(
-#	ubuntu_kernel_info --pkg-name linux supported      | sed 's/^/ubuntu /'
-	ubuntu_kernel_info supported                       | sed 's/^/ubuntu /'
 	ubuntu_kernel_info --src-name linux-unstable devel | sed 's/^/ubuntu /'
+	ubuntu_kernel_info supported                       | sed 's/^/ubuntu /'
 	ubuntu_kernel_info --src-name linux supported-esm  | sed 's/^/esm /'
 )
 
