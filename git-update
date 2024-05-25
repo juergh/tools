@@ -3,7 +3,7 @@
 # Update local git repos and mirrors
 #
 
-update_repo()
+function update_repo()
 {
 	local repo=${1}
 
@@ -20,7 +20,7 @@ update_repo()
 	)
 }
 
-update_mirror()
+function update_mirror()
 {
 	local repo=${1}
 
@@ -33,38 +33,6 @@ update_mirror()
 
 		git fetch --all --tags
 	)
-}
-
-do_hourly()
-{
-	# Update repos
-	for repo in * ; do
-		if [ "${repo}" = "ubuntu-cve-tracker" ] ; then
-			continue
-		fi
-		if [ -d "${repo}"/.git ] ; then
-			update_repo "${repo}"
-		fi
-	done
-}
-
-do_daily()
-{
-	if [ -d linux.git ] ; then
-		# Update the main linux mirror first (since all the others use it as a
-		# reference)
-		update_mirror linux.git
-	fi
-
-	# Update the remaining mirrors
-	for repo in *.git ; do
-		if [ -d "${repo}" ] && [ "${repo}" != "linux.git" ] ; then
-			update_mirror "${repo}"
-		fi
-	done
-
-	# Update uct
-	update_repo ubuntu-cve-tracker
 }
 
 if [ ${#} -ne 2 ] ; then
@@ -82,4 +50,16 @@ if ! cd "${dir}" ; then
 	exit 1
 fi
 
-do_"${freq}"
+while IFS= read -r repo ; do
+	case "${repo}" in
+		"#"*|"")
+			continue
+			;;
+		*.git)
+			update_mirror "${repo}"
+			;;
+		*)
+			update_repo "${repo}"
+			;;
+	esac
+done <"${freq}".list
