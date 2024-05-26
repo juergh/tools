@@ -19,7 +19,7 @@ mv "${log}" "${log}".1
 	"${d}"/tools/git-update daily "${d}"
 
 	echo "-- Run git-fetch-linux-ubuntu"
-	( cd linux-ubuntu.git && "${d}"/tools/git-fetch-linux-ubuntu )
+	( cd "${d}"/linux-ubuntu.git && "${d}"/tools/git-fetch-linux-ubuntu )
 
 	echo "-- Run find-fixes"
 	"${d}"/tools/find-fixes "${d}"/linux.git "${d}"/linux.fixes
