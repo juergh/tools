@@ -4,6 +4,8 @@
 #   git clone --bare --origin upstream --reference linux.git linux.git linux-ubuntu.git
 #
 
+HERE=$(dirname "$(readlink -f "${0}")")
+
 function out()
 {
 	local rc=${?}
@@ -19,7 +21,7 @@ function out()
 
 function ubuntu_kernel_info()
 {
-	ubuntu-kernel-info \
+	"${HERE}"/ubuntu-kernel-info \
 		--field series.name,package.name,package.repo.url,package.repo.branch \
 		--pkg-type main \
 		"${@}"
