@@ -176,6 +176,10 @@ def do_mp3_tag_set(args):
         if args.date:
             tags["DATE"] = [args.date]
 
+        # Set the default disc number
+        if not tags.get("DISCNUMBER"):
+            tags["DISCNUMBER"] = "1"
+
         for key, val in tags.items():
             print('  {:<12}: {}'.format(key, ' '.join(val)))
 
