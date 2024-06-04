@@ -1,0 +1,20 @@
+#!/bin/bash
+#
+# Parse commit messages CVE tags and use them as decorators
+#
+
+GREEN="\033[92m"
+NC="\033[00m"
+
+while IFS= read -r line ; do
+	h=${line%% *}
+	s=${line#* }
+
+	c=$(echo "${h}" | ansi2txt)
+	cves=$(git log --format=%b "${c}" -1 | grep -E '^CVE-[0-9]{4}-[0-9]+$' | tr '\n' ' ')
+	cves=${cves% }
+	if [ -n "${cves}" ] ; then
+		cves="${GREEN}(${cves})${NC} "
+	fi
+	echo -e "$h ${cves}$s"
+done < <(git log --oneline --decorate=short --color=always "$@") | "${PAGER:-less}"
