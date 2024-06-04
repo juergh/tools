@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+
+import email
+
+def decode_single(infile):
+    with open(infile) as fh:
+        msg = email.message_from_file(fh)
+
+    outfile = infile + ".new"
+    with open(outfile, "w") as fh:
+        # Print the header
+        for k,v in msg.items():
+            if k == "Conent-Type":
+                v = 'text/plain; charset="us-ascii"'
+            elif k ==  "Content-Transfer-Encoding":
+                v = "7bit"
+            fh.write(f"{k}: {v}\n")
+        fh.write("\n")
+
+        # Print the decoded email content
+        charset = msg.get_content_charset()
+        txt = msg.get_payload(decode=True).decode(charset)
+        fh.write(txt + "\n")
+
+    os.rename(outfile, infile)
+
+for infile in sys.argv[1:]:
+    print(f"-- Decode {infile}")
+    decode_single(infile)
