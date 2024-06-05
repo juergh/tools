@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Set the distro of a pi-kernel snap recipe
+# Set the distro of a kernel snap recipe
 #
 
 from launchpadlib.launchpad import Launchpad
@@ -14,18 +14,16 @@ def show(item):
 
 lp = Launchpad.login_with("tools", "production", version="devel")
 
-#recipe = "pi-kernel-testing"
-#owner = "juergh"
-#distro = "noble"
-
-recipe = "noble--linux-raspi--pi-kernel--beta--1+2"
 owner = "canonical-kernel-snaps"
 distro = "noble"
+recipes = ["noble--linux-raspi--pi-kernel--beta--1+2"]
 
 lp_owner = lp.people[owner]
 lp_distro = lp.distributions["ubuntu"].getSeries(name_or_version=distro)
-lp_snap = lp.snaps.getByName(name=recipe, owner=lp_owner)
 
-# Set the distro to Focal (which can't be done through the web UI)
-lp_snap.distro_series = lp_distro
-lp_snap.lp_save()
+for recipe in recipes:
+    lp_snap = lp.snaps.getByName(name=recipe, owner=lp_owner)
+
+    # Set the distro (which can't be done through the web UI)
+    lp_snap.distro_series = lp_distro
+    lp_snap.lp_save()
