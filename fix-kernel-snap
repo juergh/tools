@@ -16,14 +16,21 @@ lp = Launchpad.login_with("tools", "production", version="devel")
 
 owner = "canonical-kernel-snaps"
 distro = "noble"
-recipes = ["noble--linux-raspi--pi-kernel--beta--1+2"]
+recipes = [
+    "noble--linux-raspi--pi-kernel--edge--1+2",
+    "noble--linux-raspi--pi-kernel--edge--2+2",
+    "noble--linux-raspi--pi-kernel--beta--1+2",
+    "noble--linux-raspi--pi-kernel--beta--2+2",
+]
 
 lp_owner = lp.people[owner]
 lp_distro = lp.distributions["ubuntu"].getSeries(name_or_version=distro)
 
 for recipe in recipes:
     lp_snap = lp.snaps.getByName(name=recipe, owner=lp_owner)
+    print(lp_snap.distro_series)
 
     # Set the distro (which can't be done through the web UI)
+#    lp_snap.distro_series = None
     lp_snap.distro_series = lp_distro
     lp_snap.lp_save()
