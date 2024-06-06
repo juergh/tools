@@ -11,9 +11,9 @@ Usage: ${0##*/} [-b] [-f] [-h] SERIES PACKAGE FROM TO
 Copy packages from one PPA to another.
 
 Optional arguments:
-  -b, --binary         Copy binary packages.
-  -f, --force          Do it.
-  -h, --help           Show this help message and exit.
+  -b, --binary  Copy binary packages.
+  -f, --force   Do it.
+  -h, --help    Show this help message and exit.
 
 Example:
   $ lp-copy-packages noble linux-raspi juergh/raspi dest/name
@@ -65,12 +65,15 @@ if [ -z "${to}" ] ; then
 	exit 2
 fi
 
-if [ ${force} -eq 0 ] ; then
+
+if [ ${force} -eq 1 ] ; then
+	opts+=("--confirm-all")
+else
 	opts+=("--dry-run")
 fi
 
 set -x
-~/git/ubuntu/ubuntu-archive-tools/copy-package \
+"${HOME}"/git/ubuntu/ubuntu-archive-tools/copy-package \
 	--from="~${from%/*}/ubuntu/${from#*/}" \
 	--to="~${to%/*}/ubuntu/${to#*/}" \
 	-s "${series}" \
