@@ -3,14 +3,24 @@
 # Search the linux 'Fixes:' file for commits that fix the given commit(s).
 #
 
+COLOR=1
+
 function pr_error()
 {
-	echo -e "\033[31m${*}\033[0m" 1>&2
+	if [ ${COLOR} -eq 1 ] ; then
+		echo -e "\033[31m${*}\033[0m" 1>&2
+	else
+		echo "${*}" 1>&2
+	fi
 }
 
 function pr_warn()
 {
-	echo -e "\033[33m${*}\033[0m"
+	if [ ${COLOR} -eq 1 ] ; then
+		echo -e "\033[33m${*}\033[0m"
+	else
+		echo "${*}"
+	fi
 }
 
 function find_fixes()
@@ -106,6 +116,7 @@ Optional arguments:
   -c, --commit COMMIT  Commit to search fixes for. Can also be a list of
                        comma-separated commits.
   -h, --help           Show this help text and exit.
+  --no-colors          Disable colored ouput.
 EOF
 }
 
@@ -121,6 +132,9 @@ while [ $# -gt 0 ] ; do
 		-c|--commit)
 			shift
 			readarray -t commits < <(echo "${1}" | tr ',' '\n')
+			;;
+		--no-colors)
+			COLOR=0
 			;;
 		*)
 			rev_range=("${@}")
