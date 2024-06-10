@@ -82,26 +82,31 @@ if [ "${release}" = "UNRELEASED" ]; then
 fi
 package=$(dpkg-parsechangelog -l "${changelog}" -S Source)
 
-# Remote name and branch
-remote_name=${package}
-remote_branch=${release}/${branch}
-
-# Kernel packages are special
+# Unstable kernel packages are special
 case "${package}" in
 	linux-meta-unstable|linux-unstable)
 		release="unstable"
 		;;
 esac
+
+# Sanitize the branch name (remove release name)
+s_branch=${branch}
+s_branch=${s_branch%/"${release}"}
+s_branch=${s_branch#"${release}"/}
+
+# Remote name and branch
 case "${package}" in
 	linux-firmware)
+		remote_name=linux-firmware
+		remote_branch=${release}/${s_branch}
 		;;
 	linux-meta*)
 		remote_name=linux-meta
-		remote_branch=${release}/${package}/${branch}
+		remote_branch=${release}/${package}/${s_branch}
 		;;
 	linux*)
 		remote_name=linux
-		remote_branch=${release}/${package}/${branch}
+		remote_branch=${release}/${package}/${s_branch}
 		;;
 esac
 
@@ -113,10 +118,12 @@ remote_url="git+ssh://git.launchpad.net/~juergh/+git/${remote_name}"
 #	git remote add juergh "${remote_url}"
 #fi
 
-echo "Remote URL: ${remote_url}"
-echo "Release:    ${release}"
-echo "Source:     ${package}"
-echo "Branch:     ${branch}"
+echo "Release: ${release}"
+echo "Source:  ${package}"
+echo "Branch:  ${branch}"
+echo
+echo "Remote URL:    ${remote_url}"
+echo "Remote branch: ${remote_branch}"
 echo
 echo "git push ${opts[*]} ${remote_url} ${branch}:${remote_branch}"
 
