@@ -1,0 +1,86 @@
+#!/bin/bash -u
+#
+# Extract image files from a system image
+# Usage: extract-firmware.sh fw/dubai
+#
+
+BINDIR=${HOME}/android/lineage/prebuilts/extract-tools/linux-x86/bin
+
+SIMG2IMG=${BINDIR}/simg2img
+LPUNPACK=${BINDIR}/lpunpack
+
+function extract_img_data()
+{
+	local image_file="$1"
+	local out_dir="$2"
+
+	rm -rf "$out_dir"
+	mkdir -p "$out_dir"
+
+	rm -f debugfs.log
+	debugfs -R 'ls -p' "$image_file" 2>/dev/null | cut -d '/' -f6 | while read -r entry
+	do
+		debugfs -R "rdump \"$entry\" \"$out_dir\"" "$image_file" >> debugfs.log 2>&1 || {
+			echo "[-] Failed to extract data from '$image_file'"
+			abort 1
+		}
+	done
+
+	local symlink_err="rdump: Attempt to read block from filesystem resulted in short read while reading symlink"
+	if grep -Fq "$symlink_err" debugfs.log; then
+		echo "[-] Symlinks have not been properly processed from $image_file"
+		echo "[!] You might not have a compatible debugfs version"
+		abort 1
+	fi
+}
+
+indir=$1
+
+outdir=$indir/super_dump
+mkdir -p "$outdir"
+
+readarray -t superimg  < <(find "$indir" -name 'super.img_sparsechunk.*' | sort -V)
+
+super_raw=$outdir/super.raw
+if ! [ -e "$super_raw" ] ; then
+	echo "Unpacking super.img"
+	"${SIMG2IMG}" "${superimg[@]}" "$super_raw"
+fi
+
+for part in "system" "odm" "product" "system_ext" "vendor"
+do
+	part_img=$outdir/$part.img
+	if ! [ -e "$part_img" ] ; then
+		echo "Preparing $part"
+		if "$LPUNPACK" -p "$part"_a "$super_raw" "$outdir" ; then
+			mv "$outdir"/"$part"_a.img "$part_img"
+		else
+			"$LPUNPACK" -p "$part" "$super_raw" "$outdir"
+		fi
+	fi
+done
+
+for part in "system" "odm" "product" "system_ext" "vendor"
+do
+	part_img=$outdir/$part.img
+	part_outdir=$outdir/$part
+    if [ -f "$part_img" ]; then
+		echo "Extracting $part"
+		case "$(file -b "$part_img")" in
+			EROFS*)
+				fsck.erofs --extract="$part_outdir" "$part_img"
+				;;
+			Linux*)
+				extract_img_data "$part_img" "$part_outdir"
+				;;
+			Android*)
+				part_raw=$outdir/$part.raw
+				"$SIMG2IMG" "$part_img" "$part_raw"
+				extract_img_data "$part_raw" "$part_outdir"
+				;;
+			*)
+				echo "Unsupported $part_img"
+				;;
+		esac
+    fi
+done
