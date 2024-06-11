@@ -34,53 +34,83 @@ function extract_img_data()
 	fi
 }
 
-indir=$1
+function extract_super_raw()
+{
+	local outdir=${1}
+	local super_raw
 
-outdir=$indir/super_dump
-mkdir -p "$outdir"
+	shift
 
-readarray -t superimg  < <(find "$indir" -name 'super.img_sparsechunk.*' | sort -V)
-
-super_raw=$outdir/super.raw
-if ! [ -e "$super_raw" ] ; then
-	echo "Unpacking super.img"
-	"${SIMG2IMG}" "${superimg[@]}" "$super_raw"
-fi
-
-for part in "system" "odm" "product" "system_ext" "vendor"
-do
-	part_img=$outdir/$part.img
-	if ! [ -e "$part_img" ] ; then
-		echo "Preparing $part"
-		if "$LPUNPACK" -p "$part"_a "$super_raw" "$outdir" ; then
-			mv "$outdir"/"$part"_a.img "$part_img"
-		else
-			"$LPUNPACK" -p "$part" "$super_raw" "$outdir"
-		fi
+	super_raw=${outdir}/super.raw
+	if [ -e "${super_raw}" ] ; then
+		return
 	fi
-done
 
-for part in "system" "odm" "product" "system_ext" "vendor"
-do
-	part_img=$outdir/$part.img
-	part_outdir=$outdir/$part
-    if [ -f "$part_img" ]; then
-		echo "Extracting $part"
+	echo "-- Unpacking super.raw"
+	"${SIMG2IMG}" "${@}" "${super_raw}"
+}
+
+function lpunpack_parts()
+{
+	local outdir=${1} super_raw=${2}
+	local part part_img
+
+	for part in "system" "odm" "product" "system_ext" "vendor" ; do
+		part_img=${outdir}/${part}.img
+		if [ -e "${part_img}" ] ; then
+			continue
+		fi
+
+		echo "-- Preparing ${part}"
+		if "${LPUNPACK}" -p "${part}"_a "${super_raw}" "${outdir}" ; then
+			mv "${outdir}"/"${part}"_a.img "${part_img}"
+		else
+			"${LPUNPACK}" -p "${part}" "${super_raw}" "${outdir}"
+		fi
+	done
+}
+
+function extract_parts()
+{
+	local outdir=${1}
+	local part part_img part_outdir part_raw
+
+	for part in "system" "odm" "product" "system_ext" "vendor" ; do
+		part_img=${outdir}/${part}.img
+		if ! [ -e "${part_img}" ]; then
+			continue
+		fi
+
+		part_outdir=${outdir}/${part}
+		rm -rf "${part_outdir}"
+
+		echo "-- Extracting ${part}"
 		case "$(file -b "$part_img")" in
 			EROFS*)
-				fsck.erofs --extract="$part_outdir" "$part_img"
+				fsck.erofs --extract="${part_outdir}" "${part_img}"
 				;;
 			Linux*)
-				extract_img_data "$part_img" "$part_outdir"
+				extract_img_data "${part_img}" "${part_outdir}"
 				;;
 			Android*)
-				part_raw=$outdir/$part.raw
-				"$SIMG2IMG" "$part_img" "$part_raw"
-				extract_img_data "$part_raw" "$part_outdir"
+				part_raw=${outdir}/${part}.raw
+				"${SIMG2IMG}" "${part_img}" "${part_raw}"
+				extract_img_data "${part_raw}" "${part_outdir}"
 				;;
 			*)
-				echo "Unsupported $part_img"
+				echo "Unsupported ${part_img}"
 				;;
 		esac
-    fi
-done
+	done
+}
+
+indir=$1
+
+outdir=${indir}/super_dump
+mkdir -p "$outdir"
+
+readarray -t superimg  < <(find "${indir}" -name 'super.img_sparsechunk.*' | sort -V)
+
+extract_super_raw "${outdir}" "${superimg[@]}"
+lpunpack_parts "${outdir}" "${outdir}"/super.raw
+extract_parts "${outdir}"
