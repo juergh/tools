@@ -158,8 +158,11 @@ if [ -z "${kdir}" ] ; then
 	kdir=buildd/virtme-${v1}.${v2}
 fi
 
+# shellcheck disable=SC1091
+. debian/debian.env
+
+SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
 ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
-SERIES=$(dpkg-parsechangelog -S distribution)
 KBUILD_OUTPUT=${kdir}
 CONFIG=${KBUILD_OUTPUT}/.config
 
