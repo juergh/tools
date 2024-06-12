@@ -14,7 +14,6 @@ function out()
 	exit "${rc}"
 }
 
-SERIES=
 function run()
 {
 	case "${1}" in
@@ -23,24 +22,14 @@ function run()
 			echo "-- Run in pyvenv:"
 			echo "+ ${*}"
 			pyvenv "${@}"
-			return
+			;;
+
+		*)
+			echo "-- Run in chroot (${SERIES}):"
+			echo "+ ${*}"
+			run-chroot "${SERIES}" -- "${@}"
 			;;
 	esac
-
-	if [ -e debian/debian.env ] && [ -z "${SERIES}" ] ; then
-		SERIES=$(dpkg-parsechangelog -S distribution)
-	fi
-
-	if [ -n "${SERIES}" ] ; then
-		echo "-- Run in chroot (${SERIES}):"
-		echo "+ ${*}"
-		run-chroot "${SERIES}" -- "${@}"
-		return
-	fi
-
-	echo "-- Run:"
-	echo "+ ${*}"
-	"${@}"
 }
 
 function config_virtme()
@@ -107,9 +96,12 @@ EOF
 function usage()
 {
 	cat <<EOF
-Usage: virtme2 [-h] [--outdir DIR] CMD [ARGS...]
+Usage: virtme2 [-h] [--kdir DIR] [--lsmod LSMOD] CMD [ARGS...]
 
 Wrapper for virtme-ng.
+
+The kernel build output directory defaults to buildd/virtme-X.Y
+if neither KBUILD_OUTPUT is set not --kdir DIR is provided.
 
 Supported environment variables:
   KBUILD_OUTPUT  Kernel build output directory.
@@ -123,13 +115,14 @@ Available commands:
 
 Optional arguments:
   -h, --help     Show this help text and exit.
-  --lsmod LSMOD  Build only modules listed in LSMOD.
-  --outdir DIR   Kernel build output directory.
+  --kdir DIR     Kernel build output directory.
+  --lsmod LSMOD  Build only modules listed in LSMOD. Only used
+                 with the 'ubuntuconfig' command.
 EOF
 }
 
 lsmod=
-outdir=${KBUILD_OUTPUT:-./}
+kdir=${KBUILD_OUTPUT:-}
 cmd=
 
 while [ $# -gt 0 ] ; do
@@ -138,9 +131,9 @@ while [ $# -gt 0 ] ; do
 			shift
 			lsmod=${1}
 			;;
-		--outdir)
+		--kdir)
 			shift
-			outdir=${1}
+			kdir=${1}
 			;;
 		config|make|menuconfig|run|ubuntuconfig)
 			cmd=${1}
@@ -159,15 +152,23 @@ fi
 
 trap out EXIT INT TERM HUP
 
-arch=$(dpkg-architecture -q DEB_HOST_ARCH)
+if [ -z "${kdir}" ] ; then
+	v1=$(grep -m1 '^VERSION\s*=' Makefile | sed 's/.*=\s*//')
+	v2=$(grep -m1 '^PATCHLEVEL\s*=' Makefile | sed 's/.*=\s*//')
+	kdir=buildd/virtme-${v1}.${v2}
+fi
 
-KBUILD_OUTPUT=${outdir}
+ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
+SERIES=$(dpkg-parsechangelog -S distribution)
+KBUILD_OUTPUT=${kdir}
 CONFIG=${KBUILD_OUTPUT}/.config
 
 export KBUILD_OUTPUT
+echo "-- Use kernel build output directory: ${KBUILD_OUTPUT}"
 
 case "${cmd}" in
 	config)
+		echo "-- Generate default virtme config"
 		run virtme-configkernel "${@}"
 		;;
 
@@ -189,7 +190,7 @@ case "${cmd}" in
 		run fakeroot debian/rules clean genconfigs 2>/dev/null || true
 
 		mkdir -p "${KBUILD_OUTPUT}"
-		cp CONFIGS/"${arch}"-config.flavour.generic "${CONFIG}"
+		cp CONFIGS/"${ARCH}"-config.flavour.generic "${CONFIG}"
 
 		echo
 		echo "-- Set virtme configs"
@@ -199,7 +200,7 @@ case "${cmd}" in
 		if [ -e "${lsmod}" ] ; then
 			echo
 			echo "-- Enable only local modules"
-			run make LSMOD=$(realpath -e "${lsmod}") localmodconfig
+			run make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
 		fi
 		;;
 
