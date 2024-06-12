@@ -183,6 +183,8 @@ __EOF__
 					"contain_from('Launchpad Buildd System')"
 	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
 					"contain_subject('CI build of ~canonical-kernel-team')"
+	move_mail_noise "Launchpad-Message-For/juergh" \
+					"contain_subject('-proposed tracker')"
 }
 
 function filter_proton()
