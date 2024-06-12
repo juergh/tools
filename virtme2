@@ -1,0 +1,210 @@
+#!/bin/bash -eu
+#
+# Wrapper for virtme-ng
+#
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	[ ${rc} -eq 0 ] || echo "-- Error: Script failed" >&2
+
+	exit "${rc}"
+}
+
+SERIES=
+function run()
+{
+	case "${1}" in
+		vng|virtme-*)
+			# virtme is in pyvenv
+			echo "-- Run in pyvenv:"
+			echo "+ ${*}"
+			pyvenv "${@}"
+			return
+			;;
+	esac
+
+	if [ -e debian/debian.env ] && [ -z "${SERIES}" ] ; then
+		SERIES=$(dpkg-parsechangelog -S distribution)
+	fi
+
+	if [ -n "${SERIES}" ] ; then
+		echo "-- Run in chroot (${SERIES}):"
+		echo "+ ${*}"
+		run-chroot "${SERIES}" -- "${@}"
+		return
+	fi
+
+	echo "-- Run:"
+	echo "+ ${*}"
+	"${@}"
+}
+
+function config_virtme()
+{
+	cat <<EOF
+# Generic
+CONFIG_UEVENT_HELPER=n
+CONFIG_VIRTIO=y
+CONFIG_VIRTIO_PCI=y
+CONFIG_VIRTIO_MMIO=y
+CONFIG_VIRTIO_BALLOON=y
+CONFIG_NET=y
+CONFIG_NET_CORE=y
+CONFIG_NETDEVICES=y
+CONFIG_NETWORK_FILESYSTEMS=y
+CONFIG_INET=y
+CONFIG_NET_9P=y
+CONFIG_NET_9P_VIRTIO=y
+CONFIG_9P_FS=y
+CONFIG_VIRTIO_NET=y
+CONFIG_CMDLINE_OVERRIDE=n
+CONFIG_BINFMT_SCRIPT=y
+CONFIG_SHMEM=y
+CONFIG_TMPFS=y
+CONFIG_UNIX=y
+CONFIG_MODULE_SIG_FORCE=n
+CONFIG_DEVTMPFS=y
+CONFIG_TTY=y
+CONFIG_VT=y
+CONFIG_UNIX98_PTYS=y
+CONFIG_EARLY_PRINTK=y
+CONFIG_INOTIFY_USER=y
+
+# virtio-scsi support
+CONFIG_BLOCK=y
+CONFIG_SCSI_LOWLEVEL=y
+CONFIG_SCSI=y
+CONFIG_SCSI_VIRTIO=y
+CONFIG_BLK_DEV_SD=y
+
+# virt-serial support
+CONFIG_VIRTIO_CONSOLE=y
+
+# watchdog (useful for test scripts)
+CONFIG_WATCHDOG=y
+CONFIG_WATCHDOG_CORE=y
+CONFIG_I6300ESB_WDT=y
+# Make sure debuginfo are available
+CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT=y
+# Enable overlayfs
+CONFIG_OVERLAY_FS=y
+# virtio-fs support
+CONFIG_DAX=y
+CONFIG_DAX_DRIVER=y
+CONFIG_FS_DAX=y
+CONFIG_MEMORY_HOTPLUG=y
+CONFIG_MEMORY_HOTREMOVE=y
+CONFIG_ZONE_DEVICE=y
+CONFIG_FUSE_FS=y
+CONFIG_VIRTIO_FS=y
+EOF
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: virtme2 [-h] [--outdir DIR] CMD [ARGS...]
+
+Wrapper for virtme-ng.
+
+Supported environment variables:
+  KBUILD_OUTPUT  Kernel build output directory.
+
+Available commands:
+  config         Create default virtme kernel config.
+  make           Build kernel.
+  menuconfig     Run config menu.
+  run            Run kernel.
+  ubuntuconfig   Use generic Ubuntu config.
+
+Optional arguments:
+  -h, --help     Show this help text and exit.
+  --lsmod LSMOD  Build only modules listed in LSMOD.
+  --outdir DIR   Kernel build output directory.
+EOF
+}
+
+lsmod=
+outdir=${KBUILD_OUTPUT:-./}
+cmd=
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		--lsmod)
+			shift
+			lsmod=${1}
+			;;
+		--outdir)
+			shift
+			outdir=${1}
+			;;
+		config|make|menuconfig|run|ubuntuconfig)
+			cmd=${1}
+			;;
+		*)
+			break;
+			;;
+	esac
+	shift
+done
+
+if [ -z "${cmd}" ] ; then
+	usage
+	exit 2
+fi
+
+trap out EXIT INT TERM HUP
+
+arch=$(dpkg-architecture -q DEB_HOST_ARCH)
+
+KBUILD_OUTPUT=${outdir}
+CONFIG=${KBUILD_OUTPUT}/.config
+
+export KBUILD_OUTPUT
+
+case "${cmd}" in
+	config)
+		run virtme-configkernel "${@}"
+		;;
+
+	make)
+		run make -j"$(getconf _NPROCESSORS_ONLN)" "${@}"
+		;;
+
+	menuconfig)
+		run make menuconfig
+		;;
+
+	run)
+		run vng --run "${KBUILD_OUTPUT}" "${@}"
+		;;
+
+	ubuntuconfig)
+		echo "-- Generate Ubuntu config"
+		rm -rf CONFIGS
+		run fakeroot debian/rules clean genconfigs 2>/dev/null || true
+
+		mkdir -p "${KBUILD_OUTPUT}"
+		cp CONFIGS/"${arch}"-config.flavour.generic "${CONFIG}"
+
+		echo
+		echo "-- Set virtme configs"
+		config_virtme >> "${CONFIG}"
+		run make olddefconfig
+
+		if [ -e "${lsmod}" ] ; then
+			echo
+			echo "-- Enable only local modules"
+			run make LSMOD=$(realpath -e "${lsmod}") localmodconfig
+		fi
+		;;
+
+	*)
+		echo "Invalid command: ${1}" >&2
+		exit 1
+		;;
+esac
