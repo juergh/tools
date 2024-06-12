@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+#
+# Get kernel snap information from the store via the API
+#
+
+import json
+import sys
+
+from subprocess import check_output
+
+import yaml
+import requests
+
+def get_store_id(snap_name):
+    data = check_output(["pass", "show", "canonical/snap-store-ids"])
+    res = yaml.safe_load(data)
+    return res["snaps"].get(snap_name, {}).get("store-id")
+
+snap_name = sys.argv[1]
+
+snap_store_id = get_store_id(snap_name)
+
+url = f"https://api.snapcraft.io/v2/snaps/info/{snap_name}"
+
+headers = {
+    "Snap-Device-Series": "16",   # 16 is the only supported value so far
+}
+
+if snap_store_id:
+    print(f"-- Use snap store ID: {snap_store_id}")
+    headers["Snap-Device-Store"] = snap_store_id
+
+params = {"fields": "revision,version"}
+params = None
+
+r = requests.get(url, headers=headers, params=params, timeout=2)
+r.raise_for_status()
+
+data = r.json()
+# print(json.dumps(data, indent=4))
+
+result = {}
+for cm in data["channel-map"]:
+    c = cm["channel"]
+    channel = c["architecture"] + " -- " + c["track"] + "/" + c["risk"]
+    entry = {
+        "version": cm["version"],
+        "revision": cm["revision"],
+        "released-at": c["released-at"],
+    }
+    result[channel] = entry
+
+print(json.dumps(dict(sorted(result.items())), indent=4))
