@@ -163,10 +163,14 @@ fi
 
 SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
 ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
-KBUILD_OUTPUT=${kdir}
-CONFIG=${KBUILD_OUTPUT}/.config
+CONFIG=${kdir}/.config
+DOT_VERSION=$(cat "${kdir}"/.version 2>/dev/null || echo 1)
 
-export KBUILD_OUTPUT
+KBUILD_OUTPUT=${kdir}
+KBUILD_BUILD_VERSION="${DOT_VERSION}+$(git rev-parse --short=8 HEAD)"
+
+export KBUILD_OUTPUT KBUILD_BUILD_VERSION
+
 echo "-- Use kernel build output directory: ${KBUILD_OUTPUT}"
 
 case "${cmd}" in
