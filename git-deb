@@ -284,8 +284,9 @@ function do_send_patch()
 function do_request_pull()
 {
 	local start=${1:-} end=${2:-HEAD}
-	local refs_heads commit branch remotes remote buglink
-	local url bug subject blurb name email
+	local refs_heads commit
+	local branch decorate remote remote_branch remote_url
+	local buglink url bug subject blurb name email
 
 	if [ -z "${start}" ] ; then
 		# Get the start commit for this pull request
@@ -306,15 +307,23 @@ function do_request_pull()
 	# FIXME --------------------------------------------------------
 
 	branch=$(git rev-parse --abbrev-ref "${end}")
-	remote_branch=${SERIES}/${SOURCE}/${branch}
 
-	case "${SOURCE}" in
-		linux-meta*)   remote_name=linux-meta ;;
-		linux-signed*) remote_name=linux-signed ;;
-		linux*)        remote_name=linux ;;
-	esac
+	decorate=$(git log --pretty=%D --decorate-refs='refs/remotes/*' "${end}" -1)
 
-	remote_url="https://git.launchpad.net/~juergh/+git/${remote_name}"
+	remote=${decorate%%/*}
+	remote_branch=${decorate#*/}
+	remote_url="$(git config "remote.${remote}.url")"
+
+	#branch=$(git rev-parse --abbrev-ref "${end}")
+	#remote_branch=${SERIES}/${SOURCE}/${branch}
+
+	#case "${SOURCE}" in
+	#	linux-meta*)   remote_name=linux-meta ;;
+	#	linux-signed*) remote_name=linux-signed ;;
+	#	linux*)        remote_name=linux ;;
+	#esac
+
+	#remote_url="https://git.launchpad.net/~juergh/+git/${remote_name}"
 
 	# Get the remote where we pushed this branch to
 	#commit=$(git rev-parse "${end}")
