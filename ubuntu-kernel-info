@@ -113,8 +113,8 @@ def parse_kernel_series(ks):
                     entry = dict(series_entry)
                     entry.update(source_entry)
                     entry.update(package_entry)
-                    for key, val in dict(entry).items():
-                        entry[key] = str(val).lower()
+                    for _key, _val in dict(entry).items():
+                        entry[_key] = str(_val).lower()
                     pkgs.append(entry)
 
     return pkgs
