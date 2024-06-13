@@ -165,18 +165,25 @@ def main():
     parser.add_argument(
         "-t",
         "--pkg-type",
-        help="List only packages of the provided type. If not provided, lists all packages. "
-        "Possible values are: main, meta, signed, lrm, extra, extra2, snap",
+        choices=("main", "meta", "signed", "lrm", "extra", "extra2", "snap"),
+        help="List only packages of the provided type. "
+        "If not provided, lists all packages.",
     )
     parser.add_argument(
         "--pkg-name",
         help="List only packages with the provided package name. "
-        "If not provided, lists all packages. ",
+        "If not provided, lists all packages.",
+    )
+    parser.add_argument(
+        "--pkg-format",
+        choices=("deb", "snap"),
+        help="List only packages with the provided package format. "
+        "If not provided, lists all packages.",
     )
     parser.add_argument(
         "--src-name",
         help="List only packages with the provided source name. "
-        "If not provided, lists all packages. ",
+        "If not provided, lists all packages.",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose output."
@@ -207,6 +214,8 @@ def main():
                 f["package.type"] = args.pkg_type
             if args.pkg_name:
                 f["package.name"] = args.pkg_name
+            if args.pkg_format:
+                f["package.format"] = args.pkg_format
             if args.src_name:
                 f["source.name"] = args.src_name
             pkg_filters.append(f)
