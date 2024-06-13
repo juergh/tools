@@ -1,7 +1,12 @@
 #!/bin/bash -eu
 #
 # To initialize the repo:
-#   git clone --bare --origin upstream --reference linux.git linux.git linux-ubuntu.git
+#   $ mkdir linux-ubuntu.git
+#   $ cd linux-ubuntu.git
+#   $ git init --bare
+#   $ git config gc.auto 0
+#   $ git config fetch.negotiationAlgorithm skipping
+#   $ echo "/<path>/linux.git/objects" > objects/info/alternates
 #
 
 HERE=$(dirname "$(readlink -f "${0}")")
