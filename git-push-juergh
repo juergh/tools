@@ -110,22 +110,27 @@ case "${package}" in
 		;;
 esac
 
-remote_url="git+ssh://git.launchpad.net/~juergh/+git/${remote_name}"
-
-#remote_url=$(git remote get-url juergh 2>/dev/null || true)
-#if [ -z "${remote_url}" ] ; then
-#	remote_url="git+ssh://git.launchpad.net/~juergh/+git/${remote_name}"
-#	git remote add juergh "${remote_url}"
-#fi
+# Use exisiting remote or URL otherwise
+remote_ref=juergh
+remote_url=$(git remote get-url "${remote_ref}" 2>/dev/null || true)
+if [ -z "${remote_url}" ] ; then
+	remote_ref="git+ssh://git.launchpad.net/~juergh/+git/${remote_name}"
+	remote_url=${remote_ref}
+fi
 
 echo "Release: ${release}"
 echo "Source:  ${package}"
 echo "Branch:  ${branch}"
 echo
-echo "Remote URL:    ${remote_url}"
-echo "Remote branch: ${remote_branch}"
+if [ "${remote_ref}" = "${remote_url}" ] ; then
+	echo "Remote URL:    ${remote_ref}"
+	echo "Remote branch: ${remote_branch}"
+else
+	echo "Remote:        ${remote_ref} (${remote_url})"
+	echo "Remote branch: ${remote_branch}"
+fi
 echo
-echo "git push ${opts[*]} ${remote_url} ${branch}:${remote_branch}"
+echo "git push ${opts[*]} ${remote_ref} ${branch}:${remote_branch}"
 
 if [ ${dry_run} -eq 1 ] ; then
 	echo
@@ -133,4 +138,4 @@ if [ ${dry_run} -eq 1 ] ; then
 	exit
 fi
 
-git push "${opts[@]}" "${remote_url}" "${branch}":"${remote_branch}"
+git push "${opts[@]}" "${remote_ref}" "${branch}":"${remote_branch}"
