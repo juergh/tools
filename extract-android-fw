@@ -98,11 +98,15 @@ function extract_parts()
 	done
 }
 
-indir=$1
+indir=${1}
+
+if ! [ -d "${indir}" ] ; then
+	echo "-- No such directory: ${indir}" >&2
+	exit 1
+fi
 
 outdir=${indir}/extract
-#rm -rf "${outdir}"
-#mkdir -p "$outdir"
+mkdir -p "${outdir}"
 
 if [ -e "${indir}"/payload.bin ] ; then
 	true
