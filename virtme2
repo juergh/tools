@@ -16,20 +16,24 @@ function out()
 
 function run()
 {
-	case "${1}" in
-		vng|virtme-*)
-			# virtme is in pyvenv
-			echo "-- Run in pyvenv:"
-			echo "+ ${*}"
-			pyvenv "${@}"
-			;;
+	if [ "${1}" = "vng" ] || [ "${1%%-*}" = "virtme" ] ; then
+		# virtme is in pyvenv
+		echo "-- Run in pyvenv:"
+		echo "+ ${*}"
+		pyvenv "${@}"
+		return
+	fi
 
-		*)
-			echo "-- Run in chroot (${SERIES}):"
-			echo "+ ${*}"
-			run-chroot "${SERIES}" -- "${@}"
-			;;
-	esac
+	if [ -n "${SERIES}" ] ; then
+		echo "-- Run in chroot (${SERIES}):"
+		echo "+ ${*}"
+		run-chroot "${SERIES}" -- "${@}"
+		return
+	fi
+
+	echo "-- Run:"
+	echo "+ ${*}"
+	"${@}"
 }
 
 function config_virtme()
@@ -152,26 +156,35 @@ fi
 
 trap out EXIT INT TERM HUP
 
-if [ -z "${kdir}" ] ; then
-	v1=$(grep -m1 '^VERSION\s*=' Makefile | sed 's/.*=\s*//')
-	v2=$(grep -m1 '^PATCHLEVEL\s*=' Makefile | sed 's/.*=\s*//')
-	kdir=buildd/virtme-${v1}.${v2}
+SERIES=
+if [ -e debian/debian.env ] ; then
+	# shellcheck disable=SC1091
+	. debian/debian.env
+	SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
 fi
 
-# shellcheck disable=SC1091
-. debian/debian.env
+if [ -e Makefile ] ; then
+	if [ -z "${kdir}" ] ; then
+		v1=$(grep -m1 '^VERSION\s*=' Makefile | sed 's/.*=\s*//')
+		v2=$(grep -m1 '^PATCHLEVEL\s*=' Makefile | sed 's/.*=\s*//')
+		if [ -z "${v1}" ] || [ -z "${v2}" ] ; then
+			echo "Failed to parse Makefile" >&2
+			exit 1
+		fi
+		kdir=buildd/virtme-${v1}.${v2}
+	fi
 
-SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
-ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
-CONFIG=${kdir}/.config
-DOT_VERSION=$(cat "${kdir}"/.version 2>/dev/null || echo 1)
+	ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
+	CONFIG=${kdir}/.config
+	DOT_VERSION=$(cat "${kdir}"/.version 2>/dev/null || echo 1)
 
-KBUILD_OUTPUT=${kdir}
-KBUILD_BUILD_VERSION="${DOT_VERSION}+$(git rev-parse --short=8 HEAD)"
+	KBUILD_OUTPUT=${kdir}
+	KBUILD_BUILD_VERSION="${DOT_VERSION}+$(git rev-parse --short=8 HEAD)"
 
-export KBUILD_OUTPUT KBUILD_BUILD_VERSION
+	export KBUILD_OUTPUT KBUILD_BUILD_VERSION
 
-echo "-- Use kernel build output directory: ${KBUILD_OUTPUT}"
+	echo "-- Use kernel build output directory: ${KBUILD_OUTPUT}"
+fi
 
 case "${cmd}" in
 	config)
@@ -188,7 +201,14 @@ case "${cmd}" in
 		;;
 
 	run)
-		run vng --run "${KBUILD_OUTPUT}" "${@}"
+		if [ -e "${1:-}" ] ; then
+			run vng --name VIRTME2 --run "${@}"
+		elif [ -n "${KBUILD_OUTPUT:-}" ] ; then
+			run vng --name VIRTME2 --run "${KBUILD_OUTPUT}" "${@}"
+		else
+			echo "-- Don't know what/how to run" >&2
+			exit 1
+		fi
 		;;
 
 	ubuntuconfig)
