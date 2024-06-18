@@ -1,14 +1,31 @@
-#!/bin/bash -u
+#!/bin/bash -eu
 #
 # Extract image files from a system image
 # Usage: extract-firmware.sh fw/dubai
 #
 
-BINDIR=${HOME}/android/lineage/prebuilts/extract-tools/linux-x86/bin
+ET_BINDIR=${HOME}/android/lineage/prebuilts/extract-tools/linux-x86/bin
 
-SIMG2IMG=${BINDIR}/simg2img
-LPUNPACK=${BINDIR}/lpunpack
-OTA_EXTRACTOR=${BINDIR}/ota_extractor
+SIMG2IMG=${ET_BINDIR}/simg2img
+LPUNPACK=${ET_BINDIR}/lpunpack
+
+KBT_BINDIR=${HOME}/android/lineage/prebuilts/kernel-build-tools/linux-x86/bin
+MKDTIMG=${KBT_BINDIR}/mkdtimg
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	if [ ${rc} -eq 0 ] ; then
+		echo "-- Firmware extraction done"
+	else
+		echo "-- Error: Firmware extraction failed" >&2
+	fi
+
+	exit "${rc}"
+}
 
 function extract_img_data()
 {
@@ -98,6 +115,39 @@ function extract_parts()
 	done
 }
 
+function extract_dtbo()
+{
+	local outdir=${1}
+	local dtbo_img
+
+	dtbo_img=${outdir}/dtbo.img
+	if ! [ -e "${dtbo_img}" ]; then
+		dtbo_img=${outdir}/../dtbo.img
+		if ! [ -e "${dtbo_img}" ]; then
+			return
+		fi
+	fi
+
+	dtbo_outdir=${outdir}/dtbo
+	rm -rf "${dtbo_outdir}"
+	mkdir -p  "${dtbo_outdir}"
+
+	echo "-- Extracting dtbo"
+	"${MKDTIMG}" dump "${dtbo_img}" -b "${dtbo_outdir}"/dtbo
+	for f in  "${dtbo_outdir}"/dtbo.* ; do
+		if [ -e "${f}" ] ; then
+			ln -s "${f##*/}" "${dtbo_outdir}"/"${f##*.}".dtb
+		fi
+	done
+
+	echo "-- Creating dtc"
+	for f in  "${dtbo_outdir}"/*.dtb ; do
+		if [ -e "${f}" ] ; then
+			dtc -I dtb -O dts -o "${f%.dtb}".dts "${f}"
+		fi
+	done
+}
+
 indir=${1}
 
 if ! [ -d "${indir}" ] ; then
@@ -105,12 +155,13 @@ if ! [ -d "${indir}" ] ; then
 	exit 1
 fi
 
+trap out EXIT INT TERM HUP
+
 outdir=${indir}/extract
 mkdir -p "${outdir}"
 
 if [ -e "${indir}"/payload.bin ] ; then
-	true
-	#"${OTA_EXTRACTOR}" -payload "${indir}/"payload.bin -output_dir "${outdir}"
+	"${OTA_EXTRACTOR}" -payload "${indir}/"payload.bin -output_dir "${outdir}"/payload
 else
 	readarray -t infiles < <(find "${indir}" -name 'super.img_sparsechunk.*' | sort -V)
 	extract_super "${outdir}"/super.raw "${infiles[@]}"
@@ -118,3 +169,4 @@ else
 fi
 
 extract_parts "${outdir}"
+extract_dtbo "${outdir}"
