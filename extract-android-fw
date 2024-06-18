@@ -8,6 +8,7 @@ ET_BINDIR=${HOME}/android/lineage/prebuilts/extract-tools/linux-x86/bin
 
 SIMG2IMG=${ET_BINDIR}/simg2img
 LPUNPACK=${ET_BINDIR}/lpunpack
+OTA_EXTRACTOR=${ET_BINDIR}/ota_extractor
 
 KBT_BINDIR=${HOME}/android/lineage/prebuilts/kernel-build-tools/linux-x86/bin
 MKDTIMG=${KBT_BINDIR}/mkdtimg
@@ -161,7 +162,7 @@ outdir=${indir}/extract
 mkdir -p "${outdir}"
 
 if [ -e "${indir}"/payload.bin ] ; then
-	"${OTA_EXTRACTOR}" -payload "${indir}/"payload.bin -output_dir "${outdir}"/payload
+	"${OTA_EXTRACTOR}" -payload "${indir}/"payload.bin -output_dir "${outdir}"
 else
 	readarray -t infiles < <(find "${indir}" -name 'super.img_sparsechunk.*' | sort -V)
 	extract_super "${outdir}"/super.raw "${infiles[@]}"
