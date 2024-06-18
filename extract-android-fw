@@ -13,6 +13,9 @@ OTA_EXTRACTOR=${ET_BINDIR}/ota_extractor
 KBT_BINDIR=${HOME}/android/lineage/prebuilts/kernel-build-tools/linux-x86/bin
 MKDTIMG=${KBT_BINDIR}/mkdtimg
 
+MKBOOTIMG_DIR=${HOME}/android/lineage/system/tools/mkbootimg
+UNPACK_BOOTIMG=${MKBOOTIMG_DIR}/unpack_bootimg.py
+
 function out()
 {
 	local rc=${?}
@@ -149,6 +152,30 @@ function extract_dtbo()
 	done
 }
 
+function extract_bootimg()
+{
+	local outdir=${1}
+	local boot_img
+
+	boot_img=${outdir}/boot.img
+	if ! [ -e "${boot_img}" ]; then
+		boot_img=${outdir}/../boot.img
+		if ! [ -e "${boot_img}" ]; then
+			return
+		fi
+	fi
+
+	echo "-- Extracting boot"
+	"${UNPACK_BOOTIMG}" --boot_img "${boot_img}" --out "${outdir}"/boot
+
+	ramdisk_img="${outdir}"/boot/ramdisk
+	if [ -e "${ramdisk_img}" ] ; then
+		echo "-- Extracting ramdisk"
+		mkdir -p "${ramdisk_img}".d
+		lz4cat "${ramdisk_img}" | ( cd "${ramdisk_img}".d && cpio -i )
+	fi
+}
+
 indir=${1}
 
 if ! [ -d "${indir}" ] ; then
@@ -171,3 +198,4 @@ fi
 
 extract_parts "${outdir}"
 extract_dtbo "${outdir}"
+extract_bootimg "${outdir}"
