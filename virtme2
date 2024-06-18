@@ -27,8 +27,9 @@ function run_chroot()
 	fi
 }
 
-function config_virtme()
+function virtme_configs()
 {
+	# Configs required for virtme
 	cat <<EOF
 # Generic
 CONFIG_UEVENT_HELPER=n
@@ -88,10 +89,39 @@ CONFIG_VIRTIO_FS=y
 EOF
 }
 
+function minimal_modules()
+{
+	# List of minimal modules (very machine and kernel version specific)
+	cat <<EOF
+kvm_intel
+kvm_amd
+kvm
+irqbypass
+crct10dif_pclmul
+crc32_pclmul
+ghash_clmulni_intel
+aesni_intel
+aes_x86_64
+lrw
+gf128mul
+glue_helper
+psmouse
+ablk_helper
+cryptd
+input_leds
+serio_raw
+floppy
+8250_fintek
+i2c_piix4
+pata_acpi
+mac_hid
+EOF
+}
+
 function usage()
 {
 	cat <<EOF
-Usage: virtme2 [-h] [--kdir DIR] [--lsmod LSMOD] CMD [ARGS...]
+Usage: virtme2 [-h] [--kdir DIR] CMD [ARGS...]
 
 Wrapper for virtme-ng.
 
@@ -108,27 +138,33 @@ Available commands:
   run            Run kernel.
   ubuntuconfig   Use generic Ubuntu config.
 
-Optional arguments:
+Optional common arguments:
   -h, --help     Show this help text and exit.
   --kdir DIR     Kernel build output directory.
-  --lsmod LSMOD  Build only modules listed in LSMOD. Only used
-                 with the 'ubuntuconfig' command.
+
+Optional arguments for 'ubuntuconfig':
+  --lsmod LSMOD  Build only modules listed in LSMOD.
+  --minimal      Build only a minimal set of modules.
 EOF
 }
 
-lsmod=
 kdir=${KBUILD_OUTPUT:-}
+lsmod=
+minimal=0
 cmd=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
+		--kdir)
+			shift
+			kdir=${1}
+			;;
 		--lsmod)
 			shift
 			lsmod=${1}
 			;;
-		--kdir)
-			shift
-			kdir=${1}
+		--minimal)
+			minimal=1
 			;;
 		config|make|menuconfig|run|ubuntuconfig)
 			cmd=${1}
@@ -211,16 +247,25 @@ case "${cmd}" in
 		mkdir -p "${KBUILD_OUTPUT}"
 		cp CONFIGS/"${ARCH}"-config.flavour.generic "${CONFIG}"
 
-		echo
-		echo "-- Set virtme configs"
-		config_virtme >> "${CONFIG}"
-		run_chroot make olddefconfig
-
 		if [ -e "${lsmod}" ] ; then
 			echo
 			echo "-- Enable only local modules"
 			run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
 		fi
+
+		if [ ${minimal} -eq 1 ] ; then
+			echo
+			echo "-- Enable only minimal modules"
+			lsmod=${KBUILD_OUTPUT}/virtme2.modules
+			minimal_modules > "${lsmod}"
+			run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
+		fi
+
+		echo
+		echo "-- Set virtme configs"
+		virtme_configs >> "${CONFIG}"
+		run_chroot make olddefconfig
+
 		;;
 
 	*)
