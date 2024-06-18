@@ -61,7 +61,7 @@ function extract_super()
 	local outfile=${1}
 	shift
 
-	echo "-- Unpacking super.raw"
+	echo "-- Extract super.raw"
 	"${SIMG2IMG}" "${@}" "${outfile}"
 }
 
@@ -76,7 +76,7 @@ function lpunpack_parts()
 			continue
 		fi
 
-		echo "-- Preparing ${part}"
+		echo "-- Prepare ${part}.img"
 		if "${LPUNPACK}" -p "${part}"_a "${infile}" "${outdir}" ; then
 			mv "${outdir}"/"${part}"_a.img "${part_img}"
 		else
@@ -99,7 +99,7 @@ function extract_parts()
 		part_outdir=${outdir}/${part}
 		rm -rf "${part_outdir}"
 
-		echo "-- Extracting ${part}"
+		echo "-- Extract ${part}.img"
 		case "$(file -b "$part_img")" in
 			EROFS*)
 				fsck.erofs --extract="${part_outdir}" "${part_img}"
@@ -136,7 +136,7 @@ function extract_dtbo()
 	rm -rf "${dtbo_outdir}"
 	mkdir -p  "${dtbo_outdir}"
 
-	echo "-- Extracting dtbo"
+	echo "-- Extract dtbo.img"
 	"${MKDTIMG}" dump "${dtbo_img}" -b "${dtbo_outdir}"/dtbo
 	for f in  "${dtbo_outdir}"/dtbo.* ; do
 		if [ -e "${f}" ] ; then
@@ -144,9 +144,9 @@ function extract_dtbo()
 		fi
 	done
 
-	echo "-- Creating dtc"
 	for f in  "${dtbo_outdir}"/*.dtb ; do
 		if [ -e "${f}" ] ; then
+			echo "-- Convert ${f}"
 			dtc -I dtb -O dts -o "${f%.dtb}".dts "${f}"
 		fi
 	done
@@ -165,12 +165,12 @@ function extract_bootimg()
 		fi
 	fi
 
-	echo "-- Extracting boot"
+	echo "-- Extract boot.img"
 	"${UNPACK_BOOTIMG}" --boot_img "${boot_img}" --out "${outdir}"/boot
 
 	ramdisk_img="${outdir}"/boot/ramdisk
 	if [ -e "${ramdisk_img}" ] ; then
-		echo "-- Extracting ramdisk"
+		echo "-- Extract ramdisk"
 		mkdir -p "${ramdisk_img}".d
 		lz4cat "${ramdisk_img}" | ( cd "${ramdisk_img}".d && cpio -i )
 	fi
@@ -189,6 +189,7 @@ outdir=${indir}/extract
 mkdir -p "${outdir}"
 
 if [ -e "${indir}"/payload.bin ] ; then
+	echo "-- Extract payload.bin"
 	"${OTA_EXTRACTOR}" -payload "${indir}/"payload.bin -output_dir "${outdir}"
 else
 	readarray -t infiles < <(find "${indir}" -name 'super.img_sparsechunk.*' | sort -V)
