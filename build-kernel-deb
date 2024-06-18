@@ -5,9 +5,9 @@
 
 function run_chroot()
 {
-	echo "-- Run in chroot (${SERIES}):"
+	echo "-- Run in chroot (${CHROOT}):"
 	echo "+ ${*}"
-	run-chroot "${SERIES}" -- "${@}"
+	run-chroot "${CHROOT}" -- "${@}"
 }
 
 function usage()
@@ -18,23 +18,35 @@ Usage: $(basename "${0}") [-h] CMD [ARGS...]
 Build kernel Debian packages.
 
 Available commands:
-  make           Build kernel Debian packages.
-  menuconfig     Run config menu.
-  ubuntuconfig   Use generic Ubuntu config.
+  make             Build kernel Debian packages.
+  menuconfig       Run config menu.
+  ubuntuconfig     Use generic Ubuntu config.
 
 Optional arguments:
-  -h, --help     Show this help text and exit.
+  --arch ARCH      Debian package architecture.
+  --chroot CHROOT  Use chroot CHROOT.
+  -h, --help       Show this help text and exit.
 
 Optional arguments for 'ubuntuconfig':
-  --lsmod LSMOD  Build only modules listed in LSMOD.
+  --lsmod LSMOD    Build only modules listed in LSMOD.
 EOF
 }
 
+arch=
+chroot=
 lsmod=
 cmd=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		--arch)
+			shift
+			arch=${1}
+			;;
+		--chroot)
+			shift
+			chroot=${1}
+			;;
 		-h|--help)
 			usage
 			exit
@@ -58,19 +70,52 @@ if [ -z "${cmd}" ] ; then
 	exit 2
 fi
 
-# shellcheck disable=SC1091
-. debian/debian.env
+#
+# Determine the chroot and series
+#
 
-SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
-KBUILD_OUTPUT=buildd/${SERIES}
+if [ -n "${chroot}" ] ; then
+	series=$(run-chroot "${chroot}" -- lsb_release -c -s 2>/dev/null)
+	CHROOT=${chroot}
+else
+	# shellcheck disable=SC1091
+	if [ -e debian/debian.env ] ; then
+		. debian/debian.env
+		series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
+	else
+		series=$(lsb_release -c -s 2>/dev/null)
+	fi
+	CHROOT=${series}
+fi
 
-arch=$(dpkg-architecture -q DEB_BUILD_ARCH)
+#
+# Determine architecture and cross-compilation
+#
 
-#dot_version=$(cat "${KOUTPUT_DIR}"/.version 2>/dev/null || echo 1)
-#KBUILD_BUILD_VERSION="${dot_version}+$(git rev-parse --short=8 HEAD)"
+if [ -z "${arch}" ] ; then
+	arch=$(dpkg-architecture -q DEB_BUILD_ARCH)
+fi
+
+if [ "${arch}" != "$(dpkg-architecture -q DEB_BUILD_ARCH)" ] ; then
+	ARCH=$(dpkg-architecture -a "${arch}" -q DEB_HOST_ARCH_CPU 2>/dev/null)
+	CROSS_COMPILE=$(dpkg-architecture -a "${arch}" -q DEB_HOST_GNU_TYPE 2>/dev/null)-
+
+	echo "-- Cross-compilation for: ${ARCH}"
+	export ARCH CROSS_COMPILE
+fi
+
+#
+# Set exports
+#
+
+KBUILD_OUTPUT=buildd/${series}
 
 echo "-- Use kernel build output directory: ${KBUILD_OUTPUT}"
 export KBUILD_OUTPUT
+
+#
+# Process the command
+#
 
 case "${cmd}" in
 	ubuntuconfig)
@@ -94,7 +139,7 @@ case "${cmd}" in
 		;;
 
 	make)
-		run_chroot make -j"$(getconf _NPROCESSORS_ONLN)" bindeb-pkg
+		run_chroot make -j"$(getconf _NPROCESSORS_ONLN)" "${@:-bindeb-pkg}"
 		;;
 
 	menuconfig)
