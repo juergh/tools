@@ -1,0 +1,108 @@
+#!/bin/bash -eu
+#
+# Build kernel Debian packages
+#
+
+function run_chroot()
+{
+	echo "-- Run in chroot (${SERIES}):"
+	echo "+ ${*}"
+	run-chroot "${SERIES}" -- "${@}"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] CMD [ARGS...]
+
+Build kernel Debian packages.
+
+Available commands:
+  make           Build kernel Debian packages.
+  menuconfig     Run config menu.
+  ubuntuconfig   Use generic Ubuntu config.
+
+Optional arguments:
+  -h, --help     Show this help text and exit.
+
+Optional arguments for 'ubuntuconfig':
+  --lsmod LSMOD  Build only modules listed in LSMOD.
+EOF
+}
+
+lsmod=
+cmd=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		--lsmod)
+			shift
+			lsmod=${1}
+			;;
+		make|menuconfig|ubuntuconfig)
+			cmd=${1}
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
+
+if [ -z "${cmd}" ] ; then
+	usage
+	exit 2
+fi
+
+# shellcheck disable=SC1091
+. debian/debian.env
+
+SERIES=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
+KBUILD_OUTPUT=buildd/${SERIES}
+
+arch=$(dpkg-architecture -q DEB_BUILD_ARCH)
+
+#dot_version=$(cat "${KOUTPUT_DIR}"/.version 2>/dev/null || echo 1)
+#KBUILD_BUILD_VERSION="${dot_version}+$(git rev-parse --short=8 HEAD)"
+
+echo "-- Use kernel build output directory: ${KBUILD_OUTPUT}"
+export KBUILD_OUTPUT
+
+case "${cmd}" in
+	ubuntuconfig)
+		echo "-- Generate Ubuntu config"
+		rm -rf CONFIGS
+		run_chroot fakeroot debian/rules clean
+		run_chroot debian/rules genconfigs || true
+
+		mkdir -p "${KBUILD_OUTPUT}"
+		cp CONFIGS/"${arch}"-config.flavour.generic "${KBUILD_OUTPUT}"/.config
+
+		# Disable CONFIG_DEBUG_INFO
+		sed -i '/CONFIG_DEBUG_INFO/d' "${KBUILD_OUTPUT}"/.config
+		echo "# CONFIG_DEBUG_INFO is not set" >> "${KBUILD_OUTPUT}"/.config
+
+		if [ -e "${lsmod}" ] ; then
+			echo
+			echo "-- Enable only local modules"
+			run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
+		fi
+		;;
+
+	make)
+		run_chroot make -j"$(getconf _NPROCESSORS_ONLN)" bindeb-pkg
+		;;
+
+	menuconfig)
+		run_chroot make menuconfig
+		;;
+
+	*)
+		echo "Invalid command: ${1}" >&2
+		exit 1
+		;;
+esac
