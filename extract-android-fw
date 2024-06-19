@@ -79,9 +79,14 @@ function lpunpack_parts()
 		echo "-- Prepare ${part}.img"
 		if "${LPUNPACK}" -p "${part}"_a "${infile}" "${outdir}" ; then
 			mv "${outdir}"/"${part}"_a.img "${part_img}"
-		else
-			"${LPUNPACK}" -p "${part}" "${infile}" "${outdir}"
+			continue
 		fi
+
+		if "${LPUNPACK}" -p "${part}" "${infile}" "${outdir}" ; then
+			continue
+		fi
+
+		echo "-- Failed to lpunpack ${part}"
 	done
 }
 
