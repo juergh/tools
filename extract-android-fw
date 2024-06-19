@@ -177,7 +177,11 @@ function extract_bootimg()
 	if [ -e "${ramdisk_img}" ] ; then
 		echo "-- Extract ramdisk"
 		mkdir -p "${ramdisk_img}".d
-		lz4cat "${ramdisk_img}" | ( cd "${ramdisk_img}".d && cpio -i )
+		case "$(file -b "${ramdisk_img}")" in
+			gzip*) zcat "${ramdisk_img}" ;;
+			LZ4*)  lz4cat "${ramdisk_img}" ;;
+			*)     cat "${ramdisk_img}" ;;
+		esac | ( cd "${ramdisk_img}".d && cpio -i )
 	fi
 }
 
@@ -191,6 +195,7 @@ fi
 trap out EXIT INT TERM HUP
 
 outdir=${indir}/extract
+rm -rf "${outdir}"
 mkdir -p "${outdir}"
 
 if [ -e "${indir}"/payload.bin ] ; then
