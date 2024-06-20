@@ -1,0 +1,4 @@
+#!/bin/bash
+
+account=${0#*-}
+exec /usr/bin/msmtp -a "${account}" "${@}"
