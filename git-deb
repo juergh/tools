@@ -390,12 +390,12 @@ Usage: git-deb [-c] [-d] [-h] [-i MSG_ID] [-r TARGET] [-s] [-t TOKEN] [-ns]
 Helper script for managing Ubuntu package git repos.
 
 Supported commands:
-  info                        Show repo information.
-  format-patch [OPTS]         Create a patch (series). OPTS are additional
-                              options for 'git format-patch'.
-  send-patch [COMMIT]         Send the commit COMMIT as a patch email. If
-                              COMMIT is not provided, defaults to HEAD.
-  request-pull [START] [END]  Create a pull request.
+  i,  info                        Show repo information.
+  fp, format-patch [OPTS]         Create a patch (series). OPTS are additional
+                                  options for 'git format-patch'.
+  sp, send-patch [COMMIT]         Send the commit COMMIT as a patch email. If
+                                  COMMIT is not provided, defaults to HEAD.
+  rp, request-pull [START] [END]  Create a pull request.
 
 Optional arguments:
   -c, --cover-letter          Add a cover letter.
@@ -415,6 +415,17 @@ EOF
 
 # -----------------------------------------------------------------------------
 # Main entry point
+
+declare -A cmd_map=(
+	["i"]="info"
+	["info"]="info"
+	["fp"]="format_patch"
+	["format-patch"]="format_patch"
+	["sp"]="send_patch"
+	["send-patch"]="send_patch"
+	["rp"]="request_pull"
+	["request-pull"]="request_pull"
+)
 
 # Set the default globals
 set_globals
@@ -461,8 +472,8 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			version=${1}
 			;;
-		info|format-patch|send-patch|request-pull)
-			cmd=${1//-/_}
+		i|info|fp|format-patch|sp|send-patch|rp|request-pull)
+			cmd=${cmd_map[${1}]}
 			shift
 			break
 			;;
