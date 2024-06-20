@@ -59,7 +59,7 @@ function set_globals()
 	repo_name=${repo_name%.git}
 
 	# Defaults
-	REPO="unknown"
+	REPO=
 	CHANGELOG=
 	SOURCE=
 	DERIVATIVE=
@@ -68,12 +68,7 @@ function set_globals()
 	TOKEN=()
 
 	# Figure out what type of repo this is
-	if [ "${repo_name}" = kteam-tools ] || \
-	   [ "${repo_name}" = ckct ] || \
-	   [ "${repo_name}" = autotest-client-tests ] ; then
-		REPO=${repo_name}
-		TARGET=("${repo_name}")
-	elif [ -e debian/debian.env ] ; then
+	if [ -e debian/debian.env ] ; then
 		REPO="ubuntu-kernel (main)"
 		# shellcheck disable=SC1091
 		. debian/debian.env
@@ -92,21 +87,12 @@ function set_globals()
 				DERIVATIVE=${DERIVATIVE#-}
 				SRU=1
 				;;
-			linux-firmware)
-				REPO="ubuntu-firmware"
-				DERIVATIVE="linux-firmware"
-				SRU=1
-				;;
-			*)
-				# shellcheck disable=SC2034
-				REPO="debian-generic"
-				;;
 		esac
-	elif [ -e kernel-info.yaml ] ; then
-		SRU=0
-		REPO=${repo_name}
-		branch=$(git rev-parse --abbrev-ref HEAD)
-		TARGET=("${repo_name}:${branch}")
+	fi
+
+	if [ -z "${REPO}" ] ; then
+		pr_error "Unsupported repo"
+		exit 1
 	fi
 
 	# Unstable is special
