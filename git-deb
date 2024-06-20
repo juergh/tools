@@ -66,6 +66,9 @@ function set_globals()
 	SRU=0
 	TARGET=()
 	TOKEN=()
+	ESM=0
+	PRIVATE=0
+	TO=${KERNEL_PUBLIC_EMAIL}
 
 	# Figure out what type of repo this is
 	if [ -e debian/debian.env ] ; then
@@ -119,6 +122,24 @@ function set_globals()
 		fi
 	fi
 
+	# ESM?
+	case "${SERIES}" in
+		trusty|xenial|bionic)
+			# shellcheck disable=SC2034
+			ESM=1
+			TO=${KERNEL_ESM_EMAIL}
+			;;
+	esac
+
+	# Private?
+	case "${remote}" in
+		*~canonical-kernel*)
+			# shellcheck disable=SC2034
+			PRIVATE=1
+			TO=${KERNEL_ESM_EMAIL}
+			;;
+	esac
+
 	# Set the target
 	if [ ${#TARGET[@]} -eq 0 ] && [ -n "${SERIES}" ] ; then
 		series=${SERIES:0:1}
@@ -135,8 +156,8 @@ function print_globals()
 {
 	local var
 
-	for var in REPO CHANGELOG SERIES SOURCE DERIVATIVE SRU COVER_LETTER \
-					DRY_RUN IN_REPLY_TO a_TARGET a_TOKEN SUBJECT_PREFIX ; do
+	for var in REPO CHANGELOG SERIES SOURCE DERIVATIVE ESM PRIVATE SRU \
+	           COVER_LETTER DRY_RUN TO IN_REPLY_TO a_TARGET a_TOKEN SUBJECT_PREFIX ; do
 		if [ "${var#a_}" != "${var}" ] ; then
 			declare -n vars=${var#a_}
 			printf "%-14s : %s\n" "${var#a_}" "${vars[*]}" >&2
@@ -144,18 +165,6 @@ function print_globals()
 			printf "%-14s : %s\n" "${var}" "${!var}" >&2
 		fi
 	done
-}
-
-function send_patch()
-{
-	local opts=()
-
-	# Additional options
-	if [ "${DRY_RUN}" -eq 1 ] ; then
-		opts+=("--dry-run")
-	fi
-
-	git send-email .outgoing/*.patch --suppress-cc=all "${opts[@]}"
 }
 
 function _get_first_buglink()
@@ -259,12 +268,33 @@ function do_format_patch()
 	fi
 }
 
+function do_send_email()
+{
+	local opts
+
+	# git send-email options
+	opts=(
+		"--suppress-cc=all"
+		"--to=${TO}"
+	)
+	if [ "${DRY_RUN}" -eq 1 ] ; then
+		opts+=("--dry-run")
+	fi
+
+	# Just in case
+	if git config sendemail.to 2>/dev/null ; then
+		git config --unset sendemail.to
+	fi
+
+	git send-email "${opts[@]}" .outgoing/*.patch
+}
+
 function do_send_patch()
 {
 	local commit=${1:-HEAD}
 
 	do_format_patch "${commit}" -1
-	send_patch
+	do_send_email
 }
 
 function do_request_pull()
@@ -393,6 +423,8 @@ Supported commands:
   i,  info                        Show repo information.
   fp, format-patch [OPTS]         Create a patch (series). OPTS are additional
                                   options for 'git format-patch'.
+  se, send-email [OPTS]           Send patches in .outgoing. OPTS are additional
+                                  options for 'git send-email'.
   sp, send-patch [COMMIT]         Send the commit COMMIT as a patch email. If
                                   COMMIT is not provided, defaults to HEAD.
   rp, request-pull [START] [END]  Create a pull request.
@@ -421,6 +453,8 @@ declare -A cmd_map=(
 	["info"]="info"
 	["fp"]="format_patch"
 	["format-patch"]="format_patch"
+	["se"]="send_email"
+	["send-email"]="send_email"
 	["sp"]="send_patch"
 	["send-patch"]="send_patch"
 	["rp"]="request_pull"
@@ -472,7 +506,7 @@ while [ ${#} -gt 0 ] ; do
 			shift
 			version=${1}
 			;;
-		i|info|fp|format-patch|sp|send-patch|rp|request-pull)
+		i|info|fp|format-patch|se|send-email|sp|send-patch|rp|request-pull)
 			cmd=${cmd_map[${1}]}
 			shift
 			break
@@ -489,6 +523,8 @@ if [ -z "${cmd}" ] ; then
 	usage
 	exit 2
 fi
+
+trap out EXIT INT TERM HUP
 
 patch_pull=PATCH
 if [ "${cmd}" = "request_pull" ] ; then
@@ -525,4 +561,6 @@ print_globals
 if [ "${cmd}" = "info" ] ; then
 	exit
 fi
+
+echo
 do_"${cmd}" "${@}"
