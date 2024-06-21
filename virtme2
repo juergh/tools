@@ -132,6 +132,7 @@ Supported environment variables:
   KBUILD_OUTPUT  Kernel build output directory.
 
 Available commands:
+  chroot         Enter the build chroot.
   config         Create default virtme kernel config.
   make           Build kernel.
   menuconfig     Run config menu.
@@ -166,7 +167,7 @@ while [ $# -gt 0 ] ; do
 		--minimal)
 			minimal=1
 			;;
-		config|make|menuconfig|run|ubuntuconfig)
+		chroot|config|make|menuconfig|run|ubuntuconfig)
 			cmd=${1}
 			;;
 		*)
@@ -214,6 +215,10 @@ if [ -e Makefile ] ; then
 fi
 
 case "${cmd}" in
+	chroot)
+		run_chroot bash
+		;;
+
 	config)
 		echo "-- Generate default virtme config"
 		virtme-configkernel "${@}"
