@@ -135,11 +135,11 @@ function list_pkgs()
 {
 	local fmt num inst_dir source version arch flavor
 
-	fmt="%3s   %-20s   %-20s   %-10s   %3s   %3s   %3s   %3s\n"
+	fmt="%3s   %-20s   %-20s   %-10s   %-7s   %3s   %3s   %3s   %3s\n"
 
 	# shellcheck disable=SC2059
-	printf "${fmt}" "Idx" "Source" "Version" "Flavor" "Dbg" "Img" "Mod" "Src"
-	printf "%0.s-" {1..86}
+	printf "${fmt}" "Idx" "Source" "Version" "Flavor" "Arch" "Dbg" "Img" "Mod" "Src"
+	printf "%0.s-" {1..96}
 	echo
 
 	num=1
@@ -157,7 +157,7 @@ function list_pkgs()
 		[ -d "${UPKG_DIR}/${inst_dir}/../../all/src" ] && src=" * " || src=
 
 		# shellcheck disable=SC2059
-		printf "${fmt}" "${num}" "${source}" "${version}" "${flavor}" \
+		printf "${fmt}" "${num}" "${source}" "${version}" "${flavor}" "${arch}" \
 			   "${dbg}" "${img}" "${mod}" "${src}"
 
 		num=$((num + 1))
