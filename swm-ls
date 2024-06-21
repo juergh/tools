@@ -1,0 +1,26 @@
+#!/bin/bash -eu
+
+owner=${USER}
+
+prev_cycle=
+
+while IFS= read -r line ; do
+
+	# Filter out 'Complete' tasks
+	case "${line}" in
+		*" Complete "*) continue ;;
+	esac
+
+	cycle=$(echo "${line}" | awk '{print $5}')
+	if [ "${cycle}" != "${prev_cycle}" ] ; then
+		if [ -n "${prev_cycle}" ] ; then
+			echo
+		fi
+		echo "${cycle}"
+	fi
+
+	# Print the data
+	echo "  ${line}"
+
+	prev_cycle=${cycle}
+done < <("${KTEAM_TOOLS}"/stable/swm-ls --limit-owner "${owner}")
