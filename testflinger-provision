@@ -1,0 +1,116 @@
+#!/bin/bash -eu
+#
+# Priovision a device via testflinger
+#
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	if [ -n "${TMPF}" ] ; then
+		rm -f "${TMPF}"
+	fi
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "-- Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [OPTS...] JOB_QUEUE IMAGE_URL
+
+Provision a device via testflinger.
+
+Positional arguments:
+  JOB_QUEUE       Testflinger job queue name.
+  IMAGE_URL       Image URL.
+
+Optional argument:
+  -h, --help      Show this help text and exit.
+  --lp-user USER  Launchpad username. If not provided, defaults to $USER.
+  --timeout SECS
+EOF
+}
+
+dry_run=0
+lp_user=${USER}
+timeout=4800
+job_queue=
+image_url=
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-n|--dry-run)
+			dry_run=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		--lp-user)
+			shift
+			lp_user=${1}
+			;;
+		--timeout)
+			shift
+			timeout=${1}
+			;;
+		*)
+			if [ -z "${job_queue}" ] ; then
+				job_queue=${1}
+			elif [ -z "${image_url}" ] ; then
+				image_url=${1}
+			else
+				usage
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${job_queue}" ] || [ -z "${image_url}" ] ; then
+	usage
+	exit 2
+fi
+
+#job_queue=rpi4b4g
+#job_queue=rpi5b8g
+#image_url=http://cdimage.ubuntu.com/ubuntu-server/daily-preinstalled/current/noble-preinstalled-server-arm64+raspi.img.xz
+#image_url=http://10.102.196.9/cdimage/jammy/release/ubuntu-22.04-preinstalled-server-arm64+raspi.img.xz
+#lp_user=juergh
+
+TMPF=
+trap out EXIT INT TERM HUP
+
+TMPF=.testflinger.$$
+cat <<EOF > "${TMPF}"
+job_queue: ${job_queue}
+provision_data:
+  url: ${image_url}
+test_data:
+  test_cmds: |
+    ssh \$DEVICE_IP snap list
+    echo done testing
+reserve_data:
+  ssh_keys:
+    - lp:${lp_user}
+  timeout: ${timeout}
+EOF
+
+chmod 644 "${TMPF}"
+cat "${TMPF}"
+
+if [ ${dry_run} -eq 1 ] ; then
+	echo "(dry-run) Exiting..."
+	exit
+fi
+
+echo
+testflinger-cli --debug submit --poll "${TMPF}"
