@@ -15,7 +15,7 @@ function verify_pkg_index()
 	# shellcheck disable=SC2012
 	if  ! [[ "${pkg_index}" =~ ^[0-9]+$ ]] || \
 		  [ "${pkg_index}" -lt 1 ] || \
-		  [ "${pkg_index}" -gt "$(ls -1d "${UPKG_DIR}"/*/* | wc -l)" ] ; then
+		  [ "${pkg_index}" -gt "$(ls -1d "${UPKG_DIR}"/*/*/* | wc -l)" ] ; then
 		echo "Error: Invalid package index: ${pkg_index}" >&2
 		exit 1
 	fi
@@ -214,7 +214,7 @@ function do_remove()
 	verify_pkg_index "${pkg_index}"
 
 	# shellcheck disable=SC2012
-	inst_dir=$(ls -1d "${UPKG_DIR}"/*/* | head -"${pkg_index}" | tail -1)
+	inst_dir=$(ls -1d "${UPKG_DIR}"/*/*/* | head -"${pkg_index}" | tail -1)
 
 	echo -n "Removing package(s) ... "
 	rm -rf "${inst_dir}"
