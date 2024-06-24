@@ -1,0 +1,81 @@
+#!/bin/bash -eu
+#
+# Generate the kernel configs
+#
+
+function out()
+{
+	local rc=${?}
+
+	set +e
+	trap - EXIT INT TERM HUP
+
+	if [ "${BRANCHED}" -eq 1 ] ; then
+		git checkout "${CUR_BRANCH}"
+		git branch -d "${TMP_BRANCH}"
+	fi
+
+	if [ "${STASHED}" -eq 1 ] ; then
+		git stash pop
+	fi
+
+	if [ -d CONFIGS.bak ] ; then
+		rm -rf CONFIGS
+		mv CONFIGS.bak CONFIGS
+	fi
+
+	if [ ${rc} -eq 0 ] ; then
+		echo "-- Configs written to CONFIGS/"
+	else
+		echo "-- Error: Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function create_configs()
+{
+	local series
+
+	echo "-- Create configs"
+	fakeroot debian/rules clean
+	series=$(dpkg-parsechangelog -SDistribution)
+	if [ "${series}" = "UNRELEASED" ] ; then
+		series=$(dpkg-parsechangelog -SDistribution -o1 -c1)
+	fi
+	run-chroot cranky--"${series}" -- debian/rules genconfigs
+}
+
+if ! [ -f debian/debian.env ] ; then
+	echo "-- Error: Not an Ubuntu kernel tree" >&2
+	exit 1
+fi
+
+if [ -d CONFIGS ] ; then
+	echo "-- Error: CONFIGS directory exists" >&2
+	exit 1
+fi
+
+STASHED=0
+BRANCHED=0
+
+trap out EXIT INT TERM HUP
+
+commit=${1:-}
+
+if [ -n "${commit}" ] ; then
+	CUR_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+	TMP_BRANCH=tmp-genconfigs
+
+	if [ -n "$(git status --porcelain)" ] ; then
+		echo "-- Stash local changes"
+		git stash
+		STASHED=1
+	fi
+
+	echo "-- Checkout ${commit}"
+	git checkout -b "${TMP_BRANCH}" "${commit}"
+	BRANCHED=1
+fi
+
+create_configs
