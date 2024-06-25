@@ -89,7 +89,7 @@ fi
 TMPF=
 trap out EXIT INT TERM HUP
 
-TMPF=.testflinger.$$
+TMPF=${HOME}/testflinger-provision.$$
 cat <<EOF > "${TMPF}"
 job_queue: ${job_queue}
 provision_data:
@@ -104,7 +104,6 @@ reserve_data:
   timeout: ${timeout}
 EOF
 
-chmod 644 "${TMPF}"
 cat "${TMPF}"
 
 if [ ${dry_run} -eq 1 ] ; then
@@ -113,4 +112,5 @@ if [ ${dry_run} -eq 1 ] ; then
 fi
 
 echo
+set -x
 testflinger-cli --debug submit --poll "${TMPF}"
