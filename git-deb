@@ -188,11 +188,45 @@ print(obj['${attr}'])
 "
 }
 
+function fill_in_cover_letter()
+{
+	local subject blurb buglink url bug
+
+	subject=
+	blurb=
+	buglink=$(_get_first_buglink .outgoing/*.patch)
+	if [ -n "${buglink}" ] ; then
+		buglink=${buglink#BugLink: }
+		url=${buglink%% *}
+		if [ "${url}" = "${buglink}" ] ; then
+			# Try to query launchpad
+			bug=${buglink##*/}
+			subject="$(_query_lp_bug "${bug}" title) (LP: #${bug})"
+			blurb=$(_query_lp_bug "${bug}" description)
+		else
+			# Buglink contains a subject, so must be a private bug
+			subject=${buglink#* }
+			subject=${subject:1:-1}
+			blurb="*** PRIVATE BLURB HERE ***"
+		fi
+	fi
+	if [ -n "${subject}" ] ; then
+		# shellcheck disable=SC2016
+		sed -e 's,\*\*\* SUBJECT HERE \*\*\*,${SUBJECT},' \
+			-e 's,\*\*\* BLURB HERE \*\*\*,${BLURB},' \
+			.outgoing/0000-cover-letter.patch | \
+			SUBJECT=${subject} BLURB=${blurb} envsubst > \
+				   .outgoing/0000-cover-letter.patch.tmp
+		mv .outgoing/0000-cover-letter.patch.tmp \
+		   .outgoing/0000-cover-letter.patch
+	fi
+}
+
 function do_format_patch()
 {
-	local patch buglink url bug subject blurb
-	local opts=()
+	local patch opts
 
+	opts=()
 	# Additional options
 	if [ "${COVER_LETTER}" -eq 1 ] ; then
 		opts+=("--cover-letter")
@@ -228,34 +262,7 @@ function do_format_patch()
 
 	# Try to fill in the cover letter
 	if [ -f .outgoing/0000-cover-letter.patch ] ; then
-		subject=
-		blurb=
-		buglink=$(_get_first_buglink .outgoing/*.patch)
-		if [ -n "${buglink}" ] ; then
-			buglink=${buglink#BugLink: }
-			url=${buglink%% *}
-			if [ "${url}" = "${buglink}" ] ; then
-				# Try to query launchpad
-				bug=${buglink##*/}
-				subject="$(_query_lp_bug "${bug}" title) (LP: #${bug})"
-				blurb=$(_query_lp_bug "${bug}" description)
-			else
-				# Buglink contains a subject, so must be a private bug
-				subject=${buglink#* }
-				subject=${subject:1:-1}
-				blurb="*** PRIVATE BLURB HERE ***"
-			fi
-		fi
-		if [ -n "${subject}" ] ; then
-			# shellcheck disable=SC2016
-			sed -e 's,\*\*\* SUBJECT HERE \*\*\*,${SUBJECT},' \
-				-e 's,\*\*\* BLURB HERE \*\*\*,${BLURB},' \
-				.outgoing/0000-cover-letter.patch | \
-			SUBJECT=${subject} BLURB=${blurb} envsubst > \
-				   .outgoing/0000-cover-letter.patch.tmp
-			mv .outgoing/0000-cover-letter.patch.tmp \
-			   .outgoing/0000-cover-letter.patch
-		fi
+		fill_in_cover_letter
 	fi
 
 	if [ "${DRY_RUN}" -eq 1 ] ; then
