@@ -26,6 +26,7 @@ Optional arguments:
   --arch ARCH      Debian package architecture.
   --chroot CHROOT  Use chroot CHROOT.
   -h, --help       Show this help text and exit.
+  -jX              Number of jobs, default one per CPU.
 
 Optional arguments for 'ubuntuconfig':
   --lsmod LSMOD    Build only modules listed in LSMOD.
@@ -34,6 +35,7 @@ EOF
 
 arch=
 chroot=
+jobs=$(getconf _NPROCESSORS_ONLN)
 lsmod=
 cmd=
 
@@ -50,6 +52,13 @@ while [ ${#} -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-j[1-9]*)
+			jobs=${1#-j}
+			if [ -z "${jobs}" ] ; then
+				shift
+				jobs=${1}
+			fi
 			;;
 		--lsmod)
 			shift
@@ -135,11 +144,13 @@ case "${cmd}" in
 			echo
 			echo "-- Enable only local modules"
 			run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
+		else
+			run_chroot make olddefconfig
 		fi
 		;;
 
 	make)
-		run_chroot make -j"$(getconf _NPROCESSORS_ONLN)" "${@:-bindeb-pkg}"
+		run_chroot make -j"${jobs}" "${@:-bindeb-pkg}"
 		;;
 
 	menuconfig)
