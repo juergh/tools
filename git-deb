@@ -167,16 +167,7 @@ function print_globals()
 	done
 }
 
-function _get_first_buglink()
-{
-	for f in "${@}" ; do
-		if grep -m1 '^BugLink: ' "${f}" ; then
-			return
-		fi
-	done
-}
-
-function _query_lp_bug()
+function query_lp_bug()
 {
 	local bug=${1} attr=${2}
 
@@ -190,36 +181,82 @@ print(obj['${attr}'])
 
 function fill_in_cover_letter()
 {
-	local subject blurb buglink url bug
+	local cves buglinks issue subject buglink bug
 
-	subject=
-	blurb=
-	buglink=$(_get_first_buglink .outgoing/*.patch)
-	if [ -n "${buglink}" ] ; then
-		buglink=${buglink#BugLink: }
-		url=${buglink%% *}
-		if [ "${url}" = "${buglink}" ] ; then
-			# Try to query launchpad
-			bug=${buglink##*/}
-			subject="$(_query_lp_bug "${bug}" title) (LP: #${bug})"
-			blurb=$(_query_lp_bug "${bug}" description)
-		else
-			# Buglink contains a subject, so must be a private bug
-			subject=${buglink#* }
-			subject=${subject:1:-1}
-			blurb="*** PRIVATE BLURB HERE ***"
-		fi
-	fi
-	if [ -n "${subject}" ] ; then
-		# shellcheck disable=SC2016
-		sed -e 's,\*\*\* SUBJECT HERE \*\*\*,${SUBJECT},' \
-			-e 's,\*\*\* BLURB HERE \*\*\*,${BLURB},' \
-			.outgoing/0000-cover-letter.patch | \
-			SUBJECT=${subject} BLURB=${blurb} envsubst > \
-				   .outgoing/0000-cover-letter.patch.tmp
-		mv .outgoing/0000-cover-letter.patch.tmp \
-		   .outgoing/0000-cover-letter.patch
-	fi
+	readarray -t cves < <(grep -hE "^CVE-[0-9]{4}-[0-9]*$" .outgoing/*.patch | sort -u)
+	readarray -t buglinks < <(grep -h '^BugLink: http' .outgoing/*.patch)
+
+	case "${#cves[@]}-${#buglinks[@]}" in
+		0-0)
+			pr_warn "Found no CVE tags and no BugLinks, can't fill in cover letter"
+			return
+			;;
+		*-0)
+			issue=cve
+			subject=$(printf "%s," "${cves[@]}")
+			subject=${subject%,}
+			;;
+		0-*)
+			buglink=${buglinks[0]}
+			buglink=${buglink#BugLink: }
+			if [ "${buglink%% *}" = "${buglink}" ] ; then
+				issue=bug
+				# Try to query launchpad
+				bug=${buglink##*/}
+				subject="$(query_lp_bug "${bug}" title) (LP: #${bug})"
+			else
+				issue=private
+				# Buglink contains a subject, so must be a private bug
+				subject=${buglink#* }
+				subject=${subject:1:-1}
+			fi
+			;;
+		*)
+			pr_warn "Found CVE tags and BugLinks, don't know how to fill in cover letter"
+			return
+			;;
+	esac
+
+	while IFS= read -r line ; do
+		case "${line}" in
+			*"*** BLURB HERE ***"*)
+				case "${issue}" in
+					cve)
+						printf "https://ubuntu.com/security/%s\n" "${cves[@]}"
+						echo
+						echo "[ Impact ]"
+						echo
+						echo "*** BLURB HERE ***"
+						echo
+						echo "[ Test Case ]"
+						echo
+						echo "*** BLURB HERE ***"
+						echo
+						echo "[ Where Problems Could Occur ]"
+						echo
+						echo "*** BLURB HERE ***"
+						;;
+					bug)
+						printf "%s\n" "${buglinks[@]}" | sort -u
+						echo
+						query_lp_bug "${bug}" description
+						;;
+					*)
+						printf "%s\n" "${buglinks[@]}" | sort -u
+						echo
+						echo "*** PRIVATE BLURB HERE ***"
+						;;
+				esac
+				;;
+			*"*** SUBJECT HERE ***"*)
+				echo "${line%\*\*\* SUBJECT*}${subject}"
+				;;
+			*)
+				echo "${line}"
+				;;
+		esac
+	done < .outgoing/0000-cover-letter.patch > .outgoing/cl.new
+	mv .outgoing/cl.new .outgoing/0000-cover-letter.patch
 }
 
 function do_format_patch()
@@ -380,8 +417,8 @@ function do_request_pull()
 	elif [ "${url}" = "${buglink}" ] ; then
 		# Try to query launchpad
 		bug=${buglink##*/}
-		subject="$(_query_lp_bug "${bug}" title) (LP: #${bug})"
-		blurb=$(_query_lp_bug "${bug}" description)
+		subject="$(query_lp_bug "${bug}" title) (LP: #${bug})"
+		blurb=$(query_lp_bug "${bug}" description)
 	else
 		# Buglink contains a subject, so must be a private bug
 		subject=${buglink#* }
