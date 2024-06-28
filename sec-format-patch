@@ -1,0 +1,121 @@
+#!/bin/bash -eu
+
+function format_patch()
+{
+	local cve=${1^^} series=${2,,}
+	local branch start odir s
+
+	branch=${cve}/${series}
+	start=
+	while IFS= read -r h ; do
+		if git for-each-ref | grep -q "${h}" ; then
+			start=${h}
+			break
+		fi
+	done < <(git log --format=%H "${branch}"~1)
+
+	odir=.sec-${series}
+	mkdir "${odir}"
+
+	# Create the patchset
+	s=${series::1}
+	git format-patch \
+		--output-directory "${odir}" \
+		--filename-max-length=50 \
+		--cover-letter \
+		--subject-prefix="SRU][${s^}][PATCH" \
+		"${start}".."${branch}"
+
+	# Add the series name to the patch filenames
+	for f in "${odir}"/0*.patch ; do
+		f=${f##*/}
+		mv "${odir}"/"${f}" "${odir}"/"${f%%-*}-${series}-${f#*-}"
+	done
+}
+
+function sort_series()
+{
+	while IFS= read -r line ; do
+		case "${line}" in
+			trusty|xenial) echo "1 ${line}" ;;
+			*)             echo "2 ${line}" ;;
+		esac
+	done | sort -rV | sed 's/^..//'
+}
+
+cve=${1:-}
+
+if [ -z "${cve}" ] ; then
+	branch=$(git rev-parse --abbrev-ref HEAD)
+	cve=${branch%%/*}
+fi
+
+readarray -t series < <(git branch | sed -n "s,^..${cve}/,,p" | sort_series)
+
+#
+# Create the patch sets
+#
+
+rm -rf .sec-*
+
+for s in "${series[@]}" ; do
+	echo "-- ${s^}"
+	format_patch "${cve}" "${s}"
+	echo
+done
+
+#
+# Collect the CVE tags from all patches
+#
+
+readarray -t cves < <(grep -hE '^CVE-[0-9]{4}-[0-9]*$' .sec-*/0*.patch | sort -u)
+
+#
+# Construct the cover letter subject
+#
+
+series_list=$(printf "%.1s/" "${series[@]^}")
+series_list=${series_list%/}
+
+cve_list=$(printf "%s," "${cves[@]}")
+cve_list=${cve_list%,}
+
+subject="Subject: [SRU][${series_list}][PATCH 0/x] ${cve_list}"
+
+#
+# Merge the cover letters
+#
+
+rm -rf .outgoing
+mkdir .outgoing
+
+{
+	sed -e "s|^Subject: .*|${subject}|" -e '/BLURB HERE/,$d' .sec-"${series[0]}"/0000-*.patch
+	printf "https://ubuntu.com/security/%s\n" "${cves[@]}"
+	echo
+	echo "[ Impact ]"
+	echo
+	echo "[ Test Case ]"
+	echo
+	echo "[ Where Problems Could Occur ]"
+	echo
+	for s in "${series[@]}" ; do
+		echo "[ Diffstat ${s^} ]"
+		sed -e '1,/BLURB HERE/d' -e '/^--/,$d' .sec-"${s}"/0000-*.patch
+	done
+	sed -e '/^--/,$!d' .sec-"${series[0]}"/0000-*.patch
+} > .outgoing/cover-letter.patch
+
+#
+# Move all patches to the outgoing directory
+#
+
+mv .sec-*/*.patch .outgoing/
+rm .outgoing/0000-*.patch
+mv .outgoing/cover-letter.patch .outgoing/0000-cover-letter.patch
+
+# Clean up
+rm -rf .sec-*
+
+echo "-- Combined patchset in .outgoing"
+ls -1 .outgoing/*
