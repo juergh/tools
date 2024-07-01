@@ -43,17 +43,70 @@ function sort_series()
 	done | sort -rV | sed 's/^..//'
 }
 
-cve=${1:-}
+function usage()
+{
+	cat <<EOF
+Usage: sec-format-patch [CVE] [SERIES [SERIES...]]
+
+Positional arguments:
+  CVE         CVE number. If not provided, is determined from the current branch name.
+  SERIES      Series name. If not provided, is determined from the available branches.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+cve=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${cve}" ] ; then
+				break
+			fi
+			cve=${1}
+			;;
+	esac
+done
 
 if [ -z "${cve}" ] ; then
 	branch=$(git rev-parse --abbrev-ref HEAD)
 	cve=${branch%%/*}
 fi
 
-readarray -t series < <(git branch | sed -n "s,^..${cve}/,,p" | sort_series)
+readarray -t series < <(
+	if [ ${#} -gt 0 ] ; then
+		printf "%s\n" "${@}"
+	else
+		git branch | sed -n "s,^..${cve}/,,p"
+	fi | sort_series
+)
 
 #
-# Create the patch sets
+# Sanity check
+#
+
+private=0
+public=0
+for s in "${series[@]}" ; do
+	case "${s}" in
+		trusty|xenial|bionic) private=1 ;;
+		*) public=1 ;;
+	esac
+done
+
+if [ ${private} -eq 1 ] && [ ${public} -eq 1 ] ; then
+	echo "Can't mix private and public kernels in a single patch series submission" >&2
+	exit 1
+fi
+
+#
+# Create the patch series
 #
 
 rm -rf .sec-*
@@ -117,5 +170,5 @@ mv .outgoing/cover-letter.patch .outgoing/0000-cover-letter.patch
 # Clean up
 rm -rf .sec-*
 
-echo "-- Combined patchset in .outgoing"
+echo "-- Combined patch series in .outgoing"
 ls -1 .outgoing/*
