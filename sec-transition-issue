@@ -33,6 +33,7 @@ parser.add_argument("-n", "--dry-run", action="store_true")
 parser.add_argument("cve")
 parser.add_argument("series")
 parser.add_argument("version")
+parser.add_argument("comment", nargs="?")
 args = parser.parse_args()
 
 # Note: Python JIRA uses ~/.netrc for authentication
@@ -64,8 +65,6 @@ for issue in issues:
 
         print(f"Transition:     {transition_name}")
         if args.dry_run:
-            add_comment = False
-            print("Dry-run, skipping...")
             break
 
         # Transition the issue to the next status
@@ -78,5 +77,11 @@ for issue in issues:
 
     if add_comment:
         comment = "CVE fixed in {{" + args.version + "}}"
+        if args.comment:
+            comment = comment + " - " + args.comment
         print(f"Add comment:    {comment}")
-        jira.add_comment(issue, comment)
+        if not args.dry_run:
+            jira.add_comment(issue, comment)
+
+    if args.dry_run:
+        print("Dry-run, skipping...")
