@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+
+import json
+import sys
+
+from jira import JIRA
+
+def show_issue(issue):
+    print(issue)
+    print(json.dumps(issue.raw["fields"], indent=4))
+
+def get_next_transition(issue):
+    transitions = (
+        "already released",
+        "patchset sent to mailinglist",
+        "solution found",
+        "ack and applied",
+        "cycle assigned",
+        "kernel released",
+    )
+
+    for t in jira.transitions(issue):
+        t_name = t["name"].lower()
+        t_id = t["id"]
+        if t_name in transitions:
+            return t_name, t_id
+
+    return None, None
+
+cve = sys.argv[1]
+series = sys.argv[2]
+version = sys.argv[3]
+
+# Note: Python JIRA uses ~/.netrc for authentication
+jira_server = "https://warthogs.atlassian.net"
+jira = JIRA(server=jira_server)
+
+summary = f"{cve.upper()} {series.capitalize()}"
+
+issues = jira.search_issues(f"project = 'KERNSEC' and summary ~ '\"{summary}\"' and status not in (\"won't fix\", 'not affected', 'done')")
+if not issues:
+    print("No issues found")
+    sys.exit(0)
+
+
+for issue in issues:
+    print(f"http://warthogs.atlassian.net/browse/{issue.key}")
+
+    status = str(issue.fields.status).lower()
+    print(f"Current status: {status}")
+
+    add_comment = False
+    while status != "done":
+        add_comment = True
+
+        transition_name, transition_id = get_next_transition(issue)
+        if not transition_name:
+            print("No transition found")
+            sys.exit(1)
+
+        # Transition the issue to the next status
+        print(f"Transition:     {transition_name}")
+        jira.transition_issue(issue, transition_id)
+
+        # Get the new status
+        issue = jira.issue(issue.key)
+        status = str(issue.fields.status).lower()
+        print(f"New status:     {status}")
+
+    if add_comment:
+        comment = "CVE fixed in {{" + version + "}}"
+        print(f"Add comment:    {comment}")
+        jira.add_comment(issue, comment)

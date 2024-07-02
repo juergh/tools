@@ -1,0 +1,10 @@
+#!/bin/bash
+
+prefix=${1}
+shift
+
+git fetch linux-ubuntu
+
+for series in "${@}" ; do
+	git branch "${prefix}"/"${series}" linux-ubuntu/ubuntu/"${series}"/linux
+done
