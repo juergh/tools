@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import json
 import sys
 
@@ -27,15 +28,18 @@ def get_next_transition(issue):
 
     return None, None
 
-cve = sys.argv[1]
-series = sys.argv[2]
-version = sys.argv[3]
+parser = argparse.ArgumentParser()
+parser.add_argument("-n", "--dry-run", action="store_true")
+parser.add_argument("cve")
+parser.add_argument("series")
+parser.add_argument("version")
+args = parser.parse_args()
 
 # Note: Python JIRA uses ~/.netrc for authentication
 jira_server = "https://warthogs.atlassian.net"
 jira = JIRA(server=jira_server)
 
-summary = f"{cve.upper()} {series.capitalize()}"
+summary = f"{args.cve.upper()} {args.series.capitalize()}"
 
 issues = jira.search_issues(f"project = 'KERNSEC' and summary ~ '\"{summary}\"' and status not in (\"won't fix\", 'not affected', 'done')")
 if not issues:
@@ -58,8 +62,13 @@ for issue in issues:
             print("No transition found")
             sys.exit(1)
 
-        # Transition the issue to the next status
         print(f"Transition:     {transition_name}")
+        if args.dry_run:
+            add_comment = False
+            print("Dry-run, skipping...")
+            break
+
+        # Transition the issue to the next status
         jira.transition_issue(issue, transition_id)
 
         # Get the new status
@@ -68,6 +77,6 @@ for issue in issues:
         print(f"New status:     {status}")
 
     if add_comment:
-        comment = "CVE fixed in {{" + version + "}}"
+        comment = "CVE fixed in {{" + args.version + "}}"
         print(f"Add comment:    {comment}")
         jira.add_comment(issue, comment)
