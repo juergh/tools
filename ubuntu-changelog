@@ -142,6 +142,7 @@ class CommitEntry:
 class CommitSet:
     def __init__(self, version=None):
         self.version = version
+        self.empty = True
         self.tracker = None
         self.ubuntu = []
         self.mainline = []
@@ -152,6 +153,9 @@ class CommitSet:
         """Add a single commit entry to the set"""
         if entry.ignore:
             return
+
+        # Commit set is no longer empty
+        self.empty = False
 
         if entry.key == "__tracker__":
             if self.tracker:
@@ -211,14 +215,12 @@ class CommitSet:
         if header and self.version:
             h = re.sub(r"(\D)-(\d)", r"\1: \2", self.version, count=1)
             yield "[ " + h + " ]"
+            yield ""
 
         # Yield the changes
         first = True
         for line in self.changes():
-            if spacers and (
-                (first and header and self.version)
-                or (not first and line.startswith("* "))
-            ):
+            if spacers and not first and line.startswith("* "):
                 yield ""
             yield from wrap_line(line, width=width)
             first = False
@@ -254,15 +256,22 @@ def main():
     first_set = True
 
     for commit in git.Repo().iter_commits(args.rev_range):
+        # Load the commit
         entry = CommitEntry(commit)
+
+        # New release commit
         if entry.subject.startswith("UBUNTU: Ubuntu-"):
-            # New release found: Print the current commit set and initialize a new set
-            print_commit_set(commit_set, first_set=first_set, **kwargs)
+            if not commit_set.empty:
+                # Print the current set
+                print_commit_set(commit_set, first_set=first_set, **kwargs)
+                first_set = False
+
+            # Initialize a new set
             commit_set = CommitSet(entry.subject.removeprefix("UBUNTU:").strip())
-            first_set = False
-        else:
-            # Add the commit to the current set
-            commit_set.add(entry)
+            continue
+
+        # Add the commit to the current set
+        commit_set.add(entry)
 
     print_commit_set(commit_set, first_set=first_set, **kwargs)
 
