@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+
+from launchpadlib.launchpad import Launchpad
+
+lp = Launchpad.login_with('tools', 'production', version='devel')
+
+#subs = lp.me.getArchiveSubscriptions()
+#for s in subs:
+#    print(s)
+
+urls = lp.me.getArchiveSubscriptionURLs()
+for url in urls:
+    print(url)
