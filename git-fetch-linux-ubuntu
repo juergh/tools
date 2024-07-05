@@ -37,7 +37,7 @@ function usage()
 	cat <<EOF
 Usage: git-fetch-linux-ubuntu [-h]
 
-Fetch Ubuntu (and upstream) kernels.
+Fetch Ubuntu kernels.
 
 Optional arguments:
   -h, --help  Show this help text and exit.
@@ -66,17 +66,9 @@ fi
 
 trap out EXIT INT TERM HUP
 
-# Just in case
-#git config remote.upstream.tagopt "--no-tags"
-#git config --unset-all remote.upstream.fetch || true
-#git config --add remote.upstream.fetch "+refs/heads/linux*:refs/heads/upstream/linux*"
-#git config --add remote.upstream.fetch "+refs/tags/v*:refs/tags/v*"
-
-# Remove all remotes (except upstream)
+# Remove all remotes
 while IFS= read -r remote ; do
-#	if [ "${remote}" != "upstream" ] ; then
-		git remote remove "${remote}" 2>/dev/null
-#	fi
+	git remote remove "${remote}" 2>/dev/null
 done < <(git remote)
 
 # Add remotes
