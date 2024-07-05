@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 
 import argparse
-import os
 import re
 import sys
+import textwrap
+import time
 
 import git
 import requests
-import textwrap
-
-from debian.changelog import Changelog
 
 
 def wrap_line(line, width=0):
@@ -45,14 +43,14 @@ def url_get(url, **kwargs):
         except requests.exceptions.ConnectionError:
             pass
         time.sleep(2)
-    raise CrankyExecption(f"Failed to get {url}")
+    raise CrankyException(f"Failed to get {url}")
 
 
 def get_title_from_lp(bug, timeout=5):
     """Get a bug title from Launchpad"""
     url = f"https://api.launchpad.net/devel/bugs/{bug}"
     resp = url_get(url, timeout=timeout)
-    if resp.status_code == requests.codes.ok:
+    if resp.status_code == 200:
         data = resp.json()
         title = data["title"]
         for line in data.get("description", "").split("\n"):
@@ -63,6 +61,13 @@ def get_title_from_lp(bug, timeout=5):
         title = "INVALID or PRIVATE BUG"
 
     return f"{title} (LP: #{bug})"
+
+
+def maybe_reversed(seq, reverse=False):
+    """Return a reversed list (or not)"""
+    if not seq or not reverse:
+        return seq
+    return reversed(seq)
 
 
 class CrankyException(Exception):
@@ -177,7 +182,7 @@ class CommitSet:
             self.fixes[entry.key] = []
         self.fixes[entry.key].append(entry)
 
-    def changes(self):
+    def changes(self, reverse=False):
         """Yield the list of changes in this set"""
         # 1. log entry: tracking bug
         if self.tracker:
@@ -194,22 +199,22 @@ class CommitSet:
                 else:
                     title.append(token)
             yield "* " + " // ".join(title)
-            for entry in self.fixes[key]:
+            for entry in maybe_reversed(self.fixes[key], reverse):
                 yield "  - " + entry.subject.removeprefix("UBUNTU:").strip()
 
         # 3. log entry: Misc Ubuntu changes
         if self.ubuntu:
             yield "* Miscellaneous Ubuntu changes"
-            for entry in self.ubuntu:
+            for entry in maybe_reversed(self.ubuntu, reverse):
                 yield "  - " + entry.subject.removeprefix("UBUNTU:").strip()
 
         # 4. log entry: Misc upstream changes
         if self.mainline:
             yield "* Miscellaneous upstream changes"
-            for entry in self.mainline:
+            for entry in maybe_reversed(self.mainline, reverse):
                 yield "  - " + entry.subject
 
-    def log(self, width=0, header=False, spacers=False):
+    def log(self, width=0, header=False, spacers=False, reverse=False):
         """Yield a formatted log of the changes in this set"""
         # Yield the header
         if header and self.version:
@@ -219,7 +224,7 @@ class CommitSet:
 
         # Yield the changes
         first = True
-        for line in self.changes():
+        for line in self.changes(reverse=reverse):
             if spacers and not first and line.startswith("* "):
                 yield ""
             yield from wrap_line(line, width=width)
@@ -251,12 +256,13 @@ def main():
         "width": args.width,
         "header": args.headers,
         "spacers": args.spacers,
+        "reverse": args.reverse,
     }
 
     commit_set = CommitSet()
     first_set = True
 
-    for commit in git.Repo().iter_commits(args.rev_range, reverse=args.reverse):
+    for commit in git.Repo().iter_commits(args.rev_range):
         # Load the commit
         entry = CommitEntry(commit)
 
