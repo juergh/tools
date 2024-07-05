@@ -243,6 +243,7 @@ def main():
     parser.add_argument("--width", type=int, default=0)
     parser.add_argument("--headers", action="store_true")
     parser.add_argument("--spacers", action="store_true")
+    parser.add_argument("--reverse", action="store_true")
     parser.add_argument("rev_range", nargs="*", default=["HEAD"])
     args = parser.parse_args()
 
@@ -255,7 +256,7 @@ def main():
     commit_set = CommitSet()
     first_set = True
 
-    for commit in git.Repo().iter_commits(args.rev_range):
+    for commit in git.Repo().iter_commits(args.rev_range, reverse=args.reverse):
         # Load the commit
         entry = CommitEntry(commit)
 
