@@ -77,7 +77,7 @@ while IFS=" " read -r series package url branch ; do
 		series=unstable
 	fi
 
-	remote=ubuntu/${series}/${package}
+	remote=${series}/${package}
 	tag_prefix=Ubuntu${package#linux}
 
 	git remote add "${remote}" "${url}"
