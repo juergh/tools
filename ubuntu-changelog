@@ -12,25 +12,26 @@ import requests
 
 def wrap_line(line, width=0):
     """Wrap and indent a line"""
-    if width == 0:
+    if width == 0 or isinstance(line, _nowrap):
         yield line
         return
+
+    if line.startswith("* "):
+        prefix = "* "
+        line = line[2:]
+    elif line.startswith("  - "):
+        prefix = "  - "
+        line = line[4:]
+    else:
+        raise CrankyException()
 
     # Prevent wrapping in LP and //
     line = line.replace("LP: ", "LP__").replace(" //", "_//")
 
-    indent = ""
-    for text in textwrap.wrap(line, width - 4):
+    for text in textwrap.wrap(line, width - len(prefix)):
         text = text.replace("LP__", "LP: ").replace("_//", " //")
-        yield indent + text
-
-        if not indent:
-            if text.startswith("* "):
-                indent = "  "
-            elif text.startswith("  - "):
-                indent = "    "
-            else:
-                raise CrankyException()
+        yield prefix + text
+        prefix = " " * len(prefix)
 
 
 def url_get(url, **kwargs):
@@ -68,6 +69,10 @@ def maybe_reversed(seq, reverse=False):
     if not seq or not reverse:
         return seq
     return reversed(seq)
+
+
+class _nowrap(str):
+    pass
 
 
 class CrankyException(Exception):
@@ -188,7 +193,7 @@ class CommitSet:
         if self.tracker:
             bug = self.tracker.bugs[0]
             title = get_title_from_lp(bug)
-            yield "* " + title
+            yield _nowrap("* " + title)
 
         # 2. log entry: BugLink and CVE fixes
         for key in self.fixes_keys:
