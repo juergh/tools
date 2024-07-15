@@ -133,7 +133,7 @@ function set_globals()
 
 	# Private?
 	case "${remote}" in
-		*~canonical-kernel*)
+		*~canonical-kernel-*)
 			# shellcheck disable=SC2034
 			PRIVATE=1
 			TO=${KERNEL_ESM_EMAIL}
