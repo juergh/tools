@@ -1,0 +1,26 @@
+#!/bin/bash -eu
+
+function run_chroot()
+{
+	run-chroot cranky--"${SERIES}" -- "${@}"
+}
+
+SERIES=$(dpkg-parsechangelog -ldebian.master/changelog -SDistribution)
+if [ -z "${SERIES}" ] ; then
+	echo "Failed to determine series" >&2
+	exit 1
+fi
+
+export BUILD_OUTPUT=buildd/${SERIES}
+
+run_chroot make allmodconfig
+
+if [ -f "${1}" ] ; then
+	run_chroot make "${1%.*}".o
+else
+	case "${1}" in
+		drivers/*)
+			run_chroot make M="${1}"
+			;;
+	esac
+fi

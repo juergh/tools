@@ -1,0 +1,10 @@
+#!/bin/bash -eu
+
+cve=${1:-}
+
+if [ -z "${cve}" ] ; then
+	branch=$(git rev-parse --abbrev-ref HEAD)
+	cve=${branch%/*}
+fi
+
+cat ~/git/cron/ubuntu-cve-tracker/active/"${cve}"
