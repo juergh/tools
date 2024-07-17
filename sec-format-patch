@@ -17,13 +17,18 @@ function format_patch()
 	odir=.sec-${series}
 	mkdir "${odir}"
 
-	# Create the patchset
 	s=${series::1}
+	subject_prefix="SRU][${s^}][PATCH"
+	if [ -n "${VERSION}" ] ; then
+		subject_prefix="${subject_prefix} v${VERSION}"
+	fi
+
+	# Create the patchset
 	git format-patch \
 		--output-directory "${odir}" \
 		--filename-max-length=50 \
 		--cover-letter \
-		--subject-prefix="SRU][${s^}][PATCH" \
+		--subject-prefix="${subject_prefix}" \
 		"${start}".."${branch}"
 
 	# Add the series name to the patch filenames
@@ -46,17 +51,19 @@ function sort_series()
 function usage()
 {
 	cat <<EOF
-Usage: sec-format-patch [CVE] [SERIES [SERIES...]]
+Usage: sec-format-patch [-h] [-v NUM] [CVE] [SERIES [SERIES...]]
 
 Positional arguments:
   CVE         CVE number. If not provided, is determined from the current branch name.
   SERIES      Series name. If not provided, is determined from the available branches.
 
 Optional arguments:
-  -h, --help  Show this help text and exit.
+  -h, --help         Show this help text and exit.
+  -v, --version NUM  Patch submission version.
 EOF
 }
 
+VERSION=
 cve=
 
 while [ ${#} -gt 0 ] ; do
@@ -65,6 +72,10 @@ while [ ${#} -gt 0 ] ; do
 			usage
 			exit
 			;;
+		-v|--version)
+			shift
+			VERSION=${1}
+			;;
 		*)
 			if [ -n "${cve}" ] ; then
 				break
@@ -72,6 +83,7 @@ while [ ${#} -gt 0 ] ; do
 			cve=${1}
 			;;
 	esac
+	shift
 done
 
 if [ -z "${cve}" ] ; then
@@ -133,7 +145,11 @@ series_list=${series_list%/}
 cve_list=$(printf "%s," "${cves[@]}")
 cve_list=${cve_list%,}
 
-subject="Subject: [SRU][${series_list}][PATCH 0/x] ${cve_list}"
+patch="PATCH 0/x"
+if [ -n "${VERSION}" ] ; then
+	patch="PATCH v${VERSION} 0/x"
+fi
+subject="Subject: [SRU][${series_list}][${patch}] ${cve_list}"
 
 #
 # Merge the cover letters
