@@ -1,0 +1,59 @@
+#!/bin/bash
+
+function usage()
+{
+        cat <<EOF
+Usage: sec-send-email [-d] [-h] public|esm
+
+Send patches in .outgoing to the ML.
+
+Optional arguments:
+  -d, --dry-run  Don't send.
+  -h, --help     Show this help text and exit.
+EOF
+}
+
+dry_run=0
+to=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-d|--dry-run)
+			dry_run=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		public)
+			to=${KERNEL_PUBLIC_EMAIL}
+			;;
+		esm)
+			to=${KERNEL_ESM_EMAIL}
+			;;
+		*)
+			echo "Invalid argument: ${1}" >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+if [ -z "${to}" ] ; then
+	usage
+	exit 2
+fi
+
+#case "$(grep -m1 '^Subject: ' .outgoing/0000-*)" in
+#	*[]*
+#esac
+
+opts=(
+    "--suppress-cc=all"
+    "--to=${to}"
+)
+
+if [ ${dry_run} -eq 1 ] ; then
+    opts+=("--dry-run")
+fi
+git send-email "${opts[@]}" .outgoing/*.patch
