@@ -249,12 +249,12 @@ def print_commit_set(commit_set, first_set=True, **kwargs):
 
 def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Format git commits for inclusion in an Ubuntu kernel changelog.")
     parser.add_argument("--width", type=int, default=0)
-    parser.add_argument("--headers", action="store_true")
+    parser.add_argument("--headers", action="store_true", help="Add header entries in the form of '[ Ubuntu[-<variant>]: <version> ]'.")
     parser.add_argument("--spacers", action="store_true")
     parser.add_argument("--reverse", action="store_true")
-    parser.add_argument("rev_range", nargs="*", default=["HEAD"])
+    parser.add_argument("rev_range", nargs="*", default=["HEAD"], help="Format only commits in the specified revision range. If not specified, defaults to HEAD.")
     args = parser.parse_args()
 
     kwargs = {
