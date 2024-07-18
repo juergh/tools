@@ -17,4 +17,4 @@ while IFS= read -r line ; do
 		cves="${GREEN}(${cves})${NC} "
 	fi
 	echo -e "$h ${cves}$s"
-done < <(git log --oneline --decorate=short --color=always "$@") | "${PAGER:-less}"
+done < <(git log --oneline --decorate=short --color=always "$@") | ${PAGER:-less -X}
