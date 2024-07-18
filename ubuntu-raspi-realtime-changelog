@@ -1,0 +1,74 @@
+#!/bin/bash
+
+function get_version()
+{
+	local debian=debian.${1} commit=${2:-HEAD}
+
+	git show "${commit}":"${debian}"/changelog | head -1 | tr -d '();' | awk '{print $2}'
+}
+
+function split_tag()
+{
+	local tag=${1}
+	local prefix version
+
+	version=$(echo "${tag}" | grep -oP '\d+\.\d+\.\d+-.*')
+	prefix=${tag%${version}}
+
+	echo "${prefix}" "${version}"
+}
+
+function find_commits()
+{
+	local start=${1} end=${2}
+	local start_p start_v to commit subject curr_p curr_v
+
+	read -r start_p start_v < <(split_tag "${start}")
+
+	to=HEAD
+	while read -r commit subject ; do
+		case "${subject}" in
+			"UBUNTU: ${end}")
+				to=${commit}
+				;;
+			"UBUNTU: "*)
+				read -r curr_p curr_v < <(split_tag "${subject#UBUNTU: }")
+				if [ "${curr_p}" = "${start_p}" ] && dpkg --compare-versions "${curr_v}" le "${start_v}" ; then
+					echo "${commit}..${to}"
+					return
+				fi
+				;;
+		esac
+	done < <(git log --oneline)
+}
+
+curr_raspi=$(get_version raspi)
+curr_realtime=$(get_version realtime)
+curr_master=$(get_version master)
+
+prev=$(dpkg-parsechangelog -ldebian.raspi-realtime/changelog -c1 -o1 -SVersion)
+prev_tag=Ubuntu-raspi-realtime-${prev}
+
+prev_raspi=$(get_version raspi "${prev_tag}")
+prev_realtime=$(get_version realtime "${prev_tag}")
+prev_master=$(get_version master "${prev_tag}")
+
+echo "-- raspi    ${prev_raspi} -> ${curr_raspi}" >&2
+echo "-- realtime ${prev_realtime} -> ${curr_realtime}" >&2
+echo "-- master   ${prev_master} -> ${curr_master}" >&2
+echo "--" >&2
+
+prev=$(git log --oneline | grep -m1 "UBUNTU: Ubuntu-raspi-realtime-" | sed 's/ .*//')
+~/git/juergh/tools/ubuntu-changelog --width=78 --reverse --spacers "${prev}..HEAD"
+
+echo
+range=$(find_commits "Ubuntu-raspi-${prev_raspi}" "Ubuntu-raspi-${curr_raspi}")
+~/git/juergh/tools/ubuntu-changelog --width=78 --reverse --headers "${range}"
+
+echo
+range=$(find_commits "Ubuntu-realtime-${prev_realtime}" "Ubuntu-realtime-${curr_realtime}")
+~/git/juergh/tools/ubuntu-changelog --width=78 --reverse --headers "${range}"
+
+echo
+range=$(find_commits "Ubuntu-${prev_master}" "Ubuntu-${curr_master}")
+~/git/juergh/tools/ubuntu-changelog --width=78 --reverse --headers "${range}"
