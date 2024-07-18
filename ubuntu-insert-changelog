@@ -1,0 +1,25 @@
+#!/bin/bash -eu
+
+infile=${1}
+
+. debian/debian.env
+changelog=${DEBIAN}/changelog
+
+if [ "$(dpkg-parsechangelog -l"${changelog}" -SDistribution)" != "UNRELEASED" ] ; then
+    echo "The top changelog entry must be UNRELEASED"
+    exit 1
+fi
+series=$(dpkg-parsechangelog -l"${changelog}" -SDistribution -c1 -o1)
+
+{
+	head -n 2 "${changelog}"
+	sed 's/^./  &/' "${infile}"
+	tail -n +2 "${changelog}"
+} | sed '/^  CHANGELOG: /d' | cat -s > "${changelog}".new
+mv  "${changelog}".new "${changelog}"
+
+dch --nomultimaint -c "${changelog}" -r -D "${series}" ''
+
+package=$(dpkg-parsechangelog -l"${changelog}" -SSource)
+version=$(dpkg-parsechangelog -l"${changelog}" -SVersion)
+git commit -sam "UBUNTU: Ubuntu${package#linux}-${version}"
