@@ -1,0 +1,134 @@
+#!/bin/bash -eu
+
+function usage()
+{
+	cat <<EOF
+Usage: sec-cherry-pick [-h] [-p PROV] [-c CVE] COMMIT
+
+Cherry pick the provided commit and amend the commit message to include:
+  - Provenance (if provided)
+  - CVE number
+  - SOB
+
+Optional arguments:
+  -c, --cve CVE          CVE line to add. If not provided, determines the CVE number
+                         from the current branch name.
+  -h, --help             Show this help message and exit.
+  -p, --provenance PROV  Add provenance to cherry-picked-from line.
+EOF
+}
+
+cve=
+prov=
+commit=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-c|--cve)
+			shift
+			cve=${1}
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-p|--provenance)
+			shift
+			prov=${1}
+			;;
+		*)
+			if [ -n "${commit}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			commit=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${commit}" ] ; then
+	usage
+	exit 2
+fi
+
+sha=$(git rev-parse "${commit}")
+if [ -z "${sha}" ] ; then
+	echo "Failed to determine commit SHA" >&2
+	exit 1
+fi
+
+if [ -z "${cve}" ] ; then
+	cve=$(git rev-parse --abbrev-ref HEAD | sed 's,/.*,,')
+fi
+if [ -z "${cve}" ] ; then
+	echo "Failed to determine CVE number" >&2
+	exit 1
+fi
+
+if [ -n "${prov}" ] ; then
+	cpf="(cherry picked from commit ${sha} ${prov})"
+else
+	cpf="(cherry picked from commit ${sha})"
+fi
+
+sob="Signed-off-by: $(git config user.name) <$(git config user.email)>"
+
+EDIT_MSG=$(mktemp)
+trap 'rm -f "${EDIT_MSG}"' EXIT
+
+cat <<EOF > "${EDIT_MSG}"
+#!/bin/bash
+
+first=1
+tac "\${MSG_FILE}" | while IFS= read -r line ; do
+	if [ -z "\${line}" ] || [ "\${line#\#}" != "\${line}" ] ; then
+		# Ignore empty lines and comments
+		true
+	elif [ \${first} -eq 1 ] ; then
+		first=0
+		echo "${sob}"
+		echo "${cve}"
+		echo "${cpf}"
+	fi
+	echo "\${line}"
+done | tac >  "\${MSG_FILE}".new
+mv "\${MSG_FILE}".new "\${MSG_FILE}"
+EOF
+chmod 755 "${EDIT_MSG}"
+
+export MSG_FILE=.git/COMMIT_EDITMSG
+export GIT_EDITOR=${EDIT_MSG}
+
+if git cherry-pick --edit "${sha}" ; then
+	exit
+fi
+
+export MSG_FILE=.git/MERGE_MSG
+"${EDIT_MSG}"
+
+cat <<EOF
+
+-- Cherry-pick failed, fix it up and/or:
+--   exit   : continue
+--   exit 1 : abort
+--   exit 2 : skip
+
+EOF
+
+set +e
+export debian_chroot="cherry-pick"
+bash
+case "$?" in
+	0)
+		git cherry-pick --continue
+		;;
+	1)
+		echo "-- Abort cherry-pick"
+		git cherry-pick --abort
+		;;
+	2)
+		echo "-- Skip cherry-pick"
+		git cherry-pick --skip
+		;;
+esac
