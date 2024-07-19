@@ -1,35 +1,97 @@
 #!/bin/bash -eu
 
+function print_sru_template()
+{
+	cat <<EOF
+[ Impact ]
+
+*** TBD ***
+
+
+[ Test Case ]
+
+*** TBD ***
+
+
+[ Where Problems Could Occur ]
+
+*** TBD ***
+
+
+[ Notes ]
+
+*** TBD ***
+
+
+EOF
+}
+
 function format_patch()
 {
-	local cve=${1^^} series=${2,,}
-	local branch start odir s
+	local branch=${1} odir=${2} msg_id=${3}
+	local series start rev_range cves cve_list s subject_prefix opts f
 
-	branch=${cve}/${series}
-	start=
-	while IFS= read -r h ; do
-		if git for-each-ref | grep -q "${h}" ; then
-			start=${h}
-			break
+	rm -rf "${odir}"
+	mkdir -p "${odir}"
+
+	series=${branch#*/}
+	# FIXME: The following is not robust and flexible enough...
+	start=$(git merge-base "${branch}" linux-ubuntu/"${series}"/linux)
+	rev_range=${start}..${branch}
+
+	# Get all CVEs in the revision range
+	readarray -t cves < <(git log --format=%b "${rev_range}" | \
+	                      grep -hE '^CVE-[0-9]{4}-[0-9]*$' | sort -u)
+
+	# Generate the cover letter content
+	cve_list=$(printf "%s, " "${cves[@]}")
+	{
+		# Subject
+		echo "${cve_list%, }"
+		echo
+
+		# Body
+		printf "https://ubuntu.com/security/%s\n" "${cves[@]}"
+		if [ -z "${msg_id}" ] ; then
+			# Single series submission
+			echo
+			print_sru_template
 		fi
-	done < <(git log --format=%H "${branch}"~1)
+	} > "${odir}"/cover-letter
 
-	odir=.sec-${series}
-	mkdir "${odir}"
-
+	# Generate the subject prefix
 	s=${series::1}
 	subject_prefix="SRU][${s^}][PATCH"
 	if [ -n "${VERSION}" ] ; then
 		subject_prefix="${subject_prefix} v${VERSION}"
 	fi
 
+	# git format-patch options
+	opts=(
+		"--cover-letter"
+		"--cover-from-description=subject"
+		"--description-file=${odir}/cover-letter"
+		"--thread=shallow"
+		"--output-directory=${odir}"
+		"--filename-max-length=50"
+		"--subject-prefix=${subject_prefix}"
+	)
+	if [ -n "${msg_id}" ] ; then
+		opts+=("--in-reply-to=${msg_id}")
+	fi
+
 	# Create the patchset
-	git format-patch \
-		--output-directory "${odir}" \
-		--filename-max-length=50 \
-		--cover-letter \
-		--subject-prefix="${subject_prefix}" \
-		"${start}".."${branch}"
+	git format-patch "${opts[@]}" "${rev_range}"
+
+	# HACK: git format-patch creates a cover letter message ID that only contains
+	# seconds-since-the-epoc as a unique identifier which results in identical
+	# cover letter message IDs for a multi-series submission. Ugh.
+	# Hack around that by adding the series name to the message ID.
+	msg_id=$(grep -m1 '^Message-ID: ' "${odir}"/0000-cover-letter.patch)
+	msg_id=${msg_id#*<}
+	msg_id=${msg_id%>*}
+	new_msg_id=${series}.${msg_id}
+	sed -i "s/${msg_id}/${new_msg_id}/g" "${odir}"/*.patch
 
 	# Add the series name to the patch filenames
 	for f in "${odir}"/0*.patch ; do
@@ -51,11 +113,10 @@ function sort_series()
 function usage()
 {
 	cat <<EOF
-Usage: sec-format-patch [-h] [-v NUM] [CVE] [SERIES [SERIES...]]
+Usage: sec-format-patch [-h] [-v NUM] [SERIES [SERIES...]]
 
 Positional arguments:
-  CVE         CVE number. If not provided, is determined from the current branch name.
-  SERIES      Series name. If not provided, is determined from the available branches.
+  SERIES  Series name. If not provided, is determined from the available branches.
 
 Optional arguments:
   -h, --help         Show this help text and exit.
@@ -64,7 +125,7 @@ EOF
 }
 
 VERSION=
-cve=
+series=()
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -77,27 +138,20 @@ while [ ${#} -gt 0 ] ; do
 			VERSION=${1}
 			;;
 		*)
-			if [ -n "${cve}" ] ; then
-				break
-			fi
-			cve=${1}
+			series=("${@}")
+			break
 			;;
 	esac
 	shift
 done
 
-if [ -z "${cve}" ] ; then
-	branch=$(git rev-parse --abbrev-ref HEAD)
-	cve=${branch%%/*}
+branch_prefix=$(git rev-parse --abbrev-ref HEAD | sed 's,/.*,,')
+
+if [ ${#series[@]} -eq 0 ] ; then
+	readarray -t series < <(git branch | sed -n "s,^..${branch_prefix}/,,p")
 fi
 
-readarray -t series < <(
-	if [ ${#} -gt 0 ] ; then
-		printf "%s\n" "${@}"
-	else
-		git branch | sed -n "s,^..${cve}/,,p"
-	fi | sort_series
-)
+sha1=$(date -R | sha1sum | awk '{ print $1 }')
 
 #
 # Sanity check
@@ -118,73 +172,72 @@ if [ ${private} -eq 1 ] && [ ${public} -eq 1 ] ; then
 fi
 
 #
+# Create a top-level message ID for multi-series submissions
+#
+
+msg_id=
+if [ ${#series[@]} -gt 1 ] ; then
+	msg_id="<${sha1}.$(date +%s).git.$(git config user.email)>"
+fi
+
+#
 # Create the patch series
 #
 
 rm -rf .sec-*
 
 for s in "${series[@]}" ; do
-	echo "-- ${s^}"
-	format_patch "${cve}" "${s}"
+	branch=${branch_prefix}/${s}
+	odir=.sec-${s}
+
+	echo "-- ${branch}"
+	format_patch "${branch}" "${odir}" "${msg_id}"
 	echo
 done
 
 #
-# Collect the CVE tags from all patches
-#
-
-readarray -t cves < <(grep -hE '^CVE-[0-9]{4}-[0-9]*$' .sec-*/0*.patch | sort -u)
-
-#
-# Construct the cover letter subject
-#
-
-series_list=$(printf "%.1s/" "${series[@]^}")
-series_list=${series_list%/}
-
-cve_list=$(printf "%s," "${cves[@]}")
-cve_list=${cve_list%,}
-
-patch="PATCH 0/x"
-if [ -n "${VERSION}" ] ; then
-	patch="PATCH v${VERSION} 0/x"
-fi
-subject="Subject: [SRU][${series_list}][${patch}] ${cve_list}"
-
-#
-# Merge the cover letters
+# Combine the patch series
 #
 
 rm -rf .outgoing
 mkdir .outgoing
-
-{
-	sed -e "s|^Subject: .*|${subject}|" -e '/BLURB HERE/,$d' .sec-"${series[0]}"/0000-*.patch
-	printf "https://ubuntu.com/security/%s\n" "${cves[@]}"
-	echo
-	echo "[ Impact ]"
-	echo
-	echo "[ Test Case ]"
-	echo
-	echo "[ Where Problems Could Occur ]"
-	echo
-	for s in "${series[@]}" ; do
-		echo "[ Diffstat ${s^} ]"
-		sed -e '1,/BLURB HERE/d' -e '/^--/,$d' .sec-"${s}"/0000-*.patch
-	done
-	sed -e '/^--/,$!d' .sec-"${series[0]}"/0000-*.patch
-} > .outgoing/cover-letter.patch
-
-#
-# Move all patches to the outgoing directory
-#
-
 mv .sec-*/*.patch .outgoing/
-rm .outgoing/0000-*.patch
-mv .outgoing/cover-letter.patch .outgoing/0000-cover-letter.patch
-
-# Clean up
 rm -rf .sec-*
 
-echo "-- Combined patch series in .outgoing"
+#
+# Create a top-level cover letter for multi-series submissions
+#
+
+if [ -n "${msg_id}" ] ; then
+	# Collect all CVE numbers from all patches
+	readarray -t cves < <(grep -hE '^CVE-[0-9]{4}-[0-9]*$' .outgoing/0*.patch | sort -u)
+
+	series_list=$(printf "%.1s/" "${series[@]^}")
+	series_list=${series_list%/}
+
+	patch="PATCH 0/${#series[@]}"
+	if [ -n "${VERSION}" ] ; then
+		patch="${patch} v${VERSION}"
+	fi
+
+	cve_list=$(printf "%s, " "${cves[@]}")
+	cve_list=${cve_list%, }
+
+	{
+		echo "From ${sha1} Mon Sep 17 00:00:00 2001"
+		echo "Message-Id: ${msg_id}"
+		echo "References: ${msg_id}"
+		echo "Subject: [SRU][${series_list}][${patch}] ${cve_list}"
+		echo
+		printf "https://ubuntu.com/security/%s\n" "${cves[@]}"
+		echo
+		print_sru_template
+	} > .outgoing/0000-0-cover-letter.patch
+fi
+
+#
+# Done
+#
+
+echo "-- Final patch series in .outgoing/"
 ls -1 .outgoing/*
