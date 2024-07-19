@@ -122,6 +122,8 @@ bash
 case "$?" in
 	0)
 		git cherry-pick --continue
+		# This was a fix-up, so amend the commit message
+		git commit --amend
 		;;
 	1)
 		echo "-- Abort cherry-pick"
