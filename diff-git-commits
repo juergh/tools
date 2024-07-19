@@ -85,7 +85,7 @@ fi
 if [ -z "${commit2}" ] ; then
 	show_opts=()
 	commit2=$(grep -P '(cherry picked|(back|forward )ported) from commit [0-9a-f]{40}' \
-				   "${patch1}" | grep -oP '[0-9a-f]{40}' || true)
+				   "${patch1}" | tail -1 | grep -oP '[0-9a-f]{40}' || true)
 fi
 
 if [ -z "${commit2}" ] ; then
