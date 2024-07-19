@@ -1,0 +1,6 @@
+#!/bin/bash
+
+series=$(git rev-parse --abbrev-ref HEAD | sed 's,.*/,,')
+start=$(git merge-base HEAD linux-ubuntu/"${series}"/linux)
+
+~/git/ubuntu/ubuntu-check-commit/ubuntu-check-commit --color . "${start}"
