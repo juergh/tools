@@ -105,7 +105,11 @@ if git cherry-pick --edit "${sha}" ; then
 fi
 
 export MSG_FILE=.git/MERGE_MSG
-"${EDIT_MSG}"
+"${GIT_EDITOR}"
+
+# All done with automatic commit message mangling
+unset MSG_FILE
+unset GIT_EDITOR
 
 cat <<EOF
 
