@@ -1,5 +1,38 @@
 #!/bin/bash -eu
 
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+	[ ${rc} -eq 0 ] || echo "Error: Script failed" >&2
+	exit ${rc}
+}
+
+function print_jira_link()
+{
+	local summary=${1}
+
+	python3 -c "
+import sys
+from jira import JIRA
+
+server = 'https://warthogs.atlassian.net'
+summary = '${summary}'
+
+jira = JIRA(server=server)
+issues = jira.search_issues(f'project=\'KERNSEC\' and summary~\'{summary}\'')
+
+if issues:
+    for i in issues:
+        if i.fields.summary == summary:
+            print(f'{server}/browse/{i.key}')
+            sys.exit(0)
+
+sys.exit(1)
+"
+}
+
 function print_sru_template()
 {
 	cat <<EOF
@@ -29,7 +62,7 @@ EOF
 function format_patch()
 {
 	local branch=${1} odir=${2} msg_id=${3}
-	local series start rev_range cves cve_list s subject_prefix opts f
+	local series start rev_range cves cve_list s subject_prefix opts msg_id new_msg_id f
 
 	rm -rf "${odir}"
 	mkdir -p "${odir}"
@@ -46,12 +79,23 @@ function format_patch()
 	# Generate the cover letter content
 	cve_list=$(printf "%s, " "${cves[@]}")
 	{
+		local cve summary
+
 		# Subject
 		echo "${cve_list%, }"
 		echo
 
-		# Body
+		# CVE links
 		printf "https://ubuntu.com/security/%s\n" "${cves[@]}"
+
+		# Jira links
+		echo
+		for cve in "${cves[@]}" ; do
+			summary="${cve^^} ${series^}"
+			print_jira_link "${summary}" || echo "-- No Jira ticket found for: ${summary}" >&2
+		done
+
+		# SRUT template
 		if [ -z "${msg_id}" ] ; then
 			# Single series submission
 			echo
@@ -144,6 +188,8 @@ while [ ${#} -gt 0 ] ; do
 	esac
 	shift
 done
+
+trap out EXIT INT TERM HUP
 
 branch_prefix=$(git rev-parse --abbrev-ref HEAD | sed 's,/.*,,')
 
