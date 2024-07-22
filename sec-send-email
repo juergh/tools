@@ -3,7 +3,7 @@
 function usage()
 {
         cat <<EOF
-Usage: sec-send-email [-d] [-h] public|esm
+Usage: sec-send-email [-d] [-h] public|esm|self
 
 Send patches in .outgoing to the ML.
 
@@ -31,6 +31,9 @@ while [ ${#} -gt 0 ] ; do
 		esm)
 			to=${KERNEL_ESM_EMAIL}
 			;;
+		self)
+			to=$(git config user.email)
+			;;
 		*)
 			echo "Invalid argument: ${1}" >&2
 			exit 2
@@ -43,10 +46,6 @@ if [ -z "${to}" ] ; then
 	usage
 	exit 2
 fi
-
-#case "$(grep -m1 '^Subject: ' .outgoing/0000-*)" in
-#	*[]*
-#esac
 
 opts=(
     "--suppress-cc=all"
