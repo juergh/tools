@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/bin/bash -u
 #
 # To initialize the repo:
 #   $ mkdir linux-ubuntu.git
@@ -18,10 +18,10 @@ function out()
 	trap - EXIT INT TERM HUP
 
 	if [ ${rc} -ne 0 ] ; then
-		echo "Script failed" >&2
+		echo "-- Script failed" >&2
 	fi
 
-	exit "${rc}"
+	exit ${rc}
 }
 
 function ubuntu_kernel_info()
@@ -66,32 +66,29 @@ fi
 
 trap out EXIT INT TERM HUP
 
-# Remove all remotes
-while IFS= read -r remote ; do
-	git remote remove "${remote}" 2>/dev/null
-done < <(git remote)
-
-# Add remotes
-while IFS=" " read -r series package url branch ; do
-	if [ "${package}" = "linux-unstable" ] ; then
+while IFS=" " read -r _yymm series package url branch ; do
+	if [ "${package}" = "linux-unstable" ] || [ "${url/unstable/}" != "${url}" ] ; then
 		series=unstable
 	fi
 
-	remote=${series}/${package}
+	local_branch=${series}/${package}
 	tag_prefix=Ubuntu${package#linux}
 
-	git remote add "${remote}" "${url}"
-	git config remote."${remote}".tagopt "--no-tags"
-	git config --unset-all remote."${remote}".fetch || true
-	git config --add remote."${remote}".fetch "+refs/heads/${branch}:refs/heads/${remote}"
+	echo "-- Fetch branch from ${url} (${branch} -> ${local_branch})"
+	refs=("refs/heads/${branch}:refs/heads/${local_branch}")
+	git fetch --force --no-tags "${url}" "${refs[@]}"
+
+	echo "-- Fetch tags from ${url}"
+	refs=()
 	for v in $(seq 1 9) ; do
-		git config --add remote."${remote}".fetch "+refs/tags/${tag_prefix}-${v}*:refs/tags/${tag_prefix}-${v}*"
+		refs+=("refs/tags/${tag_prefix}-${v}*:refs/tags/${tag_prefix}-${v}*")
 	done
+	git fetch --force --no-tags "${url}" "${refs[@]}"
 
 done < <(
-	ubuntu_kernel_info --src-name linux-unstable devel
-	ubuntu_kernel_info supported,supported-esm
+	"${HERE}"/ubuntu-kernel-info \
+		--pkg-type main \
+		--field series.yymm,series.name,package.name,package.repo.url,package.repo.branch \
+		supported-esm,supported,devel | \
+		sort -V
 )
-
-# Fetch everything
-git fetch --all
