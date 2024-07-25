@@ -3,6 +3,130 @@
 # Build kernel Debian packages
 #
 
+MINMOD_RASPI=(
+	8021q
+	8250_bcm7271
+	ac97_bus
+	aes_ce_blk
+	aes_ce_cipher
+	af_alg
+	algif_hash
+	algif_skcipher
+	autofs4
+	binfmt_misc
+	blake2b_generic
+	bluetooth
+	bnep
+	brcmfmac
+	brcmfmac_wcc
+	brcmutil
+	btbcm
+	btintel
+	btqca
+	btrfs
+	btrtl
+	btsdio
+	cec
+	cfg80211
+	cqhci
+	crct10dif_ce
+	dax
+	dm_mod
+	drm_display_helper
+	drm_dma_helper
+	drm_shmem_helper
+	dw_axi_dmac_platform
+	dwc2
+	dwc3
+	ecc
+	ecdh_generic
+	fuse
+	garp
+	gf128mul
+	ghash_ce
+	gpio_brcmstb
+	gpio_generic
+	gpio_keys
+	gpu_sched
+	hci_uart
+	hid_generic
+	i2c_brcmstb
+	i2c_designware_core
+	i2c_designware_platform
+	ip_tables
+	libcrc32c
+	llc
+	macb
+	mc
+	mrp
+	nfnetlink
+	nvmem_rmem
+	phy_generic
+	phylink
+	pisp_be
+	polyval_ce
+	polyval_generic
+	pwm_brcmstb
+	pwm_fan
+	pwm_rp1
+	qrtr
+	raid6_pq
+	raspberrypi_gpiomem
+	raspberrypi_hwmon
+	reset_brcmstb
+	reset_brcmstb_rescal
+	rfcomm
+	rfkill
+	roles
+	rp1_adc
+	rpivid_hevc
+	rtc_rpi
+	sdhci_brcmstb
+	sha1_ce
+	sha256_arm64
+	sha2_ce
+	sm4
+	snd
+	snd_compress
+	snd_hrtimer
+	snd_pcm
+	snd_pcm_dmaengine
+	snd_rawmidi
+	snd_seq
+	snd_seq_device
+	snd_seq_dummy
+	snd_seq_midi
+	snd_seq_midi_event
+	snd_soc_core
+	snd_soc_hdmi_codec
+	snd_timer
+	spi_bcm2835
+	spi_dw
+	spi_dw_mmio
+	spidev
+	stp
+	tls
+	udc_core
+	uio
+	uio_pdrv_genirq
+	ulpi
+	usbhid
+	v3d
+	v4l2_mem2mem
+	vc4
+	videobuf2_common
+	videobuf2_dma_contig
+	videobuf2_memops
+	videobuf2_v4l2
+	videodev
+	x_tables
+	xhci_plat_hcd
+	xor
+	xor_neon
+	z3fold
+	zstd
+)
+
 function run_chroot()
 {
 	echo "-- Run in chroot (${CHROOT}):"
@@ -176,9 +300,14 @@ case "${cmd}" in
 
 				cp CONFIGS/"${arch}"-config.flavour."${flavor}" "${KBUILD_OUTPUT}"/.config
 
-				# Disable CONFIG_DEBUG_INFO
-				sed -i '/CONFIG_DEBUG_INFO/d' "${KBUILD_OUTPUT}"/.config
-				echo "# CONFIG_DEBUG_INFO is not set" >> "${KBUILD_OUTPUT}"/.config
+				# FIXME: Make this generic
+				if [ "${lsmod}" = "min" ] && [ "${flavor}" = "raspi" ] ; then
+					{
+						echo "Module  Size  Used by"
+						printf "%s  1000  0\n" "${MINMOD_RASPI[@]}"
+					} > .lsmod
+					lsmod=.lsmod
+				fi
 
 				if [ -e "${lsmod}" ] ; then
 					echo
@@ -197,6 +326,9 @@ case "${cmd}" in
 		;;
 
 	make)
+		# FIXME: Disable the build of the dbg package
+		#sed -i -e 's/ CONFIG_DEBUG_INFO/ __BOGUS_CONFIG__/' scripts/package/mkdebian
+
 		run_chroot make -j"${jobs}" "${@:-bindeb-pkg}"
 		;;
 
