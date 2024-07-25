@@ -1,5 +1,19 @@
 #!/bin/bash
 
+FIRST=1
+function header()
+{
+	[ ${FIRST} -eq 1 ] && FIRST=0 || echo
+	echo "-- $(date -R)"
+	echo "-- ${*}"
+}
+
+function footer()
+{
+	echo "-- Done"
+	echo "-- $(date -R)"
+}
+
 if [ "$(id -u)" -eq 0 ] ; then
 	exec sudo -u juergh "$0"
 fi
@@ -15,20 +29,18 @@ mv "${log}" "${log}".1
 	# shellcheck disable=SC2155
 	export SSH_AUTH_SOCK=/run/user/$(id -u)/keyring/ssh
 
-	echo "-- Run git-update daily"
+	header "Run git-update daily"
 	"${d}"/tools/git-update daily "${d}"
-	echo "-- Done"
 
-	echo "-- Run find-fixes"
+	header "Run find-fixes"
 	"${d}"/tools/find-fixes "${d}"/linux.git "${d}"/linux.fixes
-	echo "-- Done"
 
-	echo "-- Run cranky-update-sessions"
+	header "Run cranky-update-sessions"
 	"${d}"/tools/cranky-update-sessions
-	echo "-- Done"
 
-	echo "-- Run git-fetch-linux-ubuntu"
+	header "Run git-fetch-linux-ubuntu"
 	( cd "${d}"/linux-ubuntu.git && "${d}"/tools/git-fetch-linux-ubuntu )
-	echo "-- Done"
+
+	footer
 
 } > "${log}" 2>&1
