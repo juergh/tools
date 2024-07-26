@@ -3,17 +3,25 @@
 function usage()
 {
         cat <<EOF
-Usage: sec-send-email [-d] [-h] public|esm|self
+Usage: sec-send-email [-d] [-h] public|esm|self|uct
 
-Send patches in .outgoing to the ML.
+Send patches in .outgoing via email.
+
+Positional arguments:
+  public  Send to the public mailing list.
+  esm     Seng to the private ESM mailing list.
+  self    Send to self (git user.email).
+  uct     Format a single patch and send it to the ESM mailing list.
 
 Optional arguments:
   -d, --dry-run  Don't send.
   -h, --help     Show this help text and exit.
+  -v, --verbose  Show patches.
 EOF
 }
 
 dry_run=0
+verbose=0
 to=
 
 while [ ${#} -gt 0 ] ; do
@@ -25,6 +33,9 @@ while [ ${#} -gt 0 ] ; do
 			usage
 			exit
 			;;
+		-v|--verbose)
+			verbose=1
+			;;
 		public)
 			to=${KERNEL_PUBLIC_EMAIL}
 			;;
@@ -33,6 +44,14 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		self)
 			to=$(git config user.email)
+			;;
+		uct)
+			to=${KERNEL_ESM_EMAIL}
+			rm -rf .outgoing
+			git format-patch \
+				--output-directory .outgoing \
+				--subject-prefix='UCT][PATCH' \
+				-1
 			;;
 		*)
 			echo "Invalid argument: ${1}" >&2
@@ -45,6 +64,16 @@ done
 if [ -z "${to}" ] ; then
 	usage
 	exit 2
+fi
+
+if [ ${verbose} -eq 1 ] ; then
+	for p in .outgoing/*.patch ; do
+		echo
+		printf "%.0s-" {1..80}; echo
+		echo "-- ${p}"
+		echo
+		cat "${p}"
+	done
 fi
 
 opts=(
