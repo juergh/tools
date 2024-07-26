@@ -146,14 +146,14 @@ Optional common arguments:
   --kdir DIR     Kernel build output directory.
 
 Optional arguments for 'ubuntuconfig':
-  --lsmod LSMOD  Build only modules listed in LSMOD.
-  --minimal      Build only a minimal set of modules.
+  --lsmod LSMOD  Build only modules listed in <LSMOD>. If <LSMOD>
+                 is 'min' or 'minimal', build only a minimal set
+                 of hard-coded modules.
 EOF
 }
 
 kdir=${KBUILD_OUTPUT:-}
 lsmod=
-minimal=0
 cmd=
 config=
 
@@ -166,9 +166,6 @@ while [ $# -gt 0 ] ; do
 		--lsmod)
 			shift
 			lsmod=${1}
-			;;
-		--minimal)
-			minimal=1
 			;;
 		config)
 			cmd=config
@@ -247,17 +244,16 @@ case "${cmd}" in
 				mkdir -p "${KBUILD_OUTPUT}"
 				cp CONFIGS/"${ARCH}"-config.flavour.generic "${CONFIG}"
 
-				if [ -e "${lsmod}" ] ; then
-					echo
-					echo "-- Enable only local modules"
-					run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
-				fi
-
-				if [ ${minimal} -eq 1 ] ; then
+				if [ "${lsmod}" = "min" ] || [ "${lsmod}" = "minimal" ] ; then
 					echo
 					echo "-- Enable only minimal modules"
 					lsmod=${KBUILD_OUTPUT}/virtme2.modules
 					minimal_modules > "${lsmod}"
+				fi
+
+				if [ -e "${lsmod}" ] ; then
+					echo
+					echo "-- Enable only a subset of modules"
 					run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
 				fi
 
