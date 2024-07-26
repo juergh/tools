@@ -89,6 +89,26 @@ CONFIG_VIRTIO_FS=y
 EOF
 }
 
+function syz_configs()
+{
+	# Configs required for syzcaller
+	cat <<EOF
+# Coverage collection.
+CONFIG_KCOV=y
+
+# Debug info for symbolization.
+CONFIG_DEBUG_INFO_DWARF4=y
+
+# Memory bug detector
+CONFIG_KASAN=y
+CONFIG_KASAN_INLINE=y
+
+# Required for Debian Stretch and later
+CONFIG_CONFIGFS_FS=y
+CONFIG_SECURITYFS=y
+EOF
+}
+
 function minimal_modules()
 {
 	# List of minimal modules (very machine and kernel version specific)
@@ -144,11 +164,10 @@ Available commands:
 Optional common arguments:
   -h, --help     Show this help text and exit.
   --kdir DIR     Kernel build output directory.
-
-Optional arguments for 'ubuntuconfig':
   --lsmod LSMOD  Build only modules listed in <LSMOD>. If <LSMOD>
                  is 'min' or 'minimal', build only a minimal set
                  of hard-coded modules.
+  --syz          Enable config options for syzcaller.
 EOF
 }
 
@@ -156,6 +175,7 @@ kdir=${KBUILD_OUTPUT:-}
 lsmod=
 cmd=
 config=
+syz=0
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -166,6 +186,9 @@ while [ $# -gt 0 ] ; do
 		--lsmod)
 			shift
 			lsmod=${1}
+			;;
+		--syz)
+			syz=1
 			;;
 		config)
 			cmd=config
@@ -260,6 +283,12 @@ case "${cmd}" in
 				echo
 				echo "-- Set virtme configs"
 				virtme_configs >> "${CONFIG}"
+
+				if [ ${syz} -eq 1 ] ; then
+					echo
+					echo "-- Set syzcaller configs"
+					syz_configs >> "${CONFIG}"
+				fi
 
 				run_chroot make olddefconfig
 				;;
