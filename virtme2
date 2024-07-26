@@ -129,15 +129,17 @@ The kernel build output directory defaults to buildd/virtme-X.Y
 if neither KBUILD_OUTPUT is set not --kdir DIR is provided.
 
 Supported environment variables:
-  KBUILD_OUTPUT  Kernel build output directory.
+  KBUILD_OUTPUT    Kernel build output directory.
 
 Available commands:
-  chroot         Enter the build chroot.
-  config         Create default virtme kernel config.
-  make           Build kernel.
-  menuconfig     Run config menu.
-  run            Run kernel.
-  ubuntuconfig   Use generic Ubuntu config.
+  chroot           Enter build chroot.
+  config [CONFIG]  Create kernel config. Supported <CONFIG> values:
+                     menu:   Run config menu.
+                     ubuntu: Use generic Ubuntu configs.
+                     virtme: Use default virtme configs. This is the
+                             default, if <CONFIG> is not provided.
+  make             Build kernel.
+  run              Run kernel.
 
 Optional common arguments:
   -h, --help     Show this help text and exit.
@@ -153,6 +155,7 @@ kdir=${KBUILD_OUTPUT:-}
 lsmod=
 minimal=0
 cmd=
+config=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -167,7 +170,12 @@ while [ $# -gt 0 ] ; do
 		--minimal)
 			minimal=1
 			;;
-		chroot|config|make|menuconfig|run|ubuntuconfig)
+		config)
+			cmd=config
+			shift
+			config=${1:-}
+			;;
+		chroot|make|run)
 			cmd=${1}
 			;;
 		*)
@@ -220,16 +228,55 @@ case "${cmd}" in
 		;;
 
 	config)
-		echo "-- Generate default virtme config"
-		virtme-configkernel "${@}"
+		case "${config}" in
+			""|virtme)
+				echo "-- Generate default virtme config"
+				virtme-configkernel "${@}"
+				;;
+
+			menu)
+				run_chroot make menuconfig
+				;;
+
+			ubuntu)
+				echo "-- Generate Ubuntu config"
+				rm -rf CONFIGS
+				run_chroot fakeroot debian/rules clean
+				run_chroot debian/rules genconfigs || true
+
+				mkdir -p "${KBUILD_OUTPUT}"
+				cp CONFIGS/"${ARCH}"-config.flavour.generic "${CONFIG}"
+
+				if [ -e "${lsmod}" ] ; then
+					echo
+					echo "-- Enable only local modules"
+					run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
+				fi
+
+				if [ ${minimal} -eq 1 ] ; then
+					echo
+					echo "-- Enable only minimal modules"
+					lsmod=${KBUILD_OUTPUT}/virtme2.modules
+					minimal_modules > "${lsmod}"
+					run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
+				fi
+
+				echo
+				echo "-- Set virtme configs"
+				virtme_configs >> "${CONFIG}"
+
+				run_chroot make olddefconfig
+				;;
+
+			*)
+				echo "-- Invalid config option: ${config}" >&2
+				exit 1
+				;;
+		esac
 		;;
 
 	make)
 		run_chroot make -j"$(getconf _NPROCESSORS_ONLN)" "${@}"
-		;;
-
-	menuconfig)
-		run_chroot make menuconfig
 		;;
 
 	run)
@@ -241,36 +288,6 @@ case "${cmd}" in
 			echo "-- Don't know what/how to run" >&2
 			exit 1
 		fi
-		;;
-
-	ubuntuconfig)
-		echo "-- Generate Ubuntu config"
-		rm -rf CONFIGS
-		run_chroot fakeroot debian/rules clean
-		run_chroot debian/rules genconfigs || true
-
-		mkdir -p "${KBUILD_OUTPUT}"
-		cp CONFIGS/"${ARCH}"-config.flavour.generic "${CONFIG}"
-
-		if [ -e "${lsmod}" ] ; then
-			echo
-			echo "-- Enable only local modules"
-			run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
-		fi
-
-		if [ ${minimal} -eq 1 ] ; then
-			echo
-			echo "-- Enable only minimal modules"
-			lsmod=${KBUILD_OUTPUT}/virtme2.modules
-			minimal_modules > "${lsmod}"
-			run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
-		fi
-
-		echo
-		echo "-- Set virtme configs"
-		virtme_configs >> "${CONFIG}"
-		run_chroot make olddefconfig
-
 		;;
 
 	*)
