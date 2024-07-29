@@ -276,8 +276,6 @@ case "${cmd}" in
 				cp CONFIGS/"${ARCH}"-config.flavour.generic "${CONFIG}"
 
 				if [ ${min} -eq 1 ] ; then
-					echo
-					echo "-- Enable only minimal modules"
 					lsmod=${KBUILD_OUTPUT}/virtme2.modules
 					minimal_modules > "${lsmod}"
 				fi
