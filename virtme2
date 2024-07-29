@@ -3,13 +3,16 @@
 # Wrapper for virtme-ng
 #
 
+function pr_error() { echo -e "\033[31mE: ${*}\033[0m" >&2 ; }
+function pr_info()  { echo -e "\033[33mI: ${*}\033[0m" ; }
+
 function out()
 {
 	local rc=${?}
 
 	trap - EXIT INT TERM HUP
 
-	[ ${rc} -eq 0 ] || echo "-- Error: Script failed" >&2
+	[ ${rc} -eq 0 ] || pr_error "Error: Script failed"
 
 	exit "${rc}"
 }
@@ -17,12 +20,12 @@ function out()
 function run_chroot()
 {
 	if [ -n "${SERIES}" ] ; then
-		echo "-- Run in chroot (${SERIES}):"
-		echo "+ ${*}"
+		pr_info "Run in chroot (${SERIES}):"
+		pr_info "+ ${*}"
 		run-chroot "${SERIES}" -- "${@}"
 	else
-		echo "-- Run:"
-		echo "+ ${*}"
+		pr_info "Run:"
+		pr_info "+ ${*}"
 		"${@}"
 	fi
 }
@@ -214,7 +217,7 @@ if [ -z "${cmd}" ] ; then
 fi
 
 if [ -n "${lsmod}" ] && [ ${min} -eq 1 ] ; then
-	echo "--lsmod and --min are mutulay exclusive." >&2
+	pr_error "--lsmod and --min are mutulay exclusive."
 	exit 2
 fi
 
@@ -232,7 +235,7 @@ if [ -e Makefile ] ; then
 		v1=$(grep -m1 '^VERSION\s*=' Makefile | sed 's/.*=\s*//')
 		v2=$(grep -m1 '^PATCHLEVEL\s*=' Makefile | sed 's/.*=\s*//')
 		if [ -z "${v1}" ] || [ -z "${v2}" ] ; then
-			echo "Failed to parse Makefile" >&2
+			pr_error "Failed to parse Makefile"
 			exit 1
 		fi
 		kdir=buildd/virtme-${v1}.${v2}
@@ -247,7 +250,7 @@ if [ -e Makefile ] ; then
 
 	export KBUILD_OUTPUT KBUILD_BUILD_VERSION
 
-	echo "-- Use kernel build output directory: ${KBUILD_OUTPUT}"
+	pr_info "Use kernel build output directory: ${KBUILD_OUTPUT}"
 fi
 
 case "${cmd}" in
@@ -258,7 +261,7 @@ case "${cmd}" in
 	config)
 		case "${config}" in
 			""|virtme)
-				echo "-- Generate default virtme config"
+				pr_info "Generate default virtme config"
 				virtme-configkernel "${@}"
 				;;
 
@@ -267,7 +270,7 @@ case "${cmd}" in
 				;;
 
 			ubuntu)
-				echo "-- Generate Ubuntu config"
+				pr_info "Generate Ubuntu config"
 				rm -rf CONFIGS
 				run_chroot fakeroot debian/rules clean
 				run_chroot debian/rules genconfigs || true
@@ -281,26 +284,23 @@ case "${cmd}" in
 				fi
 
 				if [ -e "${lsmod}" ] ; then
-					echo
-					echo "-- Enable only a subset of modules"
+					pr_info "Enable only a subset of modules"
 					run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
 				fi
 
-				echo
-				echo "-- Set virtme configs"
-				virtme_configs >> "${CONFIG}"
-
 				if [ ${syz} -eq 1 ] ; then
-					echo
-					echo "-- Set syzcaller configs"
+					pr_info "Set syzcaller configs"
 					syz_configs >> "${CONFIG}"
 				fi
+
+				pr_info "Set virtme configs"
+				virtme_configs >> "${CONFIG}"
 
 				run_chroot make olddefconfig
 				;;
 
 			*)
-				echo "-- Invalid config option: ${config}" >&2
+				pr_info "Invalid config option: ${config}" >&2
 				exit 1
 				;;
 		esac
@@ -316,13 +316,13 @@ case "${cmd}" in
 		elif [ -n "${KBUILD_OUTPUT:-}" ] ; then
 			vng --name VIRTME2 --run "${KBUILD_OUTPUT}" "${@}"
 		else
-			echo "-- Don't know what/how to run" >&2
+			pr_error "Don't know what/how to run"
 			exit 1
 		fi
 		;;
 
 	*)
-		echo "Invalid command: ${1}" >&2
+		pr_error "Invalid command: ${1}"
 		exit 1
 		;;
 esac
