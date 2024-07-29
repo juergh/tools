@@ -164,9 +164,8 @@ Available commands:
 Optional common arguments:
   -h, --help     Show this help text and exit.
   --kdir DIR     Kernel build output directory.
-  --lsmod LSMOD  Build only modules listed in <LSMOD>. If <LSMOD>
-                 is 'min' or 'minimal', build only a minimal set
-                 of hard-coded modules.
+  --lsmod LSMOD  Build only modules listed in <LSMOD>.
+  --min          Build only a minimal set of hard-coded modules.
   --syz          Enable config options for syzcaller.
 EOF
 }
@@ -175,6 +174,7 @@ kdir=${KBUILD_OUTPUT:-}
 lsmod=
 cmd=
 config=
+min=0
 syz=0
 
 while [ $# -gt 0 ] ; do
@@ -186,6 +186,9 @@ while [ $# -gt 0 ] ; do
 		--lsmod)
 			shift
 			lsmod=${1}
+			;;
+		--min)
+			min=1
 			;;
 		--syz)
 			syz=1
@@ -207,6 +210,11 @@ done
 
 if [ -z "${cmd}" ] ; then
 	usage
+	exit 2
+fi
+
+if [ -n "${lsmod}" ] && [ ${min} -eq 1 ] ; then
+	echo "--lsmod and --min are mutulay exclusive." >&2
 	exit 2
 fi
 
@@ -267,7 +275,7 @@ case "${cmd}" in
 				mkdir -p "${KBUILD_OUTPUT}"
 				cp CONFIGS/"${ARCH}"-config.flavour.generic "${CONFIG}"
 
-				if [ "${lsmod}" = "min" ] || [ "${lsmod}" = "minimal" ] ; then
+				if [ ${min} -eq 1 ] ; then
 					echo
 					echo "-- Enable only minimal modules"
 					lsmod=${KBUILD_OUTPUT}/virtme2.modules
