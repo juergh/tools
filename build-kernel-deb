@@ -3,135 +3,161 @@
 # Build kernel Debian packages
 #
 
-MINMOD_RASPI=(
-	8021q
-	8250_bcm7271
-	ac97_bus
-	aes_ce_blk
-	aes_ce_cipher
-	af_alg
-	algif_hash
-	algif_skcipher
-	autofs4
-	binfmt_misc
-	blake2b_generic
-	bluetooth
-	bnep
-	brcmfmac
-	brcmfmac_wcc
-	brcmutil
-	btbcm
-	btintel
-	btqca
-	btrfs
-	btrtl
-	btsdio
-	cec
-	cfg80211
-	cqhci
-	crct10dif_ce
-	dax
-	dm_mod
-	drm_display_helper
-	drm_dma_helper
-	drm_shmem_helper
-	dw_axi_dmac_platform
-	dwc2
-	dwc3
-	ecc
-	ecdh_generic
-	fuse
-	garp
-	gf128mul
-	ghash_ce
-	gpio_brcmstb
-	gpio_generic
-	gpio_keys
-	gpu_sched
-	hci_uart
-	hid_generic
-	i2c_brcmstb
-	i2c_designware_core
-	i2c_designware_platform
-	ip_tables
-	libcrc32c
-	llc
-	macb
-	mc
-	mrp
-	nfnetlink
-	nvmem_rmem
-	phy_generic
-	phylink
-	pisp_be
-	polyval_ce
-	polyval_generic
-	pwm_brcmstb
-	pwm_fan
-	pwm_rp1
-	qrtr
-	raid6_pq
-	raspberrypi_gpiomem
-	raspberrypi_hwmon
-	reset_brcmstb
-	reset_brcmstb_rescal
-	rfcomm
-	rfkill
-	roles
-	rp1_adc
-	rpivid_hevc
-	rtc_rpi
-	sdhci_brcmstb
-	sha1_ce
-	sha256_arm64
-	sha2_ce
-	sm4
-	snd
-	snd_compress
-	snd_hrtimer
-	snd_pcm
-	snd_pcm_dmaengine
-	snd_rawmidi
-	snd_seq
-	snd_seq_device
-	snd_seq_dummy
-	snd_seq_midi
-	snd_seq_midi_event
-	snd_soc_core
-	snd_soc_hdmi_codec
-	snd_timer
-	spi_bcm2835
-	spi_dw
-	spi_dw_mmio
-	spidev
-	stp
-	tls
-	udc_core
-	uio
-	uio_pdrv_genirq
-	ulpi
-	usbhid
-	v3d
-	v4l2_mem2mem
-	vc4
-	videobuf2_common
-	videobuf2_dma_contig
-	videobuf2_memops
-	videobuf2_v4l2
-	videodev
-	x_tables
-	xhci_plat_hcd
-	xor
-	xor_neon
-	z3fold
-	zstd
-)
+function pr_error() { echo -e "\033[31mE: ${*}\033[0m" >&2 ; }
+function pr_info()  { echo -e "\033[33mI: ${*}\033[0m" ; }
 
 function run_chroot()
 {
-	echo "-- Run in chroot (${CHROOT}):"
-	echo "+ ${*}"
+	pr_info "Run in chroot (${CHROOT}):"
+	pr_info "+ ${*}"
 	run-chroot cranky--"${CHROOT}" -- "${@}"
+}
+
+function minimal_modules_raspi()
+{
+	cat <<EOF
+8021q
+8250_bcm7271
+ac97_bus
+aes_ce_blk
+aes_ce_cipher
+af_alg
+algif_hash
+algif_skcipher
+autofs4
+binfmt_misc
+blake2b_generic
+bluetooth
+bnep
+brcmfmac
+brcmfmac_wcc
+brcmutil
+btbcm
+btintel
+btqca
+btrfs
+btrtl
+btsdio
+cec
+cfg80211
+cqhci
+crct10dif_ce
+dax
+dm_mod
+drm_display_helper
+drm_dma_helper
+drm_shmem_helper
+dw_axi_dmac_platform
+dwc2
+dwc3
+ecc
+ecdh_generic
+fuse
+garp
+gf128mul
+ghash_ce
+gpio_brcmstb
+gpio_generic
+gpio_keys
+gpu_sched
+hci_uart
+hid_generic
+i2c_brcmstb
+i2c_designware_core
+i2c_designware_platform
+ip_tables
+libcrc32c
+llc
+macb
+mc
+mrp
+nfnetlink
+nvmem_rmem
+phy_generic
+phylink
+pisp_be
+polyval_ce
+polyval_generic
+pwm_brcmstb
+pwm_fan
+pwm_rp1
+qrtr
+raid6_pq
+raspberrypi_gpiomem
+raspberrypi_hwmon
+reset_brcmstb
+reset_brcmstb_rescal
+rfcomm
+rfkill
+roles
+rp1_adc
+rpivid_hevc
+rtc_rpi
+sdhci_brcmstb
+sha1_ce
+sha256_arm64
+sha2_ce
+sm4
+snd
+snd_compress
+snd_hrtimer
+snd_pcm
+snd_pcm_dmaengine
+snd_rawmidi
+snd_seq
+snd_seq_device
+snd_seq_dummy
+snd_seq_midi
+snd_seq_midi_event
+snd_soc_core
+snd_soc_hdmi_codec
+snd_timer
+spi_bcm2835
+spi_dw
+spi_dw_mmio
+spidev
+stp
+tls
+udc_core
+uio
+uio_pdrv_genirq
+ulpi
+usbhid
+v3d
+v4l2_mem2mem
+vc4
+videobuf2_common
+videobuf2_dma_contig
+videobuf2_memops
+videobuf2_v4l2
+videodev
+x_tables
+xhci_plat_hcd
+xor
+xor_neon
+z3fold
+zstd
+EOF
+}
+
+function syz_configs()
+{
+	# Configs required for syzcaller
+	cat <<EOF
+# Coverage collection.
+CONFIG_KCOV=y
+
+# Debug info for symbolization.
+CONFIG_DEBUG_INFO_DWARF4=y
+
+# Memory bug detector
+CONFIG_KASAN=y
+CONFIG_KASAN_INLINE=y
+
+# Required for Debian Stretch and later
+CONFIG_CONFIGFS_FS=y
+CONFIG_SECURITYFS=y
+EOF
 }
 
 function usage()
@@ -150,21 +176,25 @@ To build a generic Ubuntu kernel:
   $ build-kernel-deb make
 
 Available commands:
-  config CONFIG    Generate .config for the build.
-  make             Build kernel Debian packages.
-  menuconfig       Run config menu.
-                   This is an alias for 'config menu'.
-  ubuntuconfig     Use generic Ubuntu config.
-                   This is an alias for 'config ubuntu'.
+  config [CONFIG]    Create kernel config. Supported <CONFIG> values:
+                       menu:      Run config menu.
+                       ubuntu:    Use generic Ubuntu configs.
+                       raspi:     Use raspi Ubuntu configs.
+                       defconfig: Use arch defconfigs.
+  make               Build kernel Debian packages.
 
-Optional arguments:
-  --arch ARCH      Debian package architecture.
-  --buildd BUILDD  Use buildd/<BUILDD> as the build output directory.
-                   If not provided, defaults to buildd/<SERIES>.
-  --chroot CHROOT  Use chroot <CHROOT>.
-  -h, --help       Show this help text and exit.
-  -jX              Number of jobs, default one per CPU.
-  --lsmod LSMOD    Build only modules listed in <LSMOD>.
+Optional common arguments:
+  --arch ARCH        Debian package architecture.
+  --buildd BUILDD    Use buildd/<BUILDD> as the build output directory.
+                     If not provided, defaults to buildd/<SERIES>.
+  --chroot CHROOT    Use chroot <CHROOT>.
+  -h, --help         Show this help text and exit.
+  -jX                Number of jobs, default one per CPU.
+
+Optional arguments for 'config' command:
+  --lsmod LSMOD      Build modules listed in <LSMOD>.
+  --min              Build a minimal set of hard-coded modules.
+  --syz              Enable config options for syzcaller.
 EOF
 }
 
@@ -175,6 +205,10 @@ jobs=$(getconf _NPROCESSORS_ONLN)
 lsmod=
 cmd=
 flavor=
+min=0
+syz=0
+
+module_subset=0
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -204,15 +238,19 @@ while [ ${#} -gt 0 ] ; do
 		--lsmod)
 			shift
 			lsmod=${1}
+			module_subset=1
+			;;
+		--min)
+			min=1
+			module_subset=1
+			;;
+		--syz)
+			syz=1
 			;;
 		config)
 			cmd=${1}
 			shift
 			flavor=${1}
-			;;
-		*config)
-			cmd=config
-			flavor=${1%config}
 			;;
 		make)
 			cmd=${1}
@@ -259,7 +297,7 @@ if [ "${arch}" != "$(dpkg-architecture -q DEB_BUILD_ARCH)" ] ; then
 	ARCH=$(dpkg-architecture -a "${arch}" -q DEB_HOST_ARCH_CPU 2>/dev/null)
 	CROSS_COMPILE=$(dpkg-architecture -a "${arch}" -q DEB_HOST_GNU_TYPE 2>/dev/null)-
 
-	echo "-- Cross-compilation for: ${ARCH}"
+	pr_info "Cross-compilation for: ${ARCH}"
 	export ARCH CROSS_COMPILE
 fi
 
@@ -274,7 +312,7 @@ else
 fi
 mkdir -p "${KBUILD_OUTPUT}"
 
-echo "-- Use kernel build output directory: ${KBUILD_OUTPUT}"
+pr_info "Use kernel build output directory: ${KBUILD_OUTPUT}"
 export KBUILD_OUTPUT
 
 #
@@ -288,38 +326,51 @@ case "${cmd}" in
 				run_chroot make menuconfig
 				;;
 
-			ubuntu|raspi|generic)
+			ubuntu|raspi|generic|defconfig)
 				if [ "${flavor}" = ubuntu ] ; then
 					flavor=generic
 				fi
 
-				echo "-- Generate Ubuntu config (${arch}, ${flavor})"
-				rm -rf CONFIGS
-				run_chroot fakeroot debian/rules clean
-				run_chroot debian/rules genconfigs || true
-
-				cp CONFIGS/"${arch}"-config.flavour."${flavor}" "${KBUILD_OUTPUT}"/.config
-
-				# FIXME: Make this generic
-				if [ "${lsmod}" = "min" ] && [ "${flavor}" = "raspi" ] ; then
-					{
-						echo "Module  Size  Used by"
-						printf "%s  1000  0\n" "${MINMOD_RASPI[@]}"
-					} > .lsmod
-					lsmod=.lsmod
-				fi
-
-				if [ -e "${lsmod}" ] ; then
-					echo
-					echo "-- Enable only local modules"
-					run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
+				if  [ "${flavor}" = defconfig ] ; then
+					pr_info "Generate defconfigs (${arch})"
+					run_chroot make defconfig
 				else
-					run_chroot make olddefconfig
+					pr_info "Generate Ubuntu config (${arch}, ${flavor})"
+					rm -rf CONFIGS
+					run_chroot fakeroot debian/rules clean
+					run_chroot debian/rules genconfigs || true
+
+					cp CONFIGS/"${arch}"-config.flavour."${flavor}" "${KBUILD_OUTPUT}"/.config
 				fi
+
+				if [ ${module_subset} -eq 1 ] ; then
+					pr_info "Enable only a subset of modules"
+
+					if [ -z "${lsmod}" ] ; then
+						lsmod=${KBUILD_OUTPUT}/bkd.modules
+						echo "Module" > "${lsmod}"
+					fi
+
+					{
+						# FIXME: Make this generic
+						if [ ${min} -eq 1 ] && [ "${flavor}" = raspi ] ; then
+							minimal_modules_raspi
+						fi
+					} >> "${lsmod}"
+
+					run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
+				fi
+
+				if [ ${syz} -eq 1 ] ; then
+					pr_info "Set syzcaller configs"
+					syz_configs >> "${KBUILD_OUTPUT}"/.config
+				fi
+
+				run_chroot make olddefconfig
 				;;
 
 			*)
-				echo "Invalid config type: ${flavor}" >&2
+				pr_error "Invalid config option: ${flavor}"
 				exit 1
 				;;
 		esac
@@ -333,7 +384,7 @@ case "${cmd}" in
 		;;
 
 	*)
-		echo "Invalid command: ${1}" >&2
+		pr_error "Invalid command: ${1}"
 		exit 1
 		;;
 esac
