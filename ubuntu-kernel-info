@@ -154,7 +154,23 @@ def main():
     Main entry point
     """
     desc = "Provides information about Ubuntu's kernels."
-    parser = argparse.ArgumentParser(description=desc)
+    epilog = """
+
+Kernel selections:
+  devel          Development kernels.
+  supported      Supported non-ESM kernels.
+  supported-esm  Supported ESM kernels.
+
+  supported-all  supported + supported-esm.
+
+  all            All kernels listed in kernel-series.json.
+  dump           Dump kernel-series.json for debugging.
+"""
+    parser = argparse.ArgumentParser(
+        description=desc,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=epilog,
+    )
     parser.add_argument(
         "-f",
         "--field",
