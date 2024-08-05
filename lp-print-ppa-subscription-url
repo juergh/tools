@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+
+import sys
+
+from launchpadlib.launchpad import Launchpad
+
+ppa = sys.argv[1]
+
+if ppa.startswith("ppa:"):
+    owner, _, name = ppa.split(":")[1].split("/")
+else:
+    owner, name = ppa.spit("/")
+ppa_url = f"launchpadcontent.net/{owner}/{name}/ubuntu"
+
+lp = Launchpad.login_with("tools", "production", version="devel")
+
+lp_ppa = lp.archives.getByReference(reference=ppa)
+if not lp_ppa:
+    print("PPA not found", file.sys.stderr)
+    sys.exit(1)
+
+# HACK (see https://answers.launchpad.net/launchpad/+question/697954)
+lp_me = lp.load(lp.me.self_link)
+print(lp_me.getArchiveSubscriptionURL(archive=lp_ppa))
