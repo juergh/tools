@@ -1,0 +1,30 @@
+#!/bin/bash
+#
+# Rename local branches that have been integrated into Ubuntu kernels
+#
+
+git fetch linux-ubuntu
+
+TMP_FILE=$(mktemp)
+
+first=1
+while IFS= read -r branch ; do
+	cve=${branch%/*}
+	series=${branch#*/}
+	ubuntu_branch=linux-ubuntu/${series}/linux
+
+	git --no-pager log --oneline --since="2 months ago" --grep "^${cve}$" -E "${ubuntu_branch}" 2>/dev/null > "${TMP_FILE}"
+
+	if [ -s "${TMP_FILE}" ] ; then
+		if [ ${first} -eq 1 ] ; then
+			first=0
+		else
+			echo
+		fi
+		echo "${cve} fix(es) found on ${ubuntu_branch}"
+		sed 's/^/  /' "${TMP_FILE}"
+		git branch -m "${branch}" xx_done/"${branch}"
+	fi
+done < <(git branch | sed -n 's/^..CVE/CVE/p')
+
+rm -f "${TMP_FILE}"
