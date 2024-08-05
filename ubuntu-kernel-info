@@ -53,10 +53,6 @@ PKG_FILTERS = {
         "source.supported": "true",
         "series.esm": "true",
     },
-    "supported-all": {
-        "series.supported": "true",
-        "source.supported": "true",
-    },
     "all": {},
 }
 
@@ -164,6 +160,7 @@ Kernel selections:
   supported-esm  Supported ESM kernels.
 
   supported-all  supported + supported-esm.
+  active         devel + supported + supported-esm.
 
   all            All kernels listed in kernel-series.json.
   dump           Dump kernel-series.json for debugging.
@@ -210,12 +207,26 @@ Kernel selections:
         "selection",
         help="Select which kernels to list. "
         "Comma-separated list. "
-        "Possible values are: devel, supported, supported-esm, supported-all, all (and dump).",
+        "Possible values are: devel, supported, supported-esm, supported-all, active, all, dump.",
     )
     args = parser.parse_args()
 
     fields = args.field.split(",") if args.field else None
-    selections = args.selection.split(",")
+    selections = set(args.selection.split(","))
+
+    super_sets = {
+        "supported-all": ["supported", "supported-esm"],
+        "active": ["devel", "supported", "supported-esm"],
+    }
+
+    for key, val in super_sets.items():
+        if key in selections:
+            selections.remove(key)
+            selections.update(val)
+    if "all" in selections:
+        selections = set(["all"])
+    if "dump" in selections:
+        selections = set(["dump"])
 
     # Special selection
     dump = "dump" in selections
