@@ -1,0 +1,46 @@
+#!/bin/bash
+#
+# Search the given directory for modules that want to load firmware
+#
+
+FW_SYMBOLS=(
+	firmware_request_builtin
+	firmware_request_cache
+	firmware_request_nowarn
+	firmware_request_platform
+	firmware_upload_register
+	firmware_upload_unregister
+	fw_fallback_config
+	register_firmware_config_sysctl
+	release_firmware
+	request_firmware
+	request_firmware_direct
+	request_firmware_into_buf
+	request_firmware_nowait
+	request_partial_firmware_into_buf
+	unregister_firmware_config_sysctl
+)
+
+#readarray -t FW_SYMBOLS < <(git grep -h EXPORT_SYMBOL drivers/base/firmware_loader/ | \
+#                            sed 's/.*(//;s/.)*//;s/,*//' | sort -u)
+
+re_symbol=$(printf "|%s" "${FW_SYMBOLS[@]}")
+re_symbol=${re_symbol:1}
+
+TMPFILE=$(mktemp)
+
+while IFS= read -r mod ; do
+	m=${mod##*/kernel/}
+	m=${m%.ko*}.ko
+	if [ -n "$(modinfo -F firmware "${mod}")" ] ; then
+		echo "S: ${m}"
+		continue
+	fi
+
+	zstd -d -q -f -o "${TMPFILE}" "${mod}"
+	if nm -P "${TMPFILE}" | grep -qE "^(${re_symbol}) "; then
+		echo "U: ${m}"
+	fi
+done < <(find "${@}" -name '*.ko*')
+
+rm -f "${TMPFILE}"
