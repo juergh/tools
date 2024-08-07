@@ -15,6 +15,11 @@ Optional arguments:
                          from the current branch name.
   -h, --help             Show this help message and exit.
   -p, --provenance PROV  Add provenance to cherry-picked-from line.
+
+Dropped into a shell if the cherry-pick failed. To exit that shell:
+  exit   : continue
+  exit 1 : abort
+  exit 2 : skip
 EOF
 }
 
