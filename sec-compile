@@ -13,16 +13,16 @@ fi
 
 export BUILD_OUTPUT=buildd/${SERIES}
 
-run_chroot make allmodconfig
-
 if [ -f "${1}" ] ; then
+	run_chroot make allmodconfig
 	run_chroot make "${1%.*}".o
 else
 	case "${1}" in
-		prepare)
-			run_chroot make prepare
+		clean|prepare)
+			run_chroot make "${1}"
 			;;
 		drivers/*)
+			run_chroot make allmodconfig
 			run_chroot make M="${1}"
 			;;
 	esac
