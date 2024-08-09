@@ -1,8 +1,16 @@
 #!/bin/bash -eu
 
-function run_chroot()
+function pr_info()  { echo -e "\033[33mI: ${*}\033[0m" ; }
+
+function chroot_make()
 {
-	run-chroot cranky--"${SERIES}" -- "${@}"
+	local cmd
+
+	cmd=("schroot" "-r" "-c" "cranky--${SERIES}-amd64" "--" "make" "O=${O}")
+	cmd+=("${@}")
+
+	pr_info "${cmd[*]}"
+	"${cmd[@]}"
 }
 
 SERIES=$(dpkg-parsechangelog -ldebian.master/changelog -SDistribution)
@@ -11,19 +19,25 @@ if [ -z "${SERIES}" ] ; then
 	exit 1
 fi
 
-export BUILD_OUTPUT=buildd/${SERIES}
+O=buildd/${SERIES}
 
 if [ -f "${1}" ] ; then
-	run_chroot make allmodconfig
-	run_chroot make "${1%.*}".o
+	chroot_make  allmodconfig
+	chroot_make "${1%.*}".o
 else
 	case "${1}" in
-		clean|prepare)
-			run_chroot make "${1}"
+		clean)
+			chroot_make clean
+			;;
+		prepare)
+			if ! [ -e "${O}"/.config ] ; then
+				chroot_make allmodconfig
+			fi
+			chroot_make prepare
 			;;
 		drivers/*)
-			run_chroot make allmodconfig
-			run_chroot make M="${1}"
+			chroot_make allmodconfig
+			chroot_make M="${1}"
 			;;
 	esac
 fi
