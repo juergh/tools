@@ -3,23 +3,6 @@
 # Search the given directory for modules that want to load firmware
 #
 
-function usage()
-{
-	cat <<EOF
-Usage: find-modules-with-firmware [-f FWINFO] [-h] [DIR [DIR..]]
-
-Search the given directories for modules that want to load firmware.
-
-Output prefix:
-  S:  Module declares firmware (via modinfo).
-  U:  Module uses firmware load symbols.
-
-Optional arguments:
-  -f, --fwinfo FWINFO  Write firmware info to the file FWINFO.
-  -h, --help           Show this help message and exit.
-EOF
-}
-
 FW_SYMBOLS=(
 	firmware_request_builtin
 	firmware_request_cache
@@ -38,13 +21,55 @@ FW_SYMBOLS=(
 	unregister_firmware_config_sysctl
 )
 
-fwinfo=
+function check_module()
+{
+	local mod=${1}
+	local m
+
+	m=${mod##*/kernel/}
+	m=${m%.ko*}.ko
+
+	# Check if the module declares firmware
+	modinfo -F firmware "${mod}" > "${TMPFILE}"
+	if [ -s "${TMPFILE}" ] ; then
+		echo "S: ${m}"
+		if [ -n "${FWINFO}" ] ; then
+			cat "${TMPFILE}" >> "${FWINFO}"
+		fi
+		return
+	fi
+
+	# Check if the module uses firmware load symbols
+	zstd -d -q -f -o "${TMPFILE}" "${mod}"
+	if nm -P "${TMPFILE}" | grep -qE "^(${re_symbol}) "; then
+		echo "U: ${m}"
+	fi
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: find-modules-with-firmware [-f FWINFO] [-h] [DIR [DIR..]]
+
+Search the given directories for modules that want to load firmware.
+
+Output prefix:
+  S:  Module declares firmware (via modinfo).
+  U:  Module uses firmware load symbols.
+
+Optional arguments:
+  -f, --fwinfo FWINFO  Write firmware info to the file FWINFO.
+  -h, --help           Show this help message and exit.
+EOF
+}
+
+FWINFO=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
 		-f|--fwinfo)
 			shift
-			fwinfo=${1}
+			FWINFO=${1}
 			;;
 		-h|--help)
 			usage
@@ -65,34 +90,17 @@ re_symbol=${re_symbol:1}
 
 TMPFILE=$(mktemp)
 
-if [ -n "${fwinfo}" ] ; then
-	true > "${fwinfo}"
+if [ -n "${FWINFO}" ] ; then
+	true > "${FWINFO}"
 fi
 
 while IFS= read -r mod ; do
-	m=${mod##*/kernel/}
-	m=${m%.ko*}.ko
-
-	# Check if the module declares firmware
-	modinfo -F firmware "${mod}" > "${TMPFILE}"
-	if [ -s "${TMPFILE}" ] ; then
-		echo "S: ${m}"
-		if [ -n "${fwinfo}" ] ; then
-			cat "${TMPFILE}" >> "${fwinfo}"
-		fi
-		continue
-	fi
-
-	# Check if the module uses firmware load symbols
-	zstd -d -q -f -o "${TMPFILE}" "${mod}"
-	if nm -P "${TMPFILE}" | grep -qE "^(${re_symbol}) "; then
-		echo "U: ${m}"
-	fi
+	check_module "${mod}"
 done < <(find "${@}" -name '*.ko*')
 
-if [ -n "${fwinfo}" ] ; then
-	sort -u "${fwinfo}" > "${TMPFILE}"
-	mv "${TMPFILE}" "${fwinfo}"
+if [ -n "${FWINFO}" ] ; then
+	sort -u "${FWINFO}" > "${TMPFILE}"
+	mv "${TMPFILE}" "${FWINFO}"
 fi
 
 rm -f "${TMPFILE}"
