@@ -1,0 +1,70 @@
+#!/bin/bash
+
+declare -A HASH
+
+#SORT=cat
+SORT=maybe_sort
+BRANCH=noble
+
+function new_file()
+{
+	local fw=$1
+	local line c 
+
+	# Find commits that add/modify the given firmware file
+	while IFS= read -r line ; do
+		c=${line%% *}
+		if [ -z "${HASH[$c]}" ] ; then
+			echo "$line"
+			HASH[$c]=1
+		fi
+	done < <(git --no-pager log --oneline "$BRANCH" -- "$fw")
+}
+
+function new_link()
+{
+	local fw=$1
+	local link line oneline c
+
+	link=${fw##*/}
+
+	# Find commits that add/modify the given firmware link
+	while IFS= read -r line ; do
+		case "${line}" in
+			"COMMIT "*)
+				oneline=${line#COMMIT }
+				;;
+			[-+]"Link:"*"${link}"*)
+				c=${oneline%% *}
+				if [ -z "${HASH[$c]}" ] ; then
+					echo "$oneline"
+					HASH[$c]=1
+				fi
+				;;
+		esac
+	done < <(git --no-pager log -p --format="COMMIT %h %s" "$BRANCH" -- WHENCE WHENCE.ubuntu)
+}
+
+function maybe_sort()
+{
+	local regex=""
+	
+	while read -r h s ; do
+		regex="${regex}|${h}"
+	done
+	regex=${regex:1}
+	git log --oneline "${BRANCH}" | grep -E "${regex}"
+}
+
+while read -r line ; do
+	key=${line%%: *}
+	fw=${line#*: }
+	case "${key}" in
+		"File(n)")
+			new_file "${fw}"
+			;;
+		"Link(n)")
+			new_link "${fw}"
+			;;
+	esac
+done | "${SORT}"

@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+
+import argparse
+import os
+import re
+import sys
+
+import git
+
+from shutil import rmtree
+
+RE_ENTRY = re.compile(r"^(File|RawFile|Link):\s+(.*)")
+
+WHENCE = ["WHENCE", "WHENCE.ubuntu"]
+
+
+def touch(file_name):
+    d = os.path.dirname(file_name)
+    if d and not os.path.exists(d):
+        os.makedirs(d)
+    with open(file_name, "a", encoding="utf-8"):
+        os.utime(file_name, None)
+
+
+def ln_s(target, link_name):
+    d = os.path.dirname(link_name)
+    if d and not os.path.exists(d):
+        os.makedirs(d)
+    os.symlink(target, link_name)
+
+
+def do_whence_file(whence_file, out_dir):
+    # Parse the whence file
+    with open(whence_file, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.replace("\\ ", " ").replace('"', "").strip()
+            m = RE_ENTRY.match(line)
+            if m:
+                key, val = m.groups()
+                if key in ("File", "RawFile"):
+                    touch(os.path.join(out_dir, val))
+                else:
+                    link, target = re.split(r"\s+\-\>\s+", val)
+                    ln_s(target, os.path.join(out_dir, link))
+
+    error = False
+    for root, _, files in os.walk(out_dir):
+        for f in files:
+            f = os.path.join(root, f)
+            if not os.path.exists(f):
+                error = True
+                print(f"Broken symlink: {f}")
+
+    if error:
+        raise Exception(f"Failed to process {whence_file}")
+
+
+def do_branch(branch, out_dir):
+    os.makedirs(out_dir)
+
+    repo = git.Repo()
+    for whence in WHENCE:
+        whence_file = os.path.join(out_dir, whence)
+        with open(whence_file, "w", encoding="utf-8") as fh:
+            fh.write(repo.git.show(f"{branch}:{whence}") + "\n")
+        do_whence_file(whence_file, out_dir)
+
+
+def load_fwinfo(fwinfo_file):
+    fwinfo = set()
+    with open(fwinfo_file, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("firmware:"):
+                fwinfo.add(line.split(":", 1)[1].strip(" "))
+            else:
+                fwinfo.add(line)
+    return fwinfo
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-k", "--keep", action="store_true", help="Keep work directory")
+    parser.add_argument("old_branch")
+    parser.add_argument("new_branch")
+    parser.add_argument("fwinfo", nargs="?")
+    args = parser.parse_args()
+
+    fwinfo = load_fwinfo(args.fwinfo) if args.fwinfo else None
+
+    out_dir = "work"
+    if os.path.exists(out_dir):
+        print(f"Directory '{out_dir}' exists already", file=sys.stderr)
+        return 1
+
+    old_dir = os.path.join(out_dir, "old")
+    new_dir = os.path.join(out_dir, "new")
+
+    do_branch(args.old_branch, old_dir)
+    do_branch(args.new_branch, new_dir)
+
+    repo = git.Repo()
+
+    for root, dirs, files in os.walk(new_dir):
+        dirs.sort()
+        for f in sorted(files):
+            new_file = os.path.join(root, f)
+            new_file_rel = os.path.relpath(new_file, new_dir)
+
+            if fwinfo and new_file_rel not in fwinfo:
+                continue
+
+            # Check if the file/link exists on the old branch
+            old_file = new_file.replace(new_dir, old_dir)
+            if not os.path.exists(old_file):
+                if os.path.islink(new_file):
+                    print(f"Link(n): {new_file_rel}")
+                else:
+                    print(f"File(n): {new_file_rel}")
+                continue
+
+            # Check if the file on the old branch is different
+            if not os.path.islink(new_file):
+                #            print(new.diff(old_branch, "--", new_file_rel))
+                try:
+                    repo.git.diff(
+                        "--quiet", args.new_branch, args.old_branch, "--", new_file_rel
+                    )
+                except git.exc.GitCommandError:  # noqa
+                    print(f"File(d): {new_file_rel}")
+
+    if not args.keep:
+        rmtree(out_dir)
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
