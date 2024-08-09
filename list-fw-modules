@@ -24,7 +24,7 @@ FW_SYMBOLS=(
 function check_module()
 {
 	local mod=${1}
-	local m
+	local m symbols
 
 	m=${mod##*/kernel/}
 	m=${m%.ko*}.ko
@@ -32,30 +32,41 @@ function check_module()
 	# Check if the module declares firmware
 	modinfo -F firmware "${mod}" > "${TMPFILE}"
 	if [ -s "${TMPFILE}" ] ; then
-		echo "S: ${m}"
+		echo "M: ${m}"
 		if [ -n "${FWINFO}" ] ; then
 			cat "${TMPFILE}" >> "${FWINFO}"
 		fi
 		return
 	fi
 
+	# Decompress the module
+	case "${mod}" in
+		*.ko.zst) zstd -d -q -f -o "${TMPFILE}" "${mod}" ;;
+		*)        cat "${mod}" > "${TMPFILE}" ;;
+	esac
+
 	# Check if the module uses firmware load symbols
-	zstd -d -q -f -o "${TMPFILE}" "${mod}"
-	if nm -P "${TMPFILE}" | grep -qE "^(${re_symbol}) "; then
-		echo "U: ${m}"
+	symbols=$(nm -P "${TMPFILE}" | grep -oE "^(${re_symbol}) " | tr " " "," | tr -d "\n")
+	if [ -n "${symbols}" ] ; then
+		if [ "${VERBOSE}" -eq 1 ] ; then
+			echo "S: ${m} (${symbols::-1})"
+		else
+			echo "S: ${m}"
+		fi
 	fi
 }
 
 function usage()
 {
 	cat <<EOF
-Usage: find-modules-with-firmware [-f FWINFO] [-h] [DIR [DIR..]]
+Usage: find-modules-with-firmware [-f FWINFO] [-h] [-v] [DIR [DIR..] | MOD [MOD..]]
 
-Search the given directories for modules that want to load firmware.
+Search the provided directories for modules that want to load firmware or process the
+provided module files.
 
 Output prefix:
-  S:  Module declares firmware (via modinfo).
-  U:  Module uses firmware load symbols.
+  M:  Module declares firmware (via modinfo).
+  S:  Module uses firmware load symbols.
 
 Optional arguments:
   -f, --fwinfo FWINFO  Write firmware info to the file FWINFO.
@@ -64,6 +75,7 @@ EOF
 }
 
 FWINFO=
+VERBOSE=0
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -75,7 +87,14 @@ while [ $# -gt 0 ] ; do
 			usage
 			exit
 			;;
+		-v|--verbose)
+			VERBOSE=1
+			;;
 		*)
+			if ! [ -e "${1}" ] ; then
+				usage
+				exit 2
+			fi
 			break
 			;;
 	esac
@@ -94,9 +113,15 @@ if [ -n "${FWINFO}" ] ; then
 	true > "${FWINFO}"
 fi
 
-while IFS= read -r mod ; do
-	check_module "${mod}"
-done < <(find "${@}" -name '*.ko*')
+if [ $# -eq 0 ] || [ -d "${1}" ] ; then
+	while IFS= read -r mod ; do
+		check_module "${mod}"
+	done < <(find "${@}" -name '*.ko*')
+else
+	for mod in "${@}" ; do
+		check_module "${mod}"
+	done
+fi
 
 if [ -n "${FWINFO}" ] ; then
 	sort -u "${FWINFO}" > "${TMPFILE}"
