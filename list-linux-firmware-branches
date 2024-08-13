@@ -3,17 +3,13 @@
 # List unreleased commits on linux-firmware branches
 #
 
-readarray -t all < <(ubuntu-distro-info --supported-esm; \
-                     ubuntu-distro-info --supported; \
-                     ubuntu-distro-info --devel)
-
-declare -A dne
-
-for branch in "${all[@]}" ; do
-	if [ "${dne[${branch}]:-0}" = "1" ] ; then
+while IFS= read -r branch ; do
+	echo "-- $branch"
+	if ! git rev-parse "${branch}" &>/dev/null ; then
+		echo "Branch does not exist"
+		echo
 		continue
 	fi
-	dne[${branch}]=1
 
 	version=$(git show "${branch}":debian/changelog | \
 	          dpkg-parsechangelog -l- -Sversion)
@@ -24,7 +20,12 @@ for branch in "${all[@]}" ; do
 	fi
 	tag=Ubuntu-${version}
 
-	echo "-- $branch"
 	git --no-pager log --oneline "${tag}".."${branch}"
 	echo
-done
+done < <(
+	{
+		ubuntu-distro-info --supported-esm
+		ubuntu-distro-info --supported
+		ubuntu-distro-info --devel
+	} | sort -u
+)
