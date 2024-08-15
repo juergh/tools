@@ -130,9 +130,8 @@ export debian_chroot="cherry-pick"
 bash
 case "$?" in
 	0)
+		echo "-- Continue cherry-pick"
 		git cherry-pick --continue
-		# This was a fix-up, so amend the commit message
-		git commit --amend
 		;;
 	1)
 		echo "-- Abort cherry-pick"
