@@ -549,7 +549,7 @@ Optional arguments:
                         provided, defaults to 'bios'.
   -d, --debug           Enable debugging (set -x).
   -f, --force           Force the recreation of an existing VM.
-  -g, --grade GRADE     Image grade (beta, edge, edge-dangerous, ...).
+  -g, --grade GRADE     Image grade (edge, beta, candidate, stable, dangerous-edge, ...).
   -h, --help            Show this help text and exit.
   -i, --image IMAGE     Use the image IMAGE as the base image.
   -m, --memory SIZE     Memory size in KB. If not provided, defaults to
