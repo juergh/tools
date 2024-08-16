@@ -470,6 +470,11 @@ function define_vm()
 	esac
 
 	if [ "${BOOT_MODE}" = "uefi" ] ; then
+		if [ -e /usr/share/OVMF/OVMF_CODE_4M.fd ] ; then
+			XML_OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
+		else
+			XML_OVMF_CODE=/usr/share/OVMF/OVMF_CODE.fd
+		fi
 		XML_UEFI_BOOT_BEGIN=
 		XML_UEFI_BOOT_END=
 	elif [ "${BOOT_MODE}" = "direct" ] ; then
@@ -505,6 +510,7 @@ function define_vm()
 	# Export the variables for the domain XML
 	# shellcheck disable=SC2090
 	export XML_ARCH
+	export XML_OVMF_CODE
 	export XML_UEFI_BOOT_BEGIN XML_UEFI_BOOT_END
 	export XML_KERNEL_PATH XML_INITRD_PATH \
 		   XML_DIRECT_BOOT_BEGIN XML_DIRECT_BOOT_END

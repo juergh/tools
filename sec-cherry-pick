@@ -129,10 +129,6 @@ set +e
 export debian_chroot="cherry-pick"
 bash
 case "$?" in
-	0)
-		echo "-- Continue cherry-pick"
-		git cherry-pick --continue
-		;;
 	1)
 		echo "-- Abort cherry-pick"
 		git cherry-pick --abort
@@ -140,5 +136,9 @@ case "$?" in
 	2)
 		echo "-- Skip cherry-pick"
 		git cherry-pick --skip
+		;;
+	*)
+		echo "-- Continue cherry-pick"
+		git cherry-pick --continue
 		;;
 esac

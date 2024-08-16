@@ -10,7 +10,7 @@
     <type arch='${XML_ARCH}' machine='pc'>hvm</type>
 
 ${XML_UEFI_BOOT_BEGIN}
-    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE.fd</loader>
+    <loader readonly='yes' type='pflash'>${XML_OVMF_CODE}</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/${XML_NAME}_VARS.fd</nvram>
 ${XML_UEFI_BOOT_END}
 
