@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+
+import sys
+
+from launchpadlib.launchpad import Launchpad
+
+#build_request = sys.argv[1]
+#build_request="~canonical-hwe-imx/tillamook/+snap/focal--linux-uc20-ein--cascade-kernel--beta--1+2v/+build-request/90696444"
+#build_request="~canonical-kernel-snaps/+snap/jammy--linux-xilinx-zynqmp--xilinx-zynqmp-kernel--edge--1+2/+build-request/90671053"
+build_request="~canonical-kernel-snaps/+snap/jammy--linux-xilinx-zynqmp--xilinx-zynqmp-kernel--beta--1+2/+build-request/90776583"
+
+lp = Launchpad.login_with("tools", "production", version="devel")
+
+lp_snap_build_request = lp.load(build_request)
+
+for build in lp_snap_build_request.builds:
+    print(build.web_link)
+    print(build.upload_log_url)
