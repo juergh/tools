@@ -21,23 +21,23 @@ fi
 
 O=buildd/${SERIES}
 
+case "${1}" in
+	init)
+		chroot_make clean allmodconfig prepare
+		exit
+		;;
+esac
+
 if [ -f "${1}" ] ; then
-	chroot_make  allmodconfig
+#	chroot_make  allmodconfig
 	chroot_make "${1%.*}".o
-else
-	case "${1}" in
-		clean)
-			chroot_make clean
-			;;
-		prepare)
-			if ! [ -e "${O}"/.config ] ; then
-				chroot_make allmodconfig
-			fi
-			chroot_make prepare
-			;;
-		drivers/*)
-			chroot_make allmodconfig
-			chroot_make M="${1}"
-			;;
-	esac
+	exit
 fi
+
+if [ -d "${1}" ] ; then
+#	chroot_make allmodconfig
+	chroot_make -j"$(getconf _NPROCESSORS_ONLN)" M="${1%/}"
+	exit
+fi
+
+chroot_make "${@}"
