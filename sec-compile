@@ -2,13 +2,11 @@
 
 function pr_info()  { echo -e "\033[33mI: ${*}\033[0m" ; }
 
-function chroot_make()
+function run_chroot()
 {
 	local cmd
 
-	cmd=("schroot" "-r" "-c" "cranky--${SERIES}-amd64" "--" "make" "O=${O}")
-	cmd+=("${@}")
-
+	cmd=("schroot" "-r" "-c" "cranky--${SERIES}-amd64" "--" "${@}")
 	pr_info "${cmd[*]}"
 	"${cmd[@]}"
 }
@@ -20,24 +18,31 @@ if [ -z "${SERIES}" ] ; then
 fi
 
 O=buildd/${SERIES}
+mkdir -p "${O}"
+
+make="make O=${O}"
 
 case "${1}" in
 	init)
-		chroot_make clean allmodconfig prepare
+		run_chroot $make clean allmodconfig prepare
+		exit
+		;;
+	ubuntuconfig)
+		run_chroot fakeroot debian/rules clean genconfigs
+		cp CONFIGS/amd64-config.flavour.generic "${O}"/.config
+		run_chroot $make prepare
 		exit
 		;;
 esac
 
 if [ -f "${1}" ] ; then
-#	chroot_make  allmodconfig
-	chroot_make "${1%.*}".o
+	run_chroot $make "${1%.*}".o
 	exit
 fi
 
 if [ -d "${1}" ] ; then
-#	chroot_make allmodconfig
-	chroot_make -j"$(getconf _NPROCESSORS_ONLN)" M="${1%/}"
+	run_chroot $make -j"$(getconf _NPROCESSORS_ONLN)" M="${1%/}"
 	exit
 fi
 
-chroot_make "${@}"
+run_chroot $make "${@}"
