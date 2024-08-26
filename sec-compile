@@ -11,6 +11,25 @@ function run_chroot()
 	"${cmd[@]}"
 }
 
+function usage()
+{
+	cat <<EOF
+Usage: sec-compile [-h] init|ubuntuconfig
+       sec-compile [-h] FILE
+       sec-compile [-h] DIR
+       sec-compile [-h] ARGS...
+
+Optional arguments:
+  -h, --help  Show this help message and exit.
+EOF
+}
+
+case "${1:-}" in
+	-h|--help)
+		usage
+		exit
+esac
+
 SERIES=$(dpkg-parsechangelog -ldebian.master/changelog -SDistribution)
 if [ -z "${SERIES}" ] ; then
 	echo "Failed to determine series" >&2
@@ -20,29 +39,32 @@ fi
 O=buildd/${SERIES}
 mkdir -p "${O}"
 
-make="make O=${O}"
+make=(
+	make
+	O="${O}"
+)
 
 case "${1}" in
 	init)
-		run_chroot $make clean allmodconfig prepare
+		run_chroot "${make[@]}" clean allmodconfig prepare
 		exit
 		;;
 	ubuntuconfig)
 		run_chroot fakeroot debian/rules clean genconfigs
 		cp CONFIGS/amd64-config.flavour.generic "${O}"/.config
-		run_chroot $make prepare
+		run_chroot "${make[@]}" prepare
 		exit
 		;;
 esac
 
 if [ -f "${1}" ] ; then
-	run_chroot $make "${1%.*}".o
+	run_chroot "${make[@]}" "${1%.*}".o
 	exit
 fi
 
 if [ -d "${1}" ] ; then
-	run_chroot $make -j"$(getconf _NPROCESSORS_ONLN)" M="${1%/}"
+	run_chroot "${make[@]}" -j"$(getconf _NPROCESSORS_ONLN)" M="${1%/}"
 	exit
 fi
 
-run_chroot $make "${@}"
+run_chroot "${make[@]}" "${@}"
