@@ -2,13 +2,18 @@
 
 function pr_info()  { echo -e "\033[33mI: ${*}\033[0m" ; }
 
+function out()
+{
+	pr_info "Build log: ${LOG}"
+}
+
 function run_chroot()
 {
 	local cmd
 
 	cmd=("schroot" "-r" "-c" "cranky--${SERIES}-amd64" "--" "${@}")
 	pr_info "${cmd[*]}"
-	"${cmd[@]}"
+	"${cmd[@]}" 2>&1 | tee "${LOG}"
 }
 
 function usage()
@@ -38,6 +43,9 @@ fi
 
 O=buildd/${SERIES}
 mkdir -p "${O}"
+
+LOG=${O}/build.log
+trap out EXIT
 
 make=(
 	make
