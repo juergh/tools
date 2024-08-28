@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+#
+# Set the distro of a pi-kernel snap recipe
+#
+
+from launchpadlib.launchpad import Launchpad
+
+def show(item):
+    print(item)
+    print('dir:         {}'.format(sorted(dir(item))))
+    print('attributes:  {}'.format(sorted(item.lp_attributes)))
+    print('collections: {}'.format(sorted(item.lp_collections)))
+    print('entries:     {}'.format(sorted(item.lp_entries)))
+    print('operations:  {}'.format(sorted(item.lp_operations)))
+
+lp = Launchpad.login_with('tools', 'production', version='devel')
+
+team = lp.people['canonical-kernel-snaps']
+
+snaps = lp.snaps.findByOwner(owner=team)
+for snap in snaps:
+    ppa = snap.auto_build_archive
+    if not ppa:
+        continue
+
+    print()
+    print(snap)
+    print(f"  {ppa.owner.name}/{ppa.name}")
+
+    for dep in ppa.dependencies:
+        dep_ppa = dep.dependency
+        print(f"    {dep_ppa.owner.name}/{dep_ppa.name}")
