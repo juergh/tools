@@ -1,0 +1,16 @@
+#!/bin/bash -eu
+#
+# Rename CVE branches
+#
+
+cve=$(git rev-parse --abbrev-ref HEAD | sed 's,/.*,,')
+if [ "${cve#CVE-}" = "${cve}" ] ; then
+	echo "Invalid CVE: ${cve}" >&2
+	exit 1
+fi
+
+while IFS= read -r branch ; do
+	new_branch="xx-done/${branch}"
+	echo "$branch -> ${new_branch}"
+	git branch -m "${branch}" "${new_branch}"
+done < <(git branch | grep "^..${cve}/" | sed 's/^..//')
