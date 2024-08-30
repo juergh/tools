@@ -33,7 +33,7 @@ mv "${log}" "${log}".1
 	"${d}"/tools/git-update daily "${d}"
 
 	header "Run find-fixes"
-	"${d}"/tools/find-fixes "${d}"/linux.git "${d}"/linux.fixes
+	"${d}"/tools/find-fixes --branch master "${d}"/linux.git "${d}"/linux.fixes
 
 	header "Run cranky-update-sessions"
 	"${d}"/tools/cranky-update-sessions
