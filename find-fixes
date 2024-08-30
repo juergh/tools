@@ -8,7 +8,7 @@
 usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}")[-h] GIT_DIR START_COMMIT|FIXES_FILE
+Usage: find-fixes [-b BRANCH] [-h] GIT_DIR START_COMMIT|FIXES_FILE
 
 Find commits with 'Fixes:' tags in the provided git repository.
 
@@ -23,15 +23,21 @@ Positional argument:
                 history is searched.
 
 Optional arguments:
-  -h, --help    Show this help text and exit.
+  -b, --branch BRANCH  Name of branch to search.
+  -h, --help           Show this help text and exit.
 EOF
 }
 
+branch=
 git_dir=
 commit_file=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-b|--branch)
+			shift
+			branch=${1}
+			;;
 		-h|--help)
 			usage
 			exit
@@ -56,7 +62,7 @@ if [ -z "${git_dir}" ] || [ -z "${commit_file}" ] ; then
 fi
 
 if echo "${commit_file}" | grep -qP "^[0-9a-f]{12,}$" ; then
-	rev_range=${commit_file}..
+	rev_range=${commit_file}..${branch}
 	fixes_file=
 else
 	fixes_file=${commit_file}
@@ -66,7 +72,7 @@ fi
 # Create a temp file with the current (new) HEAD commit
 tmp_file=${fixes_file}.tmp
 head=$(git --git-dir "${git_dir}" log --abbrev-commit --abbrev=12 \
-		   --format="%h %s" -1)
+		   --format="%h %s" "${branch}" -1)
 echo "__HEAD__ ${head}" > "${tmp_file}"
 
 # Read the previous (old) HEAD commit from the fixes file and construct the
@@ -75,7 +81,7 @@ if [ -e "${fixes_file}" ] ; then
 	head=$(head -n 1 "${fixes_file}")
 	head=${head#__HEAD__ }
 	head=${head%% *}
-	rev_range=${head}..
+	rev_range=${head}..${branch}
 fi
 
 # Parse the commits
