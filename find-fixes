@@ -30,7 +30,7 @@ EOF
 
 branch=
 git_dir=
-commit_file=
+commit_or_file=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -45,8 +45,8 @@ while [ ${#} -gt 0 ] ; do
 		*)
 			if [ -z "${git_dir}" ] ; then
 				git_dir=${1}
-			elif [ -z "${commit_file}" ] ; then
-				commit_file=${1}
+			elif [ -z "${commit_or_file}" ] ; then
+				commit_or_file=${1}
 			else
 				echo "Invalid argument: ${1}" >&2
 				exit 2
@@ -56,16 +56,16 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
-if [ -z "${git_dir}" ] || [ -z "${commit_file}" ] ; then
+if [ -z "${git_dir}" ] || [ -z "${commit_or_file}" ] ; then
 	usage
 	exit 2
 fi
 
-if echo "${commit_file}" | grep -qP "^[0-9a-f]{12,}$" ; then
-	rev_range=${commit_file}..${branch}
+if echo "${commit_or_file}" | grep -qP "^[0-9a-f]{12,}$" ; then
+	rev_range=${commit_or_file}..${branch}
 	fixes_file=
 else
-	fixes_file=${commit_file}
+	fixes_file=${commit_or_file}
 	rev_range=
 fi
 
