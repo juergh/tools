@@ -50,10 +50,10 @@ function adb_pull_storage()
 	rmt_dirs=("/storage/self/primary/${rmt_dir}")
 	while IFS= read -r rmt_base_dir ; do
 		rmt_full_dir="${rmt_base_dir}/${rmt_dir}"
-		if adb shell test -d "${rmt_full_dir}" ; then
+		if adb -s "${SERIAL}" shell test -d "${rmt_full_dir}" ; then
 			rmt_dirs+=("${rmt_full_dir}")
 		fi
-	done < <(adb shell ls -d /storage/*)
+	done < <(adb -s "${SERIAL}" shell ls -d /storage/*)
 
 	mkdir -p "${dst_dir}"
 	while IFS= read -r rmt_file ; do
@@ -64,7 +64,24 @@ function adb_pull_storage()
 		if ! [ -e "${dst_dir}/${rmt_file##*/}" ] ; then
 			adb -s "${SERIAL}" pull "${rmt_file}" "${dst_dir}"
 		fi
-	done < <(adb shell find "${rmt_dirs[@]}" -type f)
+	done < <(adb -s "${SERIAL}" shell find "${rmt_dirs[@]}" -type f)
+}
+
+function adb_push_storage()
+{
+	local  rmt_dir=${1}
+	shift
+
+	echo "-- Push files to ${SERIAL}"
+
+	rmt_dir=/storage/self/primary/${rmt_dir}
+
+	if ! adb -s "${SERIAL}" shell test -d "${rmt_dir}" ; then
+		echo "-- No such remote directory: ${rmt_dir}" >&2
+		exit 1
+	fi
+
+	adb -s "${SERIAL}" push "${@}" "${rmt_dir}"
 }
 
 # -----------------------------------------------------------------------------
@@ -146,6 +163,11 @@ function do_pull_pictures()
 	adb_pull_storage Pictures "${HOME}"/Pictures/"${SERIAL}"
 }
 
+function do_push_download()
+{
+	adb_push_storage Download "${@}"
+}
+
 function do_scrcpy()
 {
 	# Unlock the device
@@ -216,6 +238,7 @@ Porcelain commands:
   pull-camera          Pull camera files.
   pull-download        Pull downloaded files.
   pull-pictures        Pull pictures.
+  push-download        Push files/directories to the download folder.
   scrcpy               Run scrcpy.
   unlock               Unlock device.
 
@@ -247,6 +270,11 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		pull-all|pull-backup|pull-camera|pull-download|pull-pictures|scrcpy|unlock)
 			command=${1}
+			;;
+		push-download)
+			command=${1}
+			shift
+			break
 			;;
 		display-off|display-on|display-state|serials)
 			command=${1}
