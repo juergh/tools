@@ -145,7 +145,7 @@ function do_pull_all()
 
 function do_pull_backup()
 {
-	adb_pull_storage Backup "${HOME}"/Backup/"${SERIAL}"/$(date +'%Y-%m-%d')
+	adb_pull_storage Backup "${HOME}"/Backup/"${SERIAL}"/"$(date +'%Y-%m-%d')"
 }
 
 function do_pull_camera()
