@@ -163,6 +163,15 @@ function do_pull_pictures()
 	adb_pull_storage Pictures "${HOME}"/Pictures/"${SERIAL}"
 }
 
+function do_pull()
+{
+	if [ ${#} -ne 1 ] ; then
+		usage
+		exit 1
+	fi
+	adb_pull_storage "${1}" "${HOME}"/tmp/"${SERIAL}"/"${1}"
+}
+
 function do_push_download()
 {
 	adb_push_storage Download "${@}"
@@ -233,12 +242,13 @@ App commands:
   start APP            Start an app.
 
 Porcelain commands:
-  pull-all             Pull all backup/camera/downloaded files.
-  pull-backup          Pull backup files.
-  pull-camera          Pull camera files.
-  pull-download        Pull downloaded files.
-  pull-pictures        Pull pictures.
-  push-download        Push files/directories to the download folder.
+  pull-all             Pull all Backup/DCIM/Download/Pictures files.
+  pull-backup          Pull files from folder Backup
+  pull-camera          Pull files from folder DCIM.
+  pull-download        Pull files from folder Download.
+  pull-pictures        Pull files from folder Pictures.
+  pull DIR             Pull files from folder <DIR> to ~/tmp/<SERIAL>/<DIR>.
+  push-download        Push files to folder Download.
   scrcpy               Run scrcpy.
   unlock               Unlock device.
 
@@ -270,6 +280,11 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		pull-all|pull-backup|pull-camera|pull-download|pull-pictures|scrcpy|unlock)
 			command=${1}
+			;;
+		pull)
+			command=${1}
+			shift
+			break
 			;;
 		push-download)
 			command=${1}
