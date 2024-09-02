@@ -55,8 +55,13 @@ function print_sru_template()
 
 *** TBD ***
 
-
 EOF
+
+	if [ -n "${VERSION}" ] ; then
+		echo "v${VERSION}:"
+		echo "  -"
+	fi
+	echo
 }
 
 function format_patch()
