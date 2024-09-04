@@ -160,11 +160,12 @@ function print_globals()
 	           COVER_LETTER DRY_RUN TO IN_REPLY_TO a_TARGET a_TOKEN SUBJECT_PREFIX ; do
 		if [ "${var#a_}" != "${var}" ] ; then
 			declare -n vars=${var#a_}
-			printf "%-14s : %s\n" "${var#a_}" "${vars[*]}" >&2
+			printf "%-14s : %s\n" "${var#a_}" "${vars[*]}"
 		else
-			printf "%-14s : %s\n" "${var}" "${!var}" >&2
+			printf "%-14s : %s\n" "${var}" "${!var}"
 		fi
 	done
+	echo
 }
 
 function query_lp_bug()
@@ -600,11 +601,10 @@ if [ "${resend}" -eq 1 ] ; then
 fi
 SUBJECT_PREFIX=${SUBJECT_PREFIX#][}
 
-print_globals
+print_globals >&2
 
 if [ "${cmd}" = "info" ] ; then
 	exit
 fi
 
-echo
 do_"${cmd}" "${@}"
