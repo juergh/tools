@@ -94,7 +94,7 @@ function process_commit()
 		fi
 
 		# Finally process the upstream commit
-		echo "${commit} -> ${upstream} ${subject}"
+		echo "${upstream} <- ${commit} ${subject}"
 		find_fixes "${upstream}"
 	fi
 }
