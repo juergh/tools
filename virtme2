@@ -22,7 +22,7 @@ function run_chroot()
 	if [ -n "${SERIES}" ] ; then
 		pr_info "Run in chroot (${SERIES}):"
 		pr_info "+ ${*}"
-		run-chroot "${SERIES}" -- "${@}"
+		run-chroot cranky--"${SERIES}" -- "${@}"
 	else
 		pr_info "Run:"
 		pr_info "+ ${*}"
