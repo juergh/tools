@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+
+import datetime
+
+from launchpadlib.launchpad import Launchpad
+
+def show(item):
+    print(item)
+    print("attributes:  {}".format(sorted(item.lp_attributes)))
+    print("collections: {}".format(sorted(item.lp_collections)))
+    print("entries:     {}".format(sorted(item.lp_entries)))
+    print("operations:  {}".format(sorted(item.lp_operations)))
+
+def expire_bug(lp_bug, source, dry_run=False):
+    print(f"LP: #{lp_bug.id} -- last updated: {lp_bug.date_last_updated}")
+
+    expired = False
+    first_task = None
+
+    for lp_task in lp_bug.bug_tasks:
+        if lp_task.target.name == source and lp_task.target.distribution.name == "ubuntu":
+            print(f"    {lp_task} -- {lp_task.status}")
+            if not dry_run:
+                lp_task.status = 'Expired'
+                lp_task.lp_save()
+            if not first_task:
+                first_task = lp_task
+            expired = True
+
+    if expired:
+        if not dry_run:
+            lp_bug.newMessage(content="I'm closing this bug due to old age. Please open a new bug if you think the issue still exists.")
+            lp_bug.lp_save()
+        print(f"LP: #{lp_bug.id} -- {first_task.status}")
+        print()
+
+
+# Expire bugs that were last updated 4 years ago and before
+dry_run = False
+days = 4 * 365
+source = "linux-firmware"
+
+
+lp = Launchpad.login_with('tools', 'production', version='devel')
+
+lp_dist = lp.distributions["ubuntu"]
+lp_source = lp_dist.getSourcePackage(name=source)
+
+last_updated_before = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=days)
+
+status = ("New", "Confirmed", "Triaged")
+lp_tasks = lp_source.searchTasks(status=status,
+                                 created_before=last_updated_before,
+                                 omit_duplicates=True)
+for lp_task in lp_tasks:
+    lp_bug = lp_task.bug
+    if lp_bug.date_last_updated < last_updated_before:
+        expire_bug(lp_bug, source, dry_run=dry_run)
