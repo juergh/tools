@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
+import argparse
 import datetime
+import sys
 
 from launchpadlib.launchpad import Launchpad
 
@@ -11,6 +13,10 @@ def show(item):
     print("entries:     {}".format(sorted(item.lp_entries)))
     print("operations:  {}".format(sorted(item.lp_operations)))
 
+
+STATUS = ("New", "Confirmed", "Triaged")
+
+
 def expire_bug(lp_bug, source, dry_run=False):
     print(f"LP: #{lp_bug.id} -- last updated: {lp_bug.date_last_updated}")
 
@@ -20,6 +26,8 @@ def expire_bug(lp_bug, source, dry_run=False):
     for lp_task in lp_bug.bug_tasks:
         if lp_task.target.name == source and lp_task.target.distribution.name == "ubuntu":
             print(f"    {lp_task} -- {lp_task.status}")
+            if lp_task.status not in STATUS:
+                continue
             if not dry_run:
                 lp_task.status = 'Expired'
                 lp_task.lp_save()
@@ -35,24 +43,40 @@ def expire_bug(lp_bug, source, dry_run=False):
         print()
 
 
-# Expire bugs that were last updated 4 years ago and before
-dry_run = False
-days = 4 * 365
-source = "linux-firmware"
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--updated-ago", metavar="DAYS", default=0, type=int,
+                        help="Process bugs last updated DAYS days ago and before")
+    parser.add_argument("source", help="Source package name")
+    parser.add_argument("bug", nargs="*", type=int, help="Launchpad bug number")
+    args = parser.parse_args()
+
+    if bool(args.bug) == bool(args.updated_ago):
+        parser.print_help()
+        sys.exit(2)
+
+    lp = Launchpad.login_with('tools', 'production', version='devel')
+
+    if args.bug:
+        for bug in args.bug:
+            lp_bug = lp.bugs[bug]
+            expire_bug(lp_bug, args.source, dry_run=args.dry_run)
+        sys.exit(0)
+
+    lp_dist = lp.distributions["ubuntu"]
+    lp_source = lp_dist.getSourcePackage(name=args.source)
+
+    last_updated_before = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=args.updated_ago)
+
+    lp_tasks = lp_source.searchTasks(status=STATUS,
+                                     created_before=last_updated_before,
+                                     omit_duplicates=True)
+    for lp_task in lp_tasks:
+        lp_bug = lp_task.bug
+        if lp_bug.date_last_updated < last_updated_before:
+            expire_bug(lp_bug, args.source, dry_run=args.dry_run)
 
 
-lp = Launchpad.login_with('tools', 'production', version='devel')
-
-lp_dist = lp.distributions["ubuntu"]
-lp_source = lp_dist.getSourcePackage(name=source)
-
-last_updated_before = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=days)
-
-status = ("New", "Confirmed", "Triaged")
-lp_tasks = lp_source.searchTasks(status=status,
-                                 created_before=last_updated_before,
-                                 omit_duplicates=True)
-for lp_task in lp_tasks:
-    lp_bug = lp_task.bug
-    if lp_bug.date_last_updated < last_updated_before:
-        expire_bug(lp_bug, source, dry_run=dry_run)
+if __name__ == "__main__":
+    main()
