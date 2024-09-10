@@ -178,9 +178,9 @@ To build a generic Ubuntu kernel:
 Available commands:
   config [CONFIG]    Create kernel config. Supported <CONFIG> values:
                        menu:      Run config menu.
-                       ubuntu:    Use generic Ubuntu configs.
+                       generic:   Use generic Ubuntu configs.
                        raspi:     Use raspi Ubuntu configs.
-                       defconfig: Use arch defconfigs.
+                       *config:   Use upstream arch/<arch>/configs/*config configs.
   make               Build kernel Debian packages.
 
 Optional common arguments:
@@ -326,22 +326,21 @@ case "${cmd}" in
 				run_chroot make menuconfig
 				;;
 
-			ubuntu|raspi|generic|defconfig)
-				if [ "${flavor}" = ubuntu ] ; then
-					flavor=generic
-				fi
+			generic|raspi|*config)
+				case "${flavor}" in
+					generic|raspi)
+						pr_info "Generate Ubuntu config (${arch}, ${flavor})"
+						rm -rf CONFIGS
+						run_chroot fakeroot debian/rules clean
+						run_chroot debian/rules genconfigs || true
 
-				if  [ "${flavor}" = defconfig ] ; then
-					pr_info "Generate defconfigs (${arch})"
-					run_chroot make defconfig
-				else
-					pr_info "Generate Ubuntu config (${arch}, ${flavor})"
-					rm -rf CONFIGS
-					run_chroot fakeroot debian/rules clean
-					run_chroot debian/rules genconfigs || true
-
-					cp CONFIGS/"${arch}"-config.flavour."${flavor}" "${KBUILD_OUTPUT}"/.config
-				fi
+						cp CONFIGS/"${arch}"-config.flavour."${flavor}" "${KBUILD_OUTPUT}"/.config
+						;;
+					*)
+						pr_info "Generate kernel config (${arch}, ${flavor})"
+						run_chroot make "${flavor}"
+						;;
+				esac
 
 				if [ ${module_subset} -eq 1 ] ; then
 					pr_info "Enable only a subset of modules"
