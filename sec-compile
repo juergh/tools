@@ -25,17 +25,38 @@ Usage: sec-compile [-h] init|ubuntuconfig
        sec-compile [-h] ARGS...
 
 Optional arguments:
-  -h, --help  Show this help message and exit.
+  -h, --help           Show this help message and exit.
+  -s, --series SERIES  Ubuntu series name.
 EOF
 }
 
-case "${1:-}" in
-	-h|--help)
-		usage
-		exit
-esac
+SERIES=
 
-SERIES=$(dpkg-parsechangelog -ldebian.master/changelog -SDistribution)
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-s|--series)
+			shift
+			SERIES=${1}
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
+
+if [ $# -eq 0 ] ; then
+	usage
+	exit 1
+fi
+
+if [ -z "${SERIES}" ] ; then
+	SERIES=$(dpkg-parsechangelog -ldebian.master/changelog -SDistribution)
+fi
 if [ -z "${SERIES}" ] ; then
 	echo "Failed to determine series" >&2
 	exit 1
