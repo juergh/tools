@@ -3,6 +3,8 @@
 # List unreleased commits on linux-firmware branches
 #
 
+git fetch origin
+
 while IFS= read -r branch ; do
 	echo "-- $branch"
 	if ! git rev-parse "${branch}" &>/dev/null ; then
@@ -21,6 +23,7 @@ while IFS= read -r branch ; do
 	tag=Ubuntu-${version}
 
 	git --no-pager log --oneline "${tag}".."${branch}"
+	git --no-pager log --oneline "${branch}"..origin/"${branch}"
 	echo
 done < <(
 	{
