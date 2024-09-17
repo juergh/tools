@@ -13,7 +13,7 @@ function run_chroot()
 	run-chroot cranky--"${CHROOT}" -- "${@}"
 }
 
-function minimal_modules_raspi()
+function modules_raspi()
 {
 	cat <<EOF
 8021q
@@ -140,8 +140,9 @@ zstd
 EOF
 }
 
-function minimal_modules_libvirt()
+function modules_libvirt()
 {
+	# Stamdard modules
 	cat <<EOF
 aes_x86_64
 aesni_intel
@@ -177,6 +178,7 @@ iw_cm
 joydev
 kvm
 kvm_amd
+kvm_intel
 libcrc32c
 libiscsi
 libiscsi_tcp
@@ -207,8 +209,113 @@ x_tables
 xor
 zstd_compress
 EOF
-}
 
+	# Manually loaded by kernel selftests
+	cat <<EOF
+act_bpf
+act_connmark
+act_csum
+act_ct
+act_ctinfo
+act_gact
+act_gate
+act_mirred
+act_mpls
+act_nat
+act_pedit
+act_police
+act_sample
+act_simple
+act_skbedit
+act_skbmod
+act_tunnel_key
+act_vlan
+adi
+amd-pstate-ut
+br_netfilter
+cls_basic
+cls_bpf
+cls_cgroup
+cls_flow
+cls_flower
+cls_fw
+cls_matchall
+cls_route
+cls_u32
+configs
+dummy
+em_canid
+em_cmp
+em_ipset
+em_ipt
+em_meta
+em_nbyte
+em_text
+em_u32
+fou
+fou6
+ftrace-direct
+ftrace-direct-too
+geneve
+gpio-sim
+i915
+ifb
+intel_sdsi
+ip6_tunnel
+ip6table_filter
+ip_vs
+ipip
+lkdtm
+memory-notifier-error-inject
+mpls_gso
+mpls_iptunnel
+netdevsim
+nf_conntrack
+nf_conntrack_ipv6
+nf_defrag_ipv6
+ntb_msi_test
+ntb_perf
+ntb_pingpong
+ntb_tool
+ntb_transport
+rc-loopback
+sch_cake
+sch_cbs
+sch_choke
+sch_codel
+sch_drr
+sch_etf
+sch_ets
+sch_fq
+sch_fq_codel
+sch_fq_pie
+sch_gred
+sch_hfsc
+sch_hhf
+sch_htb
+sch_teql
+sctp
+sctp_diag
+test-drm_mm
+test-ww_mutex
+test_blackhole_dev
+test_bpf
+test_firmware
+test_fpu
+test_module
+test_static_key_base
+test_static_keys
+test_user_copy
+trace-printk
+tun
+udp_tunnel
+usbip_host
+vhci_hcd
+vrf
+vxlan
+zram
+EOF
+}
 
 function syz_configs()
 {
@@ -262,9 +369,9 @@ Optional common arguments:
   -jX                Number of jobs, default one per CPU.
 
 Optional arguments for 'config' command:
-  --lsmod LSMOD      Build modules listed in <LSMOD>.
-  --min TARGET       Build a minimal set of hard-coded modules. Supported
-                     <TARGET> values: libvirt, raspi.
+  --lsmod LSMOD      Enable modules listed in <LSMOD>.
+  --mod-libvirt      Enable a minimal set of modules for libvirt.
+  --mod-raspi        Enable a minimal set of modules for raspi.
   --syz              Enable config options for syzcaller.
 EOF
 }
@@ -276,7 +383,8 @@ jobs=$(getconf _NPROCESSORS_ONLN)
 lsmod=
 cmd=
 flavor=
-min=
+mod_libvirt=0
+mod_raspi=0
 syz=0
 
 module_subset=0
@@ -311,9 +419,12 @@ while [ ${#} -gt 0 ] ; do
 			lsmod=${1}
 			module_subset=1
 			;;
-		--min)
-			shift
-			min=${1}
+		--mod-libvirt)
+			mod_libvirt=1
+			module_subset=1
+			;;
+		--mod-raspi)
+			mod_raspi=1
 			module_subset=1
 			;;
 		--syz)
@@ -422,16 +533,13 @@ case "${cmd}" in
 						echo "Module" > "${lsmod}"
 					fi
 
-					case "${min}" in
-						"") ;;
-						raspi|libvirt)
-							minimal_modules_"${min}" >> "${lsmod}"
-							;;
-						*)
-							pr_error "Invalid min option: ${min}"
-							exit 1
-							;;
-					esac
+					if [ ${mod_libvirt} -eq 1 ] ; then
+						modules_libvirt >> "${lsmod}"
+					fi
+
+					if [ ${mod_raspi} -eq 1 ] ; then
+						modules_raspi >> "${lsmod}"
+					fi
 
 					run_chroot make LSMOD="$(realpath -e "${lsmod}")" localmodconfig
 				fi
@@ -439,6 +547,12 @@ case "${cmd}" in
 				if [ ${syz} -eq 1 ] ; then
 					pr_info "Set syzcaller configs"
 					syz_configs >> "${KBUILD_OUTPUT}"/.config
+				fi
+
+				if true ; then
+					pr_info "Disable debug package build"
+					sed -i '/CONFIG_DEBUG_INFO/d' "${KBUILD_OUTPUT}"/.config
+					echo "# CONFIG_DEBUG_INFO is not set" >>  "${KBUILD_OUTPUT}"/.config
 				fi
 
 				run_chroot make olddefconfig
