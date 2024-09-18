@@ -29,6 +29,7 @@ PKG_FIELDS = (
     "source.backport",
     "source.invalid-tasks",
     "source.versions",
+    "source.routing",
     # Package
     "package.format",  # deb or snap
     "package.name",
@@ -66,6 +67,13 @@ def parse_kernel_series(ks):
         codename = series_data.get("codename")
         if not codename:
             continue
+
+        # Fully mapped routing table for this series
+        routing_table = series_data.get("routing-table", {})
+        routing_map = series_data.get("routing-map", {})
+        for key, val in routing_map.items():
+            routing_table[key] = routing_table[val]
+
         series_entry = {
             "series.yymm": series,
             "series.name": codename,
@@ -76,6 +84,18 @@ def parse_kernel_series(ks):
         }
 
         for source, source_data in series_data.get("sources", {}).items():
+            # Source package routing
+            routing = source_data.get("routing", "default")
+            if isinstance(routing, str):
+                routing = routing_table[routing]
+            routing_list = []
+            for key, val in routing.items():
+                if val:
+                    for v in val:
+                        routing_list.append(f"{key}|{'|'.join(v)}")
+            if not routing_list:
+                routing_list = ["-"]
+
             source_entry = {
                 "source.name": source,
                 "source.owner": source_data.get("owner"),
@@ -87,6 +107,7 @@ def parse_kernel_series(ks):
                     source_data.get("invalid-tasks", ["-"])
                 ),
                 "source.versions": ",".join(source_data.get("versions", ["-"])),
+                "source.routing": ",".join(routing_list),
             }
 
             for key in ("packages", "snaps"):
