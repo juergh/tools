@@ -35,6 +35,9 @@ mv "${log}" "${log}".1
 	header "Run find-fixes"
 	"${d}"/tools/find-fixes --branch master "${d}"/linux.git "${d}"/linux.fixes
 
+	header "Run linux-fixes"
+	"${d}"/tools/linux-fixes add "${d}"/linux-fixes.json.gz "${d}"/linux.git master
+
 	header "Run cranky-update-sessions"
 	"${d}"/tools/cranky-update-sessions
 
