@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+
+import gzip
+import json
+import os
+import re
+
+import click
+import git
+
+RE_FIXES = re.compile(r"^\s*Fixes:.*\b([0-9a-f]{8,})\b")
+
+
+class Commit:
+    def __init__(self, commit, fixed_by=None):
+        self.sha = commit.hexsha
+        self.subject = commit.summary
+        self.fixes_tags = []
+        self.fixes = []
+        self.fixed_by = [fixed_by]
+
+        if not fixed_by:
+            for line in commit.message.split("\n"):
+                m = RE_FIXES.match(line)
+                if m:
+                    self.fixes_tags.append(line)
+                    try:
+                        fixes_sha = m.group(1)
+                        fixes_commit = commit.repo.commit(fixes_sha)
+                        self.fixes.append(Commit(fixes_commit, fixed_by=self))
+                    except git.BadName:
+                        # Invalid SHA
+                        pass
+                    except ValueError:
+                        # fatal: bad object <SHA>
+                        pass
+
+    def to_dict(self):
+        return {
+            "sha": self.sha,
+            "subject": self.subject,
+            "fixes-tags": self.fixes_tags,
+            "fixes": [c.sha for c in self.fixes],
+            "fixed-by": [(c.sha if c else None) for c in self.fixed_by],
+        }
+
+
+class DataBase:
+    def __init__(self):
+        self.db = {}
+
+    @property
+    def head(self):
+        return self.db.get("HEAD")
+
+    @head.setter
+    def head(self, value):
+        self.db["HEAD"] = value
+
+    def load(self, filename):
+        if os.path.exists(filename):
+            with gzip.open(filename, "rt", encoding="utf-8") as fh:
+                self.db = json.load(fh)
+
+    def save(self, filename):
+        with gzip.open(filename, "wt", encoding="utf-8") as fh:
+            json.dump(self.db, fh, ensure_ascii=False)
+
+    def _add_commit(self, commit):
+        sha = commit.sha
+        if sha in self.db:
+            cur = self.db[sha]
+            new = commit.to_dict()
+            for key in ["fixes-tags", "fixes", "fixed-by"]:
+                cur[key].extend(new[key])
+                cur[key] = list(set(cur[key]))
+            self.db[sha] = cur
+        else:
+            self.db[sha] = commit.to_dict()
+
+    def add_commit(self, commit):
+        # Add the commit itself plus any fixes commits
+        for c in [commit] + commit.fixes:
+            self._add_commit(c)
+
+    def dump(self):
+        print(json.dumps(self.db, indent=4))
+
+
+@click.group()
+def cli():
+    pass
+
+
+@cli.command()
+@click.argument("fixes-file")
+@click.argument("repo-dir")
+@click.argument("branch", default="main")
+def add(fixes_file, repo_dir, branch):
+    """Find commits with 'Fixes:' tags in the provided git repository and add them to the provided fixes file."""
+    db = DataBase()
+    db.load(fixes_file)
+
+    if db.head:
+        rev_range = f"{db.head}..{branch}"
+        reverse = False
+    else:
+        rev_range = branch
+        reverse = True
+
+    print(f"fixes-file: {fixes_file}")
+    print(f"repo-dir:   {repo_dir}")
+    print(f"rev-range:  {rev_range}")
+
+    repo = git.Repo(repo_dir)
+    for c in repo.iter_commits(rev_range, reverse=reverse, max_parents=1):
+        commit = Commit(c)
+        print(f'{commit.sha} ("{commit.subject}")')
+        if commit.fixes_tags:
+            db.add_commit(commit)
+
+    # Store the current HEAD
+    db.head = repo.commit(branch).hexsha
+
+    # Save the DB back
+    db.save(fixes_file)
+
+
+@cli.command()
+@click.argument("fixes-file")
+def dump(fixes_file):
+    """Dump the fixes file to stdout."""
+    db = DataBase()
+    db.load(fixes_file)
+    db.dump()
+
+
+if __name__ == "__main__":
+    cli()
