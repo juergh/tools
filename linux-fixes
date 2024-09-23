@@ -74,6 +74,11 @@ class Commit:
                 return True
         return False
 
+    def print(self, format="oneline", indent=0):
+        """Pretty print the commit"""
+        indent = " " * indent * self.level
+        print(f"{indent}{self.sha[:12]} {self.subject}")
+
 
 class DataBase:
     def __init__(self):
@@ -170,7 +175,7 @@ def add(fixes_file, repo_dir, branch):
     repo = git.Repo(repo_dir)
     for c in repo.iter_commits(rev_range, reverse=reverse, max_parents=1):
         commit = Commit().from_commit(c)
-        print(f'{commit.sha} ("{commit.subject}")')
+        commit.print()
         if commit.fixes_tags:
             db.add_commit(commit)
 
@@ -201,9 +206,7 @@ def fixes(indent, recursive, fixes_file, commit):
     db.load(fixes_file)
 
     for fix_commit in db.fix_commits(commit, recursive=recursive):
-        print(
-            f"{' '*indent*fix_commit.level}{fix_commit.sha[:12]} {fix_commit.subject}"
-        )
+        fix_commit.print(indent=indent)
 
 
 if __name__ == "__main__":
