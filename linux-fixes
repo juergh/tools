@@ -11,6 +11,18 @@ import git
 RE_FIXES = re.compile(r"^\s*Fixes:.*\b([0-9a-f]{8,})\b")
 
 
+def contains_sha(sha_list, sha):
+    if len(sha) == 40:
+        if sha in sha_list:
+            return True
+        return False
+
+    for s in sha_list:
+        if s.startswith(sha):
+            return True
+    return False
+
+
 class Commit:
     def __init__(self, commit, fixed_by=None):
         self.sha = commit.hexsha
@@ -86,6 +98,23 @@ class DataBase:
     def dump(self):
         print(json.dumps(self.db, indent=4))
 
+    def fix_commits(self, sha, recursive=False):
+        """Return the list of commits that fix the provided commit"""
+        result = []
+        for key, commit in self.db.items():
+            if key == "HEAD" or commit in result:
+                continue
+
+            if contains_sha(commit["fixes"], sha):
+                result.append(commit)
+
+                if recursive:
+                    for f in self.fix_commits(commit["sha"], recursive=True):
+                        if f not in result:
+                            result.append(f)
+
+        return result
+
 
 @click.group()
 def cli():
@@ -133,6 +162,20 @@ def dump(fixes_file):
     db = DataBase()
     db.load(fixes_file)
     db.dump()
+
+
+@cli.command()
+@click.option("--recursive/--no-recursive", default=True)
+@click.argument("fixes-file")
+@click.argument("commit")
+def fixes(recursive, fixes_file, commit):
+    """List commits that fix the provided commit."""
+    db = DataBase()
+    db.load(fixes_file)
+
+    fixes = db.fix_commits(commit, recursive=recursive)
+    for f in fixes:
+        print(f"{f['sha'][:12]} {f['subject']}")
 
 
 if __name__ == "__main__":
