@@ -4,6 +4,7 @@ import gzip
 import json
 import os
 import re
+import sys
 
 import click
 import git
@@ -209,5 +210,39 @@ def fixes(indent, recursive, fixes_file, commit):
         fix_commit.print(indent=indent)
 
 
+@cli.command(context_settings={"ignore_unknown_options": True})
+@click.option("--indent", type=int, default=0)
+@click.option("--recursive/--no-recursive", default=True)
+@click.argument("fixes-file")
+@click.argument("args", nargs=-1)
+def log(indent, recursive, fixes_file, args):
+    """List commits and their fixes in the provided rev range."""
+    if not args:
+        args = ["HEAD"]
+
+    if "---" in args:
+        idx = args.index("---")
+        rev_range = args[:idx]
+        paths = args[(idx + 1):]
+    else:
+        rev_range = args
+        paths = []
+
+    print(f"rev-range: {rev_range}")
+    print(f"paths:     {paths}")
+
+    db = DataBase()
+    db.load(fixes_file)
+
+    repo = git.Repo(".")
+    for c in repo.iter_commits(rev_range, paths=paths):
+        commit = Commit().from_commit(c)
+        commit.print()
+
+        for fix_commit in db.fix_commits(commit.sha, recursive=recursive):
+            fix_commit.print(indent=indent)
+
+
 if __name__ == "__main__":
+    sys.argv = ["---" if a == "--" else a for a in sys.argv]
     cli()
