@@ -11,27 +11,22 @@ import git
 RE_FIXES = re.compile(r"^\s*Fixes:.*\b([0-9a-f]{8,})\b")
 
 
-def contains_sha(sha_list, sha):
-    if len(sha) == 40:
-        if sha in sha_list:
-            return True
-        return False
-
-    for s in sha_list:
-        if s.startswith(sha):
-            return True
-    return False
-
-
 class Commit:
-    def __init__(self, commit, fixed_by=None):
+    sha = None
+    subject = None
+    fixes_tags = []
+    fixes = []
+    fixed_by = []
+    level = 0
+
+    def from_commit(self, commit, fixed_by=None):
+        """Load the object data from the provided GitPython commit object"""
         self.sha = commit.hexsha
         self.subject = commit.summary
-        self.fixes_tags = []
-        self.fixes = []
-        self.fixed_by = [fixed_by]
 
-        if not fixed_by:
+        if fixed_by:
+            self.fixed_by = [fixed_by]
+        else:
             for line in commit.message.split("\n"):
                 m = RE_FIXES.match(line)
                 if m:
@@ -39,15 +34,26 @@ class Commit:
                     try:
                         fixes_sha = m.group(1)
                         fixes_commit = commit.repo.commit(fixes_sha)
-                        self.fixes.append(Commit(fixes_commit, fixed_by=self))
+                        self.fixes.append(Commit().from_commit(commit, fixed_by=self))
                     except git.BadName:
                         # Invalid SHA
                         pass
                     except ValueError:
                         # fatal: bad object <SHA>
                         pass
+        return self
+
+    def from_dict(self, cdict):
+        """Load the object data from the provided dict"""
+        self.sha = cdict["sha"]
+        self.subject = cdict["subject"]
+        self.fixes_tags = cdict["fixes-tags"]
+        self.fixes = cdict["fixes"]
+        self.fixed_by = cdict["fixed-by"]
+        return self
 
     def to_dict(self):
+        """Return the object data as a dict"""
         return {
             "sha": self.sha,
             "subject": self.subject,
@@ -55,6 +61,18 @@ class Commit:
             "fixes": [c.sha for c in self.fixes],
             "fixed-by": [(c.sha if c else None) for c in self.fixed_by],
         }
+
+    def does_fix(self, sha):
+        """Check if this commit fixes the provided commit"""
+        if len(sha) == 40:
+            if sha in self.fixes:
+                return True
+            return False
+
+        for f in self.fixes:
+            if f.startswith(sha):
+                return True
+        return False
 
 
 class DataBase:
@@ -100,21 +118,28 @@ class DataBase:
 
     def fix_commits(self, sha, recursive=False, level=0):
         """Return the list of commits that fix the provided commit"""
-        result = []
-        for key, commit in self.db.items():
-            if key == "HEAD" or commit in result:
+        sha_list = []
+        fix_list = []
+        for key, val in self.db.items():
+            if key == "HEAD":
                 continue
 
-            if contains_sha(commit["fixes"], sha):
-                commit["level"] = level
-                result.append(commit)
+            commit = Commit().from_dict(val)
+            if commit.sha in sha_list or not commit.does_fix(sha):
+                continue
 
-                if recursive:
-                    for f in self.fix_commits(commit["sha"], recursive=True, level=level+1):
-                        if f not in result:
-                            result.append(f)
+            sha_list.append(commit.sha)
+            commit.level = level
+            fix_list.append(commit)
 
-        return result
+            if recursive:
+                for fix in self.fix_commits(
+                    commit.sha, recursive=True, level=level + 1
+                ):
+                    if fix.sha not in sha_list:
+                        fix_list.append(fix)
+
+        return fix_list
 
 
 @click.group()
@@ -144,7 +169,7 @@ def add(fixes_file, repo_dir, branch):
 
     repo = git.Repo(repo_dir)
     for c in repo.iter_commits(rev_range, reverse=reverse, max_parents=1):
-        commit = Commit(c)
+        commit = Commit().from_commit(c)
         print(f'{commit.sha} ("{commit.subject}")')
         if commit.fixes_tags:
             db.add_commit(commit)
@@ -175,9 +200,10 @@ def fixes(indent, recursive, fixes_file, commit):
     db = DataBase()
     db.load(fixes_file)
 
-    fixes = db.fix_commits(commit, recursive=recursive)
-    for f in fixes:
-        print(f"{' '*indent*f['level']}{f['sha'][:12]} {f['subject']}")
+    for fix_commit in db.fix_commits(commit, recursive=recursive):
+        print(
+            f"{' '*indent*fix_commit.level}{fix_commit.sha[:12]} {fix_commit.subject}"
+        )
 
 
 if __name__ == "__main__":
