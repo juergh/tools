@@ -34,7 +34,7 @@ class Commit:
                     try:
                         fixes_sha = m.group(1)
                         fixes_commit = commit.repo.commit(fixes_sha)
-                        self.fixes.append(Commit().from_commit(commit, fixed_by=self))
+                        self.fixes.append(Commit().from_commit(fixes_commit, fixed_by=self))
                     except git.BadName:
                         # Invalid SHA
                         pass
@@ -74,7 +74,7 @@ class Commit:
                 return True
         return False
 
-    def print(self, format="oneline", indent=0):
+    def print(self, indent=0):
         """Pretty print the commit"""
         indent = " " * indent * self.level
         print(f"{indent}{self.sha[:12]} {self.subject}")
