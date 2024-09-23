@@ -98,7 +98,7 @@ class DataBase:
     def dump(self):
         print(json.dumps(self.db, indent=4))
 
-    def fix_commits(self, sha, recursive=False):
+    def fix_commits(self, sha, recursive=False, level=0):
         """Return the list of commits that fix the provided commit"""
         result = []
         for key, commit in self.db.items():
@@ -106,10 +106,11 @@ class DataBase:
                 continue
 
             if contains_sha(commit["fixes"], sha):
+                commit["level"] = level
                 result.append(commit)
 
                 if recursive:
-                    for f in self.fix_commits(commit["sha"], recursive=True):
+                    for f in self.fix_commits(commit["sha"], recursive=True, level=level+1):
                         if f not in result:
                             result.append(f)
 
@@ -165,17 +166,18 @@ def dump(fixes_file):
 
 
 @cli.command()
+@click.option("--indent", type=int, default=0)
 @click.option("--recursive/--no-recursive", default=True)
 @click.argument("fixes-file")
 @click.argument("commit")
-def fixes(recursive, fixes_file, commit):
+def fixes(indent, recursive, fixes_file, commit):
     """List commits that fix the provided commit."""
     db = DataBase()
     db.load(fixes_file)
 
     fixes = db.fix_commits(commit, recursive=recursive)
     for f in fixes:
-        print(f"{f['sha'][:12]} {f['subject']}")
+        print(f"{' '*indent*f['level']}{f['sha'][:12]} {f['subject']}")
 
 
 if __name__ == "__main__":
