@@ -263,13 +263,30 @@ def log(indent, recursive, fixes_file, args):
     db = DataBase()
     db.load(fixes_file)
 
+    sha_list = []
+
     repo = git.Repo(".")
     for c in repo.iter_commits(rev_range, paths=paths):
         commit = Commit().from_commit(c)
-        commit.print()
 
-        for fix_commit in db.fix_commits(commit.sha, recursive=recursive):
-            fix_commit.print(indent=indent)
+        sha_list.append(commit.sha)
+
+        # Color-print the current commit
+        color = "yellow"
+        for sha in commit.fixed_by:
+            color = "green"
+            if sha not in sha_list:
+                color = "red"
+                break
+        commit.print(color=color)
+
+        for fix_commit in db.fix_commits(commit.sha, recursive=recursive, level=1):
+            # Color-print the fix commit
+            if fix_commit.sha in sha_list:
+                color = "green"
+            else:
+                color = "red"
+            fix_commit.print(indent=indent, color=color)
 
 
 if __name__ == "__main__":
