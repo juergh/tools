@@ -12,13 +12,31 @@ import git
 RE_FIXES = re.compile(r"^\s*Fixes:.*\b([0-9a-f]{8,})\b")
 
 
+class CommitCache:
+    cache = {}
+
+    def lookup(self, sha, repo=None):
+        if sha not in self.cache and repo:
+            try:
+                self.cache[sha] = repo.commit(sha)
+            except git.BadName:
+                # Invalid SHA
+                pass
+            except ValueError:
+                # fatal: bad object <SHA>
+                pass
+        return self.cache.get(sha)
+
+
+CC = CommitCache()
+
+
 class Commit:
     sha = None
     subject = None
     fixes_tags = []
-    fixes_commits = []  # List of GitPython commits
-    fixes = []  # List of SHAs
-    fixed_by = []  # List of SHAs
+    fixes = []
+    fixed_by = []
     level = 0
 
     def from_commit(self, commit, fixed_by=None):
@@ -33,19 +51,10 @@ class Commit:
                 m = RE_FIXES.match(line)
                 if m:
                     self.fixes_tags.append(line)
-                    try:
-                        fixes_sha = m.group(1)
-                        fixes_commit = commit.repo.commit(fixes_sha)
+                    fixes_sha = m.group(1)
+                    fixes_commit = CC.lookup(fixes_sha, repo=commit.repo)
+                    if fixes_commit:
                         self.fixes.append(fixes_commit.hexsha)
-                        self.fixes_commits.append(
-                            Commit().from_commit(fixes_commit, fixed_by=self.sha)
-                        )
-                    except git.BadName:
-                        # Invalid SHA
-                        pass
-                    except ValueError:
-                        # fatal: bad object <SHA>
-                        pass
         return self
 
     def from_dict(self, cdict):
@@ -111,6 +120,7 @@ class DataBase:
         self.db["HEAD"] = value
 
     def load(self, filename):
+        """Load the database from file"""
         if os.path.exists(filename):
             with gzip.open(filename, "rt", encoding="utf-8") as fh:
                 self.db = json.load(fh)
@@ -118,10 +128,12 @@ class DataBase:
             print(f"W: Database file does not exist: {filename}", file=sys.stderr)
 
     def save(self, filename):
+        """Save the database to file"""
         with gzip.open(filename, "wt", encoding="utf-8") as fh:
             json.dump(self.db, fh, ensure_ascii=False)
 
     def _add_commit(self, commit):
+        """Add a single commit to the database"""
         sha = commit.sha
         if sha in self.db:
             cur = self.db[sha]
@@ -133,9 +145,11 @@ class DataBase:
             self.db[sha] = commit.to_dict()
 
     def add_commit(self, commit):
-        # Add the commit itself plus any fixes commits
-        for c in [commit] + commit.fixes_commits:
-            self._add_commit(c)
+        """Add the provided commits plus any commits it fixes"""
+        self._add_commit(commit)
+        for sha in commit.fixes:
+            fixes_commit = Commit().from_commit(CC.lookup(sha), fixed_by=commit.sha)
+            self._add_commit(fixes_commit)
 
     def commit(self, sha):
         """Return the commit with the provided SHA"""
