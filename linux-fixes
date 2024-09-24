@@ -22,6 +22,20 @@ def list_fixes(sha, db, level=0):
         yield from list_fixes(fixed_by_sha, db, level=level + 1)
 
 
+def print_commit(commit, indent=0, color=None):
+    """Pretty print a commit"""
+    colors = {
+        "red": "\033[31m",
+        "green": "\033[32m",
+        "yellow": "\033[33m",
+    }
+    cc = colors.get(color, "")
+    nc = "" if cc == "" else "\033[0m"
+
+    sys.stdout.write(f"{' ' * indent}{cc}{commit.hexsha[:12]}{nc} {commit.summary}\n")
+    sys.stdout.flush()
+
+
 class CommitCache:
     cache = {}
 
@@ -48,10 +62,16 @@ class Commit:
     fixes = []
     fixed_by = []
 
+    hexsha = None
+    summary = None
+
     def from_commit(self, commit, fixed_by=None):
         """Load the object data from the provided GitPython commit object"""
         self.sha = commit.hexsha
         self.subject = commit.summary
+
+        self.hexsha = self.sha
+        self.summary = self.subject
 
         if fixed_by:
             self.fixed_by = [fixed_by]
@@ -73,6 +93,10 @@ class Commit:
         self.fixes_tags = cdict.get("fixes-tags", self.fixes_tags)
         self.fixes = cdict.get("fixes", self.fixes)
         self.fixed_by = cdict.get("fixed-by", self.fixed_by)
+
+        self.hexsha = self.sha
+        self.summary = self.subject
+
         return self
 
     def to_dict(self):
@@ -84,19 +108,6 @@ class Commit:
             "fixes": self.fixes,
             "fixed-by": self.fixed_by,
         }
-
-    def print(self, indent=0, color=None):
-        """Pretty print the commit"""
-        colors = {
-            "red": "\033[31m",
-            "green": "\033[32m",
-            "yellow": "\033[33m",
-        }
-        cc = colors.get(color, "")
-        nc = "" if cc == "" else "\033[0m"
-
-        sys.stdout.write(f"{' ' * indent}{cc}{self.sha[:12]}{nc} {self.subject}\n")
-        sys.stdout.flush()
 
     def dump(self):
         """Dump the object data to stdout"""
@@ -141,7 +152,7 @@ class DataBase:
             self.db[sha] = commit.to_dict()
 
     def add_commit(self, commit):
-        """Add the provided commits plus any commits it fixes"""
+        """Add the provided commit plus any commits it fixes"""
         self._add_commit(commit)
         for sha in commit.fixes:
             fixes_commit = Commit().from_commit(CC.lookup(sha), fixed_by=commit.sha)
@@ -193,7 +204,7 @@ def add(ctx, dry_run, repo_dir, branch):
     repo = git.Repo(repo_dir)
     for c in repo.iter_commits(rev_range, reverse=reverse, max_parents=1):
         commit = Commit().from_commit(c)
-        commit.print()
+        print_commit(commit)
         if commit.fixes_tags:
             db.add_commit(commit)
 
@@ -238,8 +249,7 @@ def fixes(ctx, indent, commit_sha):
     db.load(fixes_file)
 
     for commit, level in list_fixes(commit_sha, db):
-        print(f"{' ' * level * indent}", end="")
-        commit.print()
+        print_commit(commit, indent=level * indent)
 
 
 @cli.command(context_settings={"ignore_unknown_options": True})
