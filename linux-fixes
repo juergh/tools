@@ -209,20 +209,20 @@ def add(ctx, dry_run, repo_dir, branch):
 
 
 @cli.command()
-@click.argument("commit", nargs=-1)
+@click.argument("commit-sha", nargs=-1)
 @click.pass_context
-def dump(ctx, commit):
+def dump(ctx, commit_sha):
     """Dump the fixes file to stdout."""
     fixes_file = ctx.obj["fixes_file"]
     db = DataBase()
     db.load(fixes_file)
 
-    if not commit:
+    if not commit_sha:
         # Dump the whole database
         db.dump()
         return
 
-    for sha in commit:
+    for sha in commit_sha:
         # Dump the commits with the provided SHAs
         db.commit(sha).dump()
 
