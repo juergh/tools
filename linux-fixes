@@ -16,8 +16,9 @@ class Commit:
     sha = None
     subject = None
     fixes_tags = []
-    fixes = []
-    fixed_by = []
+    fixes_commits = []  # List of GitPython commits
+    fixes = []  # List of SHAs
+    fixed_by = []  # List of SHAs
     level = 0
 
     def from_commit(self, commit, fixed_by=None):
@@ -35,8 +36,9 @@ class Commit:
                     try:
                         fixes_sha = m.group(1)
                         fixes_commit = commit.repo.commit(fixes_sha)
-                        self.fixes.append(
-                            Commit().from_commit(fixes_commit, fixed_by=self)
+                        self.fixes.append(fixes_commit.hexsha)
+                        self.fixes_commits.append(
+                            Commit().from_commit(fixes_commit, fixed_by=self.sha)
                         )
                     except git.BadName:
                         # Invalid SHA
@@ -48,11 +50,11 @@ class Commit:
 
     def from_dict(self, cdict):
         """Load the object data from the provided dict"""
-        self.sha = cdict["sha"]
-        self.subject = cdict["subject"]
-        self.fixes_tags = cdict["fixes-tags"]
-        self.fixes = cdict["fixes"]
-        self.fixed_by = cdict["fixed-by"]
+        self.sha = cdict.get("sha", self.sha)
+        self.subject = cdict.get("subject", self.subject)
+        self.fixes_tags = cdict.get("fixes-tags", self.fixes_tags)
+        self.fixes = cdict.get("fixes", self.fixes)
+        self.fixed_by = cdict.get("fixed-by", self.fixed_by)
         return self
 
     def to_dict(self):
@@ -61,8 +63,8 @@ class Commit:
             "sha": self.sha,
             "subject": self.subject,
             "fixes-tags": self.fixes_tags,
-            "fixes": [c.sha for c in self.fixes],
-            "fixed-by": [(c.sha if c else None) for c in self.fixed_by],
+            "fixes": self.fixes,
+            "fixed-by": self.fixed_by,
         }
 
     def does_fix(self, sha):
@@ -128,7 +130,7 @@ class DataBase:
 
     def add_commit(self, commit):
         # Add the commit itself plus any fixes commits
-        for c in [commit] + commit.fixes:
+        for c in [commit] + commit.fixes_commits:
             self._add_commit(c)
 
     def show_commit(self, sha, indent=4):
