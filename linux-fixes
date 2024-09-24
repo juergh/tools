@@ -93,6 +93,10 @@ class Commit:
         sys.stdout.write(f"{indent}{cc}{self.sha[:12]}{nc} {self.subject}\n")
         sys.stdout.flush()
 
+    def dump(self):
+        """Dump the object data to stdout"""
+        print(json.dumps(self.to_dict(), indent=4))
+
 
 class DataBase:
     def __init__(self):
@@ -133,16 +137,17 @@ class DataBase:
         for c in [commit] + commit.fixes_commits:
             self._add_commit(c)
 
-    def show_commit(self, sha, indent=4):
-        """Print the commit with the provided SHA"""
+    def commit(self, sha):
+        """Return the commit with the provided SHA"""
         if len(sha) != 40:
             for key in self.db.keys():
                 if key.startswith(sha):
                     sha = key
                     break
-        print(json.dumps(self.db.get(sha, {}), indent=indent))
+        return Commit().from_dict(self.db.get(sha, {}))
 
     def dump(self):
+        """Dump the database to stdout"""
         print(json.dumps(self.db, indent=4))
 
     def fix_commits(self, sha, recursive=False, level=0):
@@ -214,24 +219,22 @@ def add(ctx, repo_dir, branch):
 
 
 @cli.command()
-@click.argument("commit")
+@click.argument("commit", nargs=-1)
 @click.pass_context
-def show(ctx, commit):
-    """Show the provided commit."""
-    fixes_file = ctx.obj["fixes_file"]
-    db = DataBase()
-    db.load(fixes_file)
-    db.show_commit(commit)
-
-
-@cli.command()
-@click.pass_context
-def dump(ctx):
+def dump(ctx, commit):
     """Dump the fixes file to stdout."""
     fixes_file = ctx.obj["fixes_file"]
     db = DataBase()
     db.load(fixes_file)
-    db.dump()
+
+    if not commit:
+        # Dump the whole database
+        db.dump()
+        return
+
+    for sha in commit:
+        # Dump the commits with the provided SHAs
+        db.commit(sha).dump()
 
 
 @cli.command()
