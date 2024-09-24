@@ -108,8 +108,7 @@ class DataBase:
             cur = self.db[sha]
             new = commit.to_dict()
             for key in ["fixes-tags", "fixes", "fixed-by"]:
-                cur[key].extend(new[key])
-                cur[key] = list(set(cur[key]))
+                cur[key] = list(set(cur[key] + new[key]))
             self.db[sha] = cur
         else:
             self.db[sha] = commit.to_dict()
