@@ -170,10 +170,11 @@ def cli(ctx, fixes_file):
 
 
 @cli.command()
+@click.option("--dry-run/--no-dry-run", help="Don't save any changes.")
 @click.argument("repo-dir")
 @click.argument("branch", default="main")
 @click.pass_context
-def add(ctx, repo_dir, branch):
+def add(ctx, dry_run, repo_dir, branch):
     """Find commits with 'Fixes:' tags in the provided git repository and add them to the provided fixes file."""
     fixes_file = ctx.obj["fixes_file"]
     db = DataBase()
@@ -198,6 +199,10 @@ def add(ctx, repo_dir, branch):
 
     # Store the current HEAD
     db.head = repo.commit(branch).hexsha
+
+    if dry_run:
+        print("(dry-run) Not saving any changes")
+        return
 
     # Save the DB back
     db.save(fixes_file)
