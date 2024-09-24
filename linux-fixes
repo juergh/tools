@@ -173,11 +173,17 @@ class DataBase:
 
 
 @click.group()
+@click.option("--verbose/--no-verbose")
 @click.argument("fixes-file")
 @click.pass_context
-def cli(ctx, fixes_file):
-    print(f"fixes-file: {fixes_file}")
-    ctx.obj = {"fixes_file": fixes_file}
+def cli(ctx, verbose, fixes_file):
+    if verbose:
+        print(f"fixes-file: {fixes_file}")
+
+    ctx.obj = {
+        "verbose": verbose,
+        "fixes_file": fixes_file,
+    }
 
 
 @cli.command()
@@ -188,6 +194,8 @@ def cli(ctx, fixes_file):
 def add(ctx, dry_run, repo_dir, branch):
     """Find commits with 'Fixes:' tags in the provided git repository and add them to the provided fixes file."""
     fixes_file = ctx.obj["fixes_file"]
+    verbose = ctx.obj["verbose"]
+
     db = DataBase()
     db.load(fixes_file)
 
@@ -198,8 +206,9 @@ def add(ctx, dry_run, repo_dir, branch):
         rev_range = branch
         reverse = True
 
-    print(f"repo-dir:   {repo_dir}")
-    print(f"rev-range:  {rev_range}")
+    if verbose:
+        print(f"repo-dir:   {repo_dir}")
+        print(f"rev-range:  {rev_range}")
 
     repo = git.Repo(repo_dir)
     for c in repo.iter_commits(rev_range, reverse=reverse, max_parents=1):
