@@ -11,6 +11,25 @@ import git
 
 RE_FIXES = re.compile(r"^\s*Fixes:.*\b([0-9a-f]{8,})\b")
 
+RE_UPSTREAM_SHA = re.compile(
+    r"commit\s+([0-9a-f]{12,})\s+upstream|"
+    + r"upstream\s+commit\s+([0-9a-f]{12,})|"
+    + r"cherry[ -]?picked\s+from(?:\s+commit)?\s+([0-9a-f]{12,})|"
+    + r"back[ -]?ported\s+from(?:\s+commit)?\s+([0-9a-f]{12,})",
+    flags=re.IGNORECASE,
+)
+
+
+def get_upstream_sha(commit):
+    """Search a commit message for an upstream SHA and return it"""
+    for line in commit.message.split("\n"):
+        m = RE_UPSTREAM_SHA.search(line)
+        if m:
+            for sha in m.groups():
+                if sha:
+                    return sha
+    return ""
+
 
 def list_fixes(sha, db, level=0):
     """Recursively return all commits that fix the provided commit"""
@@ -22,7 +41,7 @@ def list_fixes(sha, db, level=0):
         yield from list_fixes(fixed_by_sha, db, level=level + 1)
 
 
-def print_commit(commit, indent=0, color=None):
+def print_commit(commit, indent=0, color=None, upstream_sha=None):
     """Pretty print a commit"""
     colors = {
         "red": "\033[31m",
@@ -31,8 +50,14 @@ def print_commit(commit, indent=0, color=None):
     }
     cc = colors.get(color, "")
     nc = "" if cc == "" else "\033[0m"
+    if upstream_sha and upstream_sha != commit.hexsha:
+        us = f"{upstream_sha[:12]} <- "
+    else:
+        us = ""
 
-    sys.stdout.write(f"{' ' * indent}{cc}{commit.hexsha[:12]}{nc} {commit.summary}\n")
+    sys.stdout.write(
+        f"{' ' * indent}{us}{cc}{commit.hexsha[:12]}{nc} {commit.summary}\n"
+    )
     sys.stdout.flush()
 
 
@@ -300,17 +325,17 @@ def log(ctx, indent, args):
 
     repo = git.Repo(".")
     for commit in repo.iter_commits(rev_range, paths=paths):
-        sha = commit.hexsha
+        upstream_sha = get_upstream_sha(commit) or commit.hexsha
 
         # Add the current commit to the list of applied commits
-        sha_list.append(sha)
+        sha_list.append(upstream_sha)
 
         # Get the list of all the commits that fix the current commit
-        commit_list = list(list_fixes(sha, db))
+        commit_list = list(list_fixes(upstream_sha, db))
 
         if not commit_list:
             # Commit is not in the database, so just print it and continue
-            print_commit(commit, color="yellow")
+            print_commit(commit, upstream_sha=upstream_sha, color="yellow")
             continue
 
         # Color-code the current commit
@@ -320,14 +345,14 @@ def log(ctx, indent, args):
             if fix_commit.sha not in sha_list:
                 color = "red"
                 break
-        print_commit(commit, color=color)
+        print_commit(commit, upstream_sha=upstream_sha, color=color)
 
         # Now print all fixes commits
         for fix_commit, level in commit_list[1:]:
             if fix_commit.sha in sha_list:
                 color = "green"
             else:
-                color = "green"
+                color = "red"
             print_commit(fix_commit, color=color, indent=indent * level)
 
 
