@@ -75,10 +75,19 @@ class Commit:
                 return True
         return False
 
-    def print(self, indent=0):
+    def print(self, indent=0, color=None):
         """Pretty print the commit"""
+        colors = {
+            "red": "\033[31m",
+            "green": "\033[32m",
+            "yellow": "\033[33m",
+        }
+        cc = colors.get(color, "")
+        nc =  "" if cc == "" else "\033[0m"
+
         indent = " " * indent * self.level
-        print(f"{indent}{self.sha[:12]} {self.subject}")
+        sys.stdout.write(f"{indent}{cc}{self.sha[:12]}{nc} {self.subject}\n")
+        sys.stdout.flush()
 
 
 class DataBase:
