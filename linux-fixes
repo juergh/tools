@@ -35,7 +35,9 @@ class Commit:
                     try:
                         fixes_sha = m.group(1)
                         fixes_commit = commit.repo.commit(fixes_sha)
-                        self.fixes.append(Commit().from_commit(fixes_commit, fixed_by=self))
+                        self.fixes.append(
+                            Commit().from_commit(fixes_commit, fixed_by=self)
+                        )
                     except git.BadName:
                         # Invalid SHA
                         pass
@@ -83,7 +85,7 @@ class Commit:
             "yellow": "\033[33m",
         }
         cc = colors.get(color, "")
-        nc =  "" if cc == "" else "\033[0m"
+        nc = "" if cc == "" else "\033[0m"
 
         indent = " " * indent * self.level
         sys.stdout.write(f"{indent}{cc}{self.sha[:12]}{nc} {self.subject}\n")
@@ -126,6 +128,15 @@ class DataBase:
         # Add the commit itself plus any fixes commits
         for c in [commit] + commit.fixes:
             self._add_commit(c)
+
+    def show_commit(self, sha, indent=4):
+        """Print the commit with the provided SHA"""
+        if len(sha) != 40:
+            for key in self.db.keys():
+                if key.startswith(sha):
+                    sha = key
+                    break
+        print(json.dumps(self.db.get(sha, {}), indent=indent))
 
     def dump(self):
         print(json.dumps(self.db, indent=4))
@@ -193,6 +204,16 @@ def add(fixes_file, repo_dir, branch):
 
     # Save the DB back
     db.save(fixes_file)
+
+
+@cli.command()
+@click.argument("fixes-file")
+@click.argument("commit")
+def show(fixes_file, commit):
+    """Show the provided commit."""
+    db = DataBase()
+    db.load(fixes_file)
+    db.show_commit(commit)
 
 
 @cli.command()
