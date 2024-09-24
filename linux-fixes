@@ -160,12 +160,17 @@ class DataBase:
 
     def commit(self, sha):
         """Return the commit with the provided SHA"""
-        if len(sha) != 40:
-            for key in self.db.keys():
-                if key.startswith(sha):
-                    sha = key
-                    break
-        return Commit().from_dict(self.db.get(sha, {}))
+        if len(sha) == 40:
+            if sha in self.db:
+                return Commit().from_dict(self.db[sha])
+            return None
+
+        for key in self.db.keys():
+            if key.startswith(sha):
+                return Commit().from_dict(self.db[key])
+
+        return None
+
 
     def dump(self):
         """Dump the database to stdout"""
@@ -244,7 +249,11 @@ def dump(ctx, commit_sha):
 
     for sha in commit_sha:
         # Dump the commits with the provided SHAs
-        db.commit(sha).dump()
+        db_commit = db.commit(sha)
+        if db_commit:
+            db_commit.dump()
+        else:
+            print(f"E: Commit not found: {sha}", file=sys.stderr)
 
 
 @cli.command()
