@@ -108,6 +108,8 @@ class DataBase:
         if os.path.exists(filename):
             with gzip.open(filename, "rt", encoding="utf-8") as fh:
                 self.db = json.load(fh)
+        else:
+            print(f"W: Database file does not exist: {filename}", file=sys.stderr)
 
     def save(self, filename):
         with gzip.open(filename, "wt", encoding="utf-8") as fh:
@@ -168,16 +170,20 @@ class DataBase:
 
 
 @click.group()
-def cli():
-    pass
+@click.argument("fixes-file")
+@click.pass_context
+def cli(ctx, fixes_file):
+    print(f"fixes-file: {fixes_file}")
+    ctx.obj = {"fixes_file": fixes_file}
 
 
 @cli.command()
-@click.argument("fixes-file")
 @click.argument("repo-dir")
 @click.argument("branch", default="main")
-def add(fixes_file, repo_dir, branch):
+@click.pass_context
+def add(ctx, repo_dir, branch):
     """Find commits with 'Fixes:' tags in the provided git repository and add them to the provided fixes file."""
+    fixes_file = ctx.obj["fixes_file"]
     db = DataBase()
     db.load(fixes_file)
 
@@ -188,7 +194,6 @@ def add(fixes_file, repo_dir, branch):
         rev_range = branch
         reverse = True
 
-    print(f"fixes-file: {fixes_file}")
     print(f"repo-dir:   {repo_dir}")
     print(f"rev-range:  {rev_range}")
 
@@ -207,19 +212,21 @@ def add(fixes_file, repo_dir, branch):
 
 
 @cli.command()
-@click.argument("fixes-file")
 @click.argument("commit")
-def show(fixes_file, commit):
+@click.pass_context
+def show(ctx, commit):
     """Show the provided commit."""
+    fixes_file = ctx.obj["fixes_file"]
     db = DataBase()
     db.load(fixes_file)
     db.show_commit(commit)
 
 
 @cli.command()
-@click.argument("fixes-file")
-def dump(fixes_file):
+@click.pass_context
+def dump(ctx):
     """Dump the fixes file to stdout."""
+    fixes_file = ctx.obj["fixes_file"]
     db = DataBase()
     db.load(fixes_file)
     db.dump()
@@ -228,10 +235,11 @@ def dump(fixes_file):
 @cli.command()
 @click.option("--indent", type=int, default=0)
 @click.option("--recursive/--no-recursive", default=True)
-@click.argument("fixes-file")
 @click.argument("commit")
-def fixes(indent, recursive, fixes_file, commit):
+@click.pass_context
+def fixes(ctx, indent, recursive, commit):
     """List commits that fix the provided commit."""
+    fixes_file = ctx.obj["fixes_file"]
     db = DataBase()
     db.load(fixes_file)
 
@@ -242,17 +250,18 @@ def fixes(indent, recursive, fixes_file, commit):
 @cli.command(context_settings={"ignore_unknown_options": True})
 @click.option("--indent", type=int, default=0)
 @click.option("--recursive/--no-recursive", default=True)
-@click.argument("fixes-file")
 @click.argument("args", nargs=-1)
-def log(indent, recursive, fixes_file, args):
+@click.pass_context
+def log(ctx, indent, recursive, args):
     """List commits and their fixes in the provided rev range."""
+    fixes_file = ctx.obj["fixes_file"]
     if not args:
         args = ["HEAD"]
 
     if "---" in args:
         idx = args.index("---")
         rev_range = args[:idx]
-        paths = args[(idx + 1):]
+        paths = args[(idx + 1) :]
     else:
         rev_range = args
         paths = []
@@ -291,4 +300,4 @@ def log(indent, recursive, fixes_file, args):
 
 if __name__ == "__main__":
     sys.argv = ["---" if a == "--" else a for a in sys.argv]
-    cli()
+    cli()  # pylint: disable=E1120
