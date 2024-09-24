@@ -12,6 +12,16 @@ import git
 RE_FIXES = re.compile(r"^\s*Fixes:.*\b([0-9a-f]{8,})\b")
 
 
+def list_fixes(sha, db, level=0):
+    """Recursively return all commits that fix the provided commit"""
+    db_commit = db.commit(sha)
+    if not db_commit:
+        return
+    yield db_commit, level
+    for fixed_by_sha in db_commit.fixed_by:
+        yield from list_fixes(fixed_by_sha, db, level=level + 1)
+
+
 class CommitCache:
     cache = {}
 
@@ -37,7 +47,6 @@ class Commit:
     fixes_tags = []
     fixes = []
     fixed_by = []
-    level = 0
 
     def from_commit(self, commit, fixed_by=None):
         """Load the object data from the provided GitPython commit object"""
@@ -76,18 +85,6 @@ class Commit:
             "fixed-by": self.fixed_by,
         }
 
-    def does_fix(self, sha):
-        """Check if this commit fixes the provided commit"""
-        if len(sha) == 40:
-            if sha in self.fixes:
-                return True
-            return False
-
-        for f in self.fixes:
-            if f.startswith(sha):
-                return True
-        return False
-
     def print(self, indent=0, color=None):
         """Pretty print the commit"""
         colors = {
@@ -98,8 +95,7 @@ class Commit:
         cc = colors.get(color, "")
         nc = "" if cc == "" else "\033[0m"
 
-        indent = " " * indent * self.level
-        sys.stdout.write(f"{indent}{cc}{self.sha[:12]}{nc} {self.subject}\n")
+        sys.stdout.write(f"{' ' * indent}{cc}{self.sha[:12]}{nc} {self.subject}\n")
         sys.stdout.flush()
 
     def dump(self):
@@ -163,31 +159,6 @@ class DataBase:
     def dump(self):
         """Dump the database to stdout"""
         print(json.dumps(self.db, indent=4))
-
-    def fix_commits(self, sha, recursive=False, level=0):
-        """Return the list of commits that fix the provided commit"""
-        sha_list = []
-        fix_list = []
-        for key, val in self.db.items():
-            if key == "HEAD":
-                continue
-
-            commit = Commit().from_dict(val)
-            if commit.sha in sha_list or not commit.does_fix(sha):
-                continue
-
-            sha_list.append(commit.sha)
-            commit.level = level
-            fix_list.append(commit)
-
-            if recursive:
-                for fix in self.fix_commits(
-                    commit.sha, recursive=True, level=level + 1
-                ):
-                    if fix.sha not in sha_list:
-                        fix_list.append(fix)
-
-        return fix_list
 
 
 @click.group()
@@ -253,17 +224,17 @@ def dump(ctx, commit):
 
 @cli.command()
 @click.option("--indent", type=int, default=0)
-@click.option("--recursive/--no-recursive", default=True)
-@click.argument("commit")
+@click.argument("commit-sha")
 @click.pass_context
-def fixes(ctx, indent, recursive, commit):
+def fixes(ctx, indent, commit_sha):
     """List commits that fix the provided commit."""
     fixes_file = ctx.obj["fixes_file"]
     db = DataBase()
     db.load(fixes_file)
 
-    for fix_commit in db.fix_commits(commit, recursive=recursive):
-        fix_commit.print(indent=indent)
+    for commit, level in list_fixes(commit_sha, db):
+        print(f"{' ' * level * indent}", end="")
+        commit.print()
 
 
 @cli.command(context_settings={"ignore_unknown_options": True})
