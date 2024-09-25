@@ -67,7 +67,7 @@ class CommitCache:
 
     def lookup(self, sha, repo=None):
         if len(sha) != 40:
-            for key in self.cache.keys():
+            for key in self.cache:
                 if key.startswith(sha):
                     sha = key
                     break
@@ -204,7 +204,7 @@ class DataBase:
                 return Commit().from_dict(self.db[sha])
             return None
 
-        for key in self.db.keys():
+        for key in self.db:
             if key.startswith(sha):
                 return Commit().from_dict(self.db[key])
 
