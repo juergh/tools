@@ -72,16 +72,21 @@ class CommitCache:
                     sha = key
                     break
 
+        if sha in self.cache:
+            LOG.debug("Cache hit: %s", sha)
+        else:
+            LOG.debug("Cache miss: %s", sha)
+
         if sha not in self.cache and repo:
             try:
                 commit = repo.commit(sha)
                 self.cache[commit.hexsha] = commit
             except git.BadName:
                 # Invalid SHA
-                pass
+                LOG.debug("Invalid SHA: %s", sha)
             except ValueError:
                 # fatal: bad object <SHA>
-                pass
+                LOG.debug("Bad object: %s", sha)
         return self.cache.get(sha)
 
 
@@ -211,11 +216,14 @@ class DataBase:
 
 
 @click.group()
+@click.option("--debug/--no-debug")
 @click.option("--verbose/--no-verbose")
 @click.argument("fixes-file")
 @click.pass_context
-def cli(ctx, verbose, fixes_file):
-    if verbose:
+def cli(ctx, debug, verbose, fixes_file):
+    if debug:
+        LOG.basicConfig(stream=sys.stdout, format="D: %(message)s", level=LOG.DEBUG)
+    elif verbose:
         LOG.basicConfig(stream=sys.stdout, format="I: %(message)s", level=LOG.INFO)
     LOG.info("fixes-file: %s", fixes_file)
 
