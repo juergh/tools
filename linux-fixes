@@ -2,6 +2,7 @@
 
 import gzip
 import json
+import logging as LOG
 import os
 import re
 import sys
@@ -84,6 +85,7 @@ class CommitCache:
         return self.cache.get(sha)
 
 
+# Ugly global
 CC = CommitCache()
 
 
@@ -214,10 +216,10 @@ class DataBase:
 @click.pass_context
 def cli(ctx, verbose, fixes_file):
     if verbose:
-        print(f"fixes-file: {fixes_file}")
+        LOG.basicConfig(stream=sys.stdout, format="I: %(message)s", level=LOG.INFO)
+    LOG.info("fixes-file: %s", fixes_file)
 
     ctx.obj = {
-        "verbose": verbose,
         "fixes_file": fixes_file,
     }
 
@@ -230,7 +232,6 @@ def cli(ctx, verbose, fixes_file):
 def add(ctx, dry_run, repo_dir, branch):
     """Find commits with 'Fixes:' tags in the provided git repository and add them to the provided fixes file."""
     fixes_file = ctx.obj["fixes_file"]
-    verbose = ctx.obj["verbose"]
 
     db = DataBase()
     db.load(fixes_file)
@@ -242,9 +243,8 @@ def add(ctx, dry_run, repo_dir, branch):
         rev_range = branch
         reverse = True
 
-    if verbose:
-        print(f"repo-dir:   {repo_dir}")
-        print(f"rev-range:  {rev_range}")
+    LOG.info("repo-dir:   %s", repo_dir)
+    LOG.info("rev-range:  %s", rev_range)
 
     repo = git.Repo(repo_dir)
     for c in repo.iter_commits(rev_range, reverse=reverse, max_parents=1):
@@ -308,7 +308,6 @@ def fixes(ctx, indent, commit_sha):
 def log(ctx, indent, args):
     """List commits and their fixes in the provided rev range."""
     fixes_file = ctx.obj["fixes_file"]
-    verbose = ctx.obj["verbose"]
 
     if not args:
         args = ["HEAD"]
@@ -321,9 +320,8 @@ def log(ctx, indent, args):
         rev_range = args
         paths = []
 
-    if verbose:
-        print(f"rev-range: {rev_range}")
-        print(f"paths:     {paths}")
+    LOG.info("rev-range:  %s", rev_range)
+    LOG.info("paths:      %s", paths)
 
     db = DataBase()
     db.load(fixes_file)
