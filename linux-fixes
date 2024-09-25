@@ -65,9 +65,16 @@ class CommitCache:
     cache = {}
 
     def lookup(self, sha, repo=None):
+        if len(sha) != 40:
+            for key in self.cache.keys():
+                if key.startswith(sha):
+                    sha = key
+                    break
+
         if sha not in self.cache and repo:
             try:
-                self.cache[sha] = repo.commit(sha)
+                commit = repo.commit(sha)
+                self.cache[commit.hexsha] = commit
             except git.BadName:
                 # Invalid SHA
                 pass
