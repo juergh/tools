@@ -95,8 +95,6 @@ function cmd_exec()
 #
 function cmd_upgrade()
 {
-	local series
-
 	if [ -n "${1:-}" ] ; then
 		pr_info "Upgrade to ${1}"
 		lxc_exec bash -c "sed -i 's/${SERIES}/${1}/g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources"
@@ -140,7 +138,7 @@ function cmd_copy_to()
 
 	args=("${@}")
 	dest=${args[-1]}
-	unset args[-1]
+	unset "args[-1]"
 
 	dest=${dest%/}/
 	pr_info "Copy ${args[*]} to ${dest}"
