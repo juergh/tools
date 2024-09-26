@@ -147,6 +147,15 @@ function cmd_copy_to()
 	lxc file push "${args[@]}" "${LXC_NAME}"/"${dest}"
 }
 
+#
+# Open a shell in the instance
+#
+function cmd_shell()
+{
+	pr_info "Shell"
+	lxc_exec "${SHELL}"
+}
+
 function usage()
 {
 	cat <<EOF
@@ -163,6 +172,7 @@ Supported commands:
   upgrade [SERIES]    Upgrade packages in instance
   add-ppa PPA         Add PPA to instance
   copy-to SRC... DIR  Copy multiple sources to instance directory
+  shell               Open a shell in instance
 
 Optional arguments:
   -a, --arch ARCH      Architecture (defaults to: ${ARCH})
@@ -189,7 +199,7 @@ while [ $# -gt 0 ] ; do
 			shift
 			SERIES=${1}
 			;;
-		init|launch|delete|info|exec|upgrade|add-ppa|copy-to)
+		init|launch|delete|info|exec|upgrade|add-ppa|copy-to|shell)
 			cmd=cmd_${1//-/_}
 			shift
 			break
