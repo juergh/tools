@@ -126,6 +126,27 @@ function cmd_add_ppa()
 	lxc_exec apt-add-repository --yes --ppa "${1}"
 }
 
+#
+# Copy files to instance
+#
+function cmd_copy_to()
+{
+	local dest args
+
+	if [ $# -lt 2 ] ; then
+		usage >&2
+		exit 2
+	fi
+
+	args=("${@}")
+	dest=${args[-1]}
+	unset args[-1]
+
+	dest=${dest%/}/
+	pr_info "Copy ${args[*]} to ${dest}"
+	lxc file push "${args[@]}" "${LXC_NAME}"/"${dest}"
+}
+
 function usage()
 {
 	cat <<EOF
@@ -134,13 +155,14 @@ Usage: lp-build [-a ARCH] [-h] [-s SERIES] COMMAND [ARGS...]
 Run commands in an LXC instance like an LP builder.
 
 Supported commands:
-  init               Initialize LXD, download image, create profile
-  launch             Launch instance
-  delete             Delete instance
-  info               Show instance info
-  exec CMD [ARGS..]  Execute command in instance
-  upgrade            Upgrade packages in instance
-  add-ppa PPA        Add PPA to instance
+  init                Initialize LXD, download image, create profile
+  launch              Launch instance
+  delete              Delete instance
+  info                Show instance info
+  exec CMD [ARGS..]   Execute command in instance
+  upgrade [SERIES]    Upgrade packages in instance
+  add-ppa PPA         Add PPA to instance
+  copy-to SRC... DIR  Copy multiple sources to instance directory
 
 Optional arguments:
   -a, --arch ARCH      Architecture (defaults to: ${ARCH})
@@ -167,7 +189,7 @@ while [ $# -gt 0 ] ; do
 			shift
 			SERIES=${1}
 			;;
-		init|launch|delete|info|exec|upgrade|add-ppa)
+		init|launch|delete|info|exec|upgrade|add-ppa|copy-to)
 			cmd=cmd_${1//-/_}
 			shift
 			break
