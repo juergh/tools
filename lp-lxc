@@ -1,0 +1,191 @@
+#!/bin/bash -eu
+#
+# Wrapper around LXC to mimick an LP builder
+#
+
+function lxc_exec()
+{
+	lxc exec "${LXC_NAME}" -- "${@}"
+}
+
+pr_info()
+{
+	echo "-- ${LXC_NAME}: ${*}"
+}
+
+#
+# Set up LXD image and build profile
+#
+function cmd_init()
+{
+	if [ -z "$(which lxc)" ] ; then
+		echo "-- Initialize LXD"
+		snap install lxd
+		yes "" | lxd init
+		lxc storage set default size=20GB
+	fi
+
+	# Create profile
+	if ! lxc profile show "${LXC_PROFILE}" >/dev/null 2>&1 ; then
+		echo "-- Create LXC profile"
+		lxc profile copy default "${LXC_PROFILE}"
+		lxc profile set "${LXC_PROFILE}" description="LP buildd profile" -p
+		lxc profile set "${LXC_PROFILE}" security.privileged=true security.nesting=true
+		lxc profile device add "${LXC_PROFILE}" loop-control unix-char major=10 minor=237 path=/dev/loop-control
+		for i in $(seq 0 64) ; do
+			lxc profile device add "${LXC_PROFILE}" loop"${i}" unix-block major=7 minor="${i}" path=/dev/loop"${i}"
+		done
+	fi
+
+	# Copy image
+	if ! lxc image show "${LXC_NAME}" >/dev/null 2>&1 ; then
+		pr_info "Download LXC image"
+		lxc image copy --alias "${LXC_NAME}" ubuntu-daily:"${SERIES}"/"${ARCH}" local:
+	fi
+}
+
+#
+# Launch a new instance instance and wait until it's ready
+#
+function cmd_launch()
+{
+	pr_info "Launch"
+	lxc launch --profile "${LXC_PROFILE}" local:"${LXC_NAME}" "${LXC_NAME}"
+
+	while true ; do
+		pr_info "Wait until ready"
+		case "$(lxc_exec systemctl is-system-running)" in
+			running|degraded) break ;;
+		esac
+		sleep 1
+	done
+}
+
+#
+# Delete existing instance
+#
+function cmd_delete()
+{
+	pr_info "Delete"
+	if lxc info "${LXC_NAME}" >/dev/null 2>&1 ; then
+		lxc delete --force "${LXC_NAME}"
+	fi
+}
+
+#
+# Show instance info
+#
+function cmd_info()
+{
+	pr_info "Info"
+	lxc info "${LXC_NAME}"
+}
+
+#
+# Execute a command in the instance
+#
+function cmd_exec()
+{
+	pr_info "Execute: ${*}"
+	lxc_exec "${@}"
+}
+
+#
+# Update the instance
+#
+function cmd_upgrade()
+{
+	pr_info "Upgrade"
+	lxc_exec apt-get -uy update || {
+		echo "   Wait 15 seconds and try again ..."
+		sleep 15
+		lxc_exec apt-get -uy update
+	}
+	lxc_exec apt-get -o DPkg::Options::=--force-confold -uy --purge dist-upgrade
+}
+
+#
+# Add PPA to instance
+#
+function cmd_add_ppa()
+{
+	if [ $# -ne 1 ] ; then
+		usage >&2
+		exit 2
+	fi
+
+	pr_info "Add PPA: ${1}"
+	lxc_exec apt-add-repository --yes --ppa "${1}"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: lp-build [-a ARCH] [-h] [-s SERIES] COMMAND [ARGS...]
+
+Run commands in an LXC instance like an LP builder.
+
+Supported commands:
+  init               Initialize LXD, download image, create profile
+  launch             Launch instance
+  delete             Delete instance
+  info               Show instance info
+  exec CMD [ARGS..]  Execute command in instance
+  upgrade            Upgrade packages in instance
+  add-ppa PPA        Add PPA to instance
+
+Optional arguments:
+  -a, --arch ARCH      Architecture (defaults to: ${ARCH})
+  -h, --help           Show this message and exit.
+  -s, --series SERIES  Series (defaults to: ${SERIES})
+EOF
+}
+
+ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
+SERIES=$(lsb_release -c -s 2>/dev/null)
+cmd=
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-a|--arch)
+			shift
+			ARCH=${1}
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-s|--series)
+			shift
+			SERIES=${1}
+			;;
+		init|launch|delete|info|exec|upgrade|add-ppa)
+			cmd=cmd_${1//-/_}
+			shift
+			break
+			;;
+		*)
+			usage >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+if [ -z "${ARCH}" ] || [ -z "${SERIES}" ] || [ -z "${cmd}" ] ; then
+	usage >&2
+	exit 2
+fi
+
+LXC_NAME=lp-${SERIES}-${ARCH}
+LXC_PROFILE=lp-buildd
+
+cat <<EOF
+Series:       ${SERIES}
+Arch:         ${ARCH}
+LXC instance: ${LXC_NAME}
+LXC profile:  ${LXC_PROFILE}
+
+EOF
+
+"${cmd}" "${@}"
