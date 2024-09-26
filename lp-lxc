@@ -91,11 +91,19 @@ function cmd_exec()
 }
 
 #
-# Update the instance
+# Upgrade the instance
 #
 function cmd_upgrade()
 {
-	pr_info "Upgrade"
+	local series
+
+	if [ -n "${1:-}" ] ; then
+		pr_info "Upgrade to ${1}"
+		lxc_exec bash -c "sed -i 's/${SERIES}/${1}/g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources"
+	else
+		pr_info "Upgrade"
+	fi
+
 	lxc_exec apt-get -uy update || {
 		echo "   Wait 15 seconds and try again ..."
 		sleep 15
