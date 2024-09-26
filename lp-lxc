@@ -161,6 +161,10 @@ Usage: lp-build [-a ARCH] [-h] [-s SERIES] COMMAND [ARGS...]
 
 Run commands in an LXC instance like an LP builder.
 
+Supported environment variables:
+  ARCH
+  SERIES
+
 Supported commands:
   init                Initialize LXD, download image, create profile
   launch              Launch instance
@@ -179,8 +183,8 @@ Optional arguments:
 EOF
 }
 
-ARCH=$(dpkg-architecture -q DEB_HOST_ARCH)
-SERIES=$(lsb_release -c -s 2>/dev/null)
+ARCH=${ARCH:-$(dpkg-architecture -q DEB_HOST_ARCH)}
+SERIES=${SERIES:-$(lsb_release -c -s 2>/dev/null)}
 cmd=
 
 while [ $# -gt 0 ] ; do
