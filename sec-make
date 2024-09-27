@@ -19,10 +19,17 @@ function run_chroot()
 function usage()
 {
 	cat <<EOF
-Usage: sec-compile [-h] init|ubuntuconfig
-       sec-compile [-h] FILE
-       sec-compile [-h] DIR
-       sec-compile [-h] ARGS...
+Usage: sec-make [-h] init|ubuntuconfig
+       sec-make [-h] FILE
+       sec-make [-h] DIR
+       sec-make [-h] ARGS...
+
+Wrapper around the kernel's 'make'.
+
+Examples:
+  $ sec-make ubuntuconfig
+  $ sec-make drivers/android
+  $ sec-make -j8 bzImage
 
 Optional arguments:
   -h, --help           Show this help message and exit.
