@@ -360,12 +360,9 @@ def log(ctx, indent, args):
                 break
         print_commit(commit, upstream_sha=upstream_sha, color=color)
 
-        # Now print all fixes commits
+        # Now print all fix commits
         for fix_commit, level in commit_list[1:]:
-            if fix_commit.sha in sha_list:
-                color = "green"
-            else:
-                color = "red"
+            color = "green" if fix_commit.sha in sha_list else "red"
             print_commit(fix_commit, color=color, indent=indent * level)
 
 
