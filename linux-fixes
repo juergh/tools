@@ -342,6 +342,11 @@ def log(ctx, indent, args):
     sha_list = []
 
     repo = git.Repo(".")
+
+    if paths:
+        for head_commit in repo.iter_commits(rev_range, max_count=1):
+            break
+
     for commit in repo.iter_commits(rev_range, paths=paths):
         upstream_sha = get_upstream_sha(commit) or commit.hexsha
 
@@ -355,6 +360,24 @@ def log(ctx, indent, args):
             # Commit is not in the database, so just print it and continue
             print_commit(commit, upstream_sha=upstream_sha, color="yellow")
             continue
+
+        # Process the list of fix commits. If we're using path qualifiers, we're only
+        # processing commits that match them, but a fix commit could also modify files
+        # outside of these qualified paths in which case we will never see them here.
+        # So grep the rev-range *without* path qualifiers to try to find them.
+        for fix_commit, _ in commit_list[1:]:
+            if (
+                fix_commit.sha not in sha_list
+                and paths
+                and repo.git.log(
+                    f"{commit.hexsha}..{head_commit.hexsha}",
+                    regexp_ignore_case=True,
+                    perl_regexp=True,
+                    grep=upstream_sha_pattern(fix_commit.sha),
+                    max_count=1,
+                )
+            ):
+                sha_list.append(fix_commit.sha)
 
         # Color-code the current commit
         color = "yellow"
