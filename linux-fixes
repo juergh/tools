@@ -10,14 +10,19 @@ import sys
 import click
 import git
 
-RE_FIXES = re.compile(r"^\s*Fixes:.*\b([0-9a-f]{8,})\b")
 
+def upstream_sha_pattern(sha):
+    return (
+        rf"commit\s+{sha}\s+upstream|"
+        + rf"upstream\s+commit\s+{sha}|"
+        + rf"cherry[ -]?picked\s+from(?:\s+commit)?\s+{sha}|"
+        + rf"back[ -]?ported\s+from(?:\s+commit)?\s+{sha}"
+    )
+
+
+RE_FIXES = re.compile(r"^\s*Fixes:.*\b([0-9a-f]{8,})\b")
 RE_UPSTREAM_SHA = re.compile(
-    r"commit\s+([0-9a-f]{12,})\s+upstream|"
-    + r"upstream\s+commit\s+([0-9a-f]{12,})|"
-    + r"cherry[ -]?picked\s+from(?:\s+commit)?\s+([0-9a-f]{12,})|"
-    + r"back[ -]?ported\s+from(?:\s+commit)?\s+([0-9a-f]{12,})",
-    flags=re.IGNORECASE,
+    upstream_sha_pattern("([0-9a-f]{12,})"), flags=re.IGNORECASE
 )
 
 
