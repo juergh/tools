@@ -13,7 +13,12 @@ function run_chroot()
 
 	cmd=("schroot" "-r" "-c" "cranky--${SERIES}-amd64" "--" "${@}")
 	pr_info "${cmd[*]}"
-	"${cmd[@]}" 2>&1 | tee "${LOG}"
+
+	if [ -n "${LOG}" ] ; then
+		"${cmd[@]}" 2>&1 | tee "${LOG}"
+	else
+		"${cmd[@]}"
+	fi
 }
 
 function usage()
@@ -89,6 +94,11 @@ case "${1}" in
 		run_chroot fakeroot debian/rules clean genconfigs
 		cp CONFIGS/amd64-config.flavour.generic "${O}"/.config
 		run_chroot "${make[@]}" prepare
+		exit
+		;;
+	menuconfig)
+		LOG=
+		run_chroot "${make[@]}" menuconfig
 		exit
 		;;
 esac
