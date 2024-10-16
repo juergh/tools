@@ -80,19 +80,24 @@ class CommitCache:
 
         if sha in self.cache:
             LOG.debug("Cache hit: %s", sha)
-        else:
-            LOG.debug("Cache miss: %s", sha)
+            return self.cache[sha]
 
-        if sha not in self.cache and repo:
-            try:
-                commit = repo.commit(sha)
-                self.cache[commit.hexsha] = commit
-            except git.BadName:
-                # Invalid SHA
-                LOG.debug("Invalid SHA: %s", sha)
-            except ValueError:
-                # fatal: bad object <SHA>
-                LOG.debug("Bad object: %s", sha)
+        LOG.debug("Cache miss: %s", sha)
+
+        if not repo:
+            return None
+
+        try:
+            commit = repo.commit(sha)
+            sha = commit.hexsha
+            self.cache[sha] = commit
+        except git.BadName:
+            # Invalid SHA
+            LOG.debug("Invalid SHA: %s", sha)
+        except ValueError:
+            # fatal: bad object <SHA>
+            LOG.debug("Bad object: %s", sha)
+
         return self.cache.get(sha)
 
 
