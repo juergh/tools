@@ -104,9 +104,9 @@ class Commit:
     def __init__(self):
         self.sha = None
         self.subject = None
-        self.fixes_tags = []
-        self.fixes = []
-        self.fixed_by = []
+        self.fixes_tags = None
+        self.fixes = None
+        self.fixed_by = None
 
         self.hexsha = None
         self.summary = None
@@ -115,33 +115,33 @@ class Commit:
         """Load the object data from the provided GitPython commit object"""
         self.sha = commit.hexsha
         self.subject = commit.summary
-        self.fixes_tags = []
-        self.fixes = []
-        self.fixed_by = []
+        self.fixes_tags = set()
+        self.fixes = set()
+        self.fixed_by = set()
 
         self.hexsha = self.sha
         self.summary = self.subject
 
         if fixed_by:
-            self.fixed_by = [fixed_by]
+            self.fixed_by = set([fixed_by])
         else:
             for line in commit.message.split("\n"):
                 m = RE_FIXES.match(line)
                 if m:
-                    self.fixes_tags.append(line)
+                    self.fixes_tags.add(line)
                     fixes_sha = m.group(1)
                     fixes_commit = CC.lookup(fixes_sha, repo=commit.repo)
                     if fixes_commit:
-                        self.fixes.append(fixes_commit.hexsha)
+                        self.fixes.add(fixes_commit.hexsha)
         return self
 
     def from_dict(self, cdict):
         """Load the object data from the provided dict"""
-        self.sha = cdict.get("sha", self.sha)
-        self.subject = cdict.get("subject", self.subject)
-        self.fixes_tags = cdict.get("fixes-tags", self.fixes_tags)
-        self.fixes = cdict.get("fixes", self.fixes)
-        self.fixed_by = cdict.get("fixed-by", self.fixed_by)
+        self.sha = cdict["sha"]
+        self.subject = cdict["subject"]
+        self.fixes_tags = set(cdict["fixes-tags"])
+        self.fixes = set(cdict["fixes"])
+        self.fixed_by = set(cdict["fixed-by"])
 
         self.hexsha = self.sha
         self.summary = self.subject
@@ -153,9 +153,9 @@ class Commit:
         return {
             "sha": self.sha,
             "subject": self.subject,
-            "fixes-tags": self.fixes_tags,
-            "fixes": self.fixes,
-            "fixed-by": self.fixed_by,
+            "fixes-tags": list(self.fixes_tags),
+            "fixes": list(self.fixes),
+            "fixed-by": list(self.fixed_by),
         }
 
     def dump(self):
