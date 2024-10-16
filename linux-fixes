@@ -115,6 +115,9 @@ class Commit:
         """Load the object data from the provided GitPython commit object"""
         self.sha = commit.hexsha
         self.subject = commit.summary
+        self.fixes_tags = []
+        self.fixes = []
+        self.fixed_by = []
 
         self.hexsha = self.sha
         self.summary = self.subject
