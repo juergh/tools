@@ -288,6 +288,17 @@ def add(ctx, dry_run, repo_dir, branch):
 
 
 @cli.command()
+@click.argument("repo-dir")
+@click.argument("commit-sha")
+def show(repo_dir, commit_sha):
+    """Show the provided commit. Note that FIXES_FILE is unused."""
+    repo = git.Repo(repo_dir)
+    c = repo.commit(commit_sha)
+    commit = Commit().from_commit(c)
+    print(json.dumps(commit.to_dict(), indent=4))
+
+
+@cli.command()
 @click.argument("commit-sha", nargs=-1)
 @click.pass_context
 def dump(ctx, commit_sha):
