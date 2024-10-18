@@ -199,10 +199,18 @@ if [ "${strategy}" = "cherry-pick" ] ; then
 	git checkout -b "${TMP_BRANCH}" "${cur_base_hash}"
 
 	# Cherry-pick the new parent commits
-	git cherry-pick "${new_cur_base_hash}".."${new_base_hash}"
+	git cherry-pick "${new_cur_base_hash}".."${new_base_hash}" || {
+		echo >&2
+		echo "Cherry-pick failure! Dropping into a recovery shell. Fix conflicts and enter 'exit' to continue." >&2
+		bash || true
+	}
 
 	# Cherry-pick the remaining current local commits
-	git cherry-pick "${cur_base_hash}".."${CUR_BRANCH}"
+	git cherry-pick "${cur_base_hash}".."${CUR_BRANCH}" || {
+		echo >&2
+		echo "Cherry-pick failure! Dropping into a recovery shell. Fix conflicts and enter 'exit' to continue." >&2
+		bash || true
+	}
 
 	# All done, reset the original branch to the new one
 	git checkout "${CUR_BRANCH}"
