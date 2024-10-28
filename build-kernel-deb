@@ -536,6 +536,7 @@ Optional common arguments:
   -jX                Number of jobs, default one per CPU.
 
 Optional arguments for 'config' command:
+  --debug-info       Enable DEBUG_INFO config option.
   --lsmod LSMOD      Enable modules listed in <LSMOD>.
   --mod-laptop       Enable a minimal set of modules for laptops.
   --mod-libvirt      Enable a minimal set of modules for libvirt.
@@ -547,6 +548,7 @@ EOF
 arch=
 buildd=
 chroot=
+debug_info=0
 jobs=$(getconf _NPROCESSORS_ONLN)
 lsmod=
 cmd=
@@ -571,6 +573,9 @@ while [ ${#} -gt 0 ] ; do
 		--chroot)
 			shift
 			chroot=${1}
+			;;
+		--debug-info)
+			debug_info=1
 			;;
 		-h|--help)
 			usage
@@ -726,10 +731,17 @@ case "${cmd}" in
 					syz_configs >> "${KBUILD_OUTPUT}"/.config
 				fi
 
-				if true ; then
-					pr_info "Disable debug package build"
+				if [ ${debug_info} -eq 1 ] ; then
+					pr_info "Not disable debug info"
+				else
+					pr_info "Disable CONFIG_DEBUG_INFO"
 					sed -i '/CONFIG_DEBUG_INFO/d' "${KBUILD_OUTPUT}"/.config
-					echo "# CONFIG_DEBUG_INFO is not set" >>  "${KBUILD_OUTPUT}"/.config
+					echo "# CONFIG_DEBUG_INFO is not set" >> "${KBUILD_OUTPUT}"/.config
+				fi
+
+				if true ; then
+					pr_info "Disable CONFIG_RUST"
+					echo "# CONFIG_RUST is not set" >> "${KBUILD_OUTPUT}"/.config
 				fi
 
 				run_chroot make olddefconfig
