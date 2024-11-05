@@ -1,0 +1,43 @@
+#!/bin/bash -eu
+#
+# Create apport hook links for public kernel packages
+#
+
+function lp_lookup_source()
+{
+	local series=${1} source=${2}
+
+	python3 -c """
+from launchpadlib.launchpad import Launchpad
+
+lp = Launchpad.login_anonymously('tools', 'production', version='devel')
+lp_distro = lp.distributions['ubuntu']
+lp_archive = lp_distro.main_archive
+lp_series = lp_distro.getSeries(name_or_version='${series}')
+
+ps = lp_archive.getPublishedSources(exact_match=True,
+                                    status='Published',
+                                    distro_series=lp_series,
+                                    source_name='${source}')
+if ps:
+    handle = '${series}/${source}'
+    print(f'{handle:<30} {ps[0]}')
+"""
+}
+
+series=$1
+
+ubuntu-kernel-info supported -f series.name,package.name --pkg-format deb --pkg-type main | awk '$1 == "'"$1"'" { print $2 }' | while read -r source ; do
+	if [ "${source}" = "linux" ] ; then
+		continue
+	fi
+	if [ -n "$(lp_lookup_source "$series" "${source}")" ] ; then
+		~/git/ubuntu/kteam-tools/cranky/cranky shell-helper source-packages-name -t "${series}:${source}" | while read -r t n ; do
+			case "$t" in
+				main|meta|signed)
+					echo "/usr/share/apport/package-hooks/source_linux.py /usr/share/apport/package-hooks/source_$n.py"
+					;;
+			esac
+		done
+	fi
+done
