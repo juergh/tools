@@ -75,6 +75,7 @@ if [ -z "${debdiff}" ] ; then
 	fi
 	name=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Source)
 	version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Version)
+	version=${version#*:}
 	if [ ${reduced} -eq 1 ] ; then
 		debdiff=../${name}_${version}.reduced.debdiff
 	else

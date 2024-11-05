@@ -46,6 +46,7 @@ done
 
 curr_name=$(dpkg-parsechangelog -S Source)
 curr_version=$(dpkg-parsechangelog -S Version)
+curr_version=${curr_version#*:}
 curr_base=../${curr_name}_${curr_version}
 
 case "${prev_version_offset}" in
@@ -63,6 +64,7 @@ case "${prev_version_offset}" in
 		prev_version=${prev_version_offset}
 		;;
 esac
+prev_version=${prev_version#*:}
 prev_base=../${prev_name}_${prev_version}
 
 
