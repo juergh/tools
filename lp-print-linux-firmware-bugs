@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+#
+# List open linux-firmware bugs for the given series
+#
+
+import argparse
+
+from launchpadlib.launchpad import Launchpad
+
+parser = argparse.ArgumentParser()
+parser.add_argument("series", nargs="*", default=[])
+args = parser.parse_args()
+
+source = "linux-firmware"
+status = [
+    "New",
+    "Incomplete",
+    "Confirmed",
+    "Triaged",
+    "In Progress",
+    "Fix Committed",
+]
+
+lp = Launchpad.login_with("tools", "production", version="devel")
+
+lp_dist = lp.distributions["ubuntu"]
+lp_source = lp_dist.getSourcePackage(name=source)
+
+lp_tasks = lp_source.searchTasks(status=status)
+for task in lp_tasks:
+    bug = task.bug
+
+    first = True
+    for bug_task in bug.bug_tasks:
+        if bug_task.target.name != source:
+            continue
+
+        if first:
+          first = False
+          print()
+          print(f"LP: #{bug.id:<7} - {bug_task.status:<13} - {bug.title}")
+
+        try:
+            task_series_name = bug_task.target.distroseries.name
+            if task_series_name in args.series or not args.series:
+                print(f"    {task_series_name.title():<8} - {bug_task.status}")
+        except AttributeError:
+            pass
