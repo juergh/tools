@@ -1,0 +1,11 @@
+#!/bin/bash -eu
+
+set -x
+
+cranky fdr clean updateconfigs
+cranky check-packaging
+
+ubuntu-raspi-realtime-changelog > log
+ubuntu-insert-changelog log
+
+cranky tag
