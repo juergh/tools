@@ -6,7 +6,7 @@
 function usage()
 {
         cat <<EOF
-Usage: ${0##*/} [-b] [-f] [-h] SERIES PACKAGE FROM TO
+Usage: ${0##*/} [-b] [-f] [-h] [OPTS] SERIES PACKAGE FROM TO
 
 Copy packages from one PPA to another.
 
@@ -14,6 +14,8 @@ Optional arguments:
   -b, --binary  Copy binary packages.
   -f, --force   Do it.
   -h, --help    Show this help message and exit.
+
+OPTS  Additional options passed to copy-package.
 
 Example:
   $ lp-copy-packages noble linux-raspi juergh/raspi dest/name
@@ -42,6 +44,9 @@ while [ ${#} -gt 0 ] ; do
 		-s|--series)
 			shift
 			series=${1}
+			;;
+		-*)
+			opts+=("${1}")
 			;;
 		*)
 			if [ -z "${series}" ] ; then
