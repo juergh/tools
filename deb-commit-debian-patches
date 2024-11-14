@@ -1,0 +1,23 @@
+#!/bin/bash -eu
+
+if [ -n "$(git status --porcelain)" ] ; then
+	echo "Repo is unclean" >&2
+	exit 1
+fi
+
+# if in Debian packaging tree with unset $QUILT_PATCHES
+export QUILT_PATCHES="debian/patches"
+export QUILT_PATCH_OPTS="--reject-format=unified"
+export QUILT_DIFF_ARGS="-p ab --no-timestamps --no-index --color=auto"
+export QUILT_REFRESH_ARGS="-p ab --no-timestamps --no-index"
+
+readarray -t patches < <(quilt series)
+
+num=${#patches[@]}
+cnt=1
+for p in "${patches[@]}" ; do
+	quilt push
+	git add -- . ':!.pc'
+	git commit -m "Patch ${cnt}/${num} (${p##*/})"
+	cnt=$((cnt + 1))
+done
