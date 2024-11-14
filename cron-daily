@@ -32,9 +32,6 @@ mv "${log}" "${log}".1
 	header "Run git-update daily"
 	"${d}"/tools/git-update daily "${d}"
 
-	header "Run find-fixes"
-	"${d}"/tools/find-fixes --branch master "${d}"/linux.git "${d}"/linux.fixes
-
 	header "Run linux-fixes"
 	"${d}"/tools/linux-fixes --verbose "${d}"/linux-fixes.json.gz add "${d}"/linux.git master
 
