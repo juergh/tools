@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+
+import re
+import sys
+
+import git
+
+RE_TAG = re.compile(r"^Ubuntu(-unstable)?-\d+\.\d+\.\d+-\d+\.\d+$")
+
+
+def parse_release(line):
+    source, version, series = line.translate({ord(i): None for i in "();"}).split(" ")[0:3]
+    series = series.split("-")[0]  # Fix series like jaunty-security
+    return source, version, series
+
+
+class InvalidTagError(Exception):
+    pass
+
+
+class UbuntuTag:
+    def __init__(self, tag, releases):
+        self.tag = tag
+        self.name = tag.name
+        self.releases = releases
+        self.source, self.version, self.series = releases[0]
+        self.previous_tag = None
+
+    @classmethod
+    def from_tag(cls, tag):
+        # Check the tag name
+        if not RE_TAG.match(tag.name):
+            # print(f"Invalid tag name: {tag.name}")
+            return None
+
+        # Get the changelog directory
+        try:
+            debian = tag.repo.git.show(f"{tag}:debian/debian.env").splitlines()[0]
+            debian = debian.split("=")[1]
+        except git.exc.GitCommandError:
+            debian = "debian"
+
+        # Get the changelog content
+        try:
+            changelog = tag.repo.git.show(f"{tag}:{debian}/changelog").splitlines()
+        except git.exc.GitCommandError:
+            changelog = None
+        if not changelog:
+            # print("Debian changelog not found")
+            return None
+
+        # Check the source name and tag format
+        source, version, _ = parse_release(changelog[0])
+        if source == "linux" or source.startswith("linux-source-2.6"):
+            tag_name = f"Ubuntu-{version}"
+        elif source == "linux-unstable":
+            tag_name = f"Ubuntu-unstable-{version}"
+        else:
+            # print(f"Invalid source name: {source}")
+            return None
+        if tag.name != tag_name:
+            # print(f"Tag name mismatch: {tag.name} != {tag_name}")
+            return None
+
+        releases = []
+        for line in changelog:
+            if line.startswith("linux"):
+                releases.append(parse_release(line))
+
+        return cls(tag, releases)
+
+    def __repr__(self):
+        if self.previous_tag:
+            prev_release = self.previous_tag.releases[0]
+        else:
+            prev_release = ("None", "None", "None")
+        return f"{self.tag.name} -- {' '.join(self.releases[0])} -- {' '.join(prev_release)}"
+
+
+all_tags = {}
+
+# 1st pass: Collect all Ubuntu tags
+repo = git.Repo(".")
+for repo_tag in repo.tags:
+    tag = UbuntuTag.from_tag(repo_tag)
+    if not tag:
+        continue
+#    print(tag)
+
+    key = "/".join(tag.releases[0])
+    if key in all_tags:
+        t = all_tags[key]
+        print(f"Tag exists: {t}")
+        sys.exit(1)
+    all_tags[key] = tag
+
+# 2nd pass: Determine the previous tag for each tag
+for tag in all_tags.values():
+    for release in tag.releases[1:]:
+        key = "/".join(release)
+        if key in all_tags:
+            tag.previous_tag = all_tags[key]
+            break
+
+# 3rd pass: Print the tags
+for tag in all_tags.values():
+    print(tag)
