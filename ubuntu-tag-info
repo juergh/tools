@@ -18,13 +18,33 @@ class InvalidTagError(Exception):
     pass
 
 
+class TagCache:
+    def __init__(self):
+        self.tags = {}
+
+    def add(self, tag):
+        if tag.name not in self.tags:
+            self.tags[tag.name] = tag
+            self.tags[tag.id] = self.tags[tag.name]
+
+    def get(self, tag_name_or_id):
+        return self.tags.get(tag_name_or_id)
+
+
+TC = TagCache()
+
+
 class UbuntuTag:
     def __init__(self, tag, releases):
         self.tag = tag
         self.name = tag.name
         self.releases = releases
         self.source, self.version, self.series = releases[0]
+        self.id = f"{self.source}/{self.version}/{self.series}"
         self.previous_tag = None
+
+        # Add ourselves to the cache
+        TC.add(self)
 
     @classmethod
     def from_tag(cls, tag):
@@ -32,6 +52,11 @@ class UbuntuTag:
         if not RE_TAG.match(tag.name):
             # print(f"Invalid tag name: {tag.name}")
             return None
+
+        # Check the cache first
+        cached = TC.get(tag.name)
+        if cached:
+            return cached
 
         # Get the changelog directory
         try:
