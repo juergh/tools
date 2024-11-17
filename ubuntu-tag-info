@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
 
 import re
-import sys
 
 import git
 
 RE_TAG = re.compile(r"^Ubuntu(-unstable)?-\d+\.\d+\.\d+-\d+\.\d+$")
 
 
-def parse_release(line):
+def release_from_line(line):
     source, version, series = line.translate({ord(i): None for i in "();"}).split(" ")[0:3]
     series = series.split("-")[0]  # Fix series like jaunty-security
-    return source, version, series
+    return f"{source}/{version}/{series}"
 
 
-class InvalidTagError(Exception):
+def tagname_from_release(release):
+    source, version, _ = release.split("/")
+    if source.startswith("linux-source-2.6"):
+        prefix = ""
+    else:
+        prefix = source.removeprefix("linux")
+    return f"Ubuntu{prefix}-{version}"
+
+
+class TagError(Exception):
     pass
 
 
@@ -22,41 +30,49 @@ class TagCache:
     def __init__(self):
         self.tags = {}
 
-    def add(self, tag):
-        if tag.name not in self.tags:
-            self.tags[tag.name] = tag
-            self.tags[tag.id] = self.tags[tag.name]
+    def add(self, tag, exclusive=False):
+        if exclusive and tag.name in self.tags:
+            raise TagError(f"Tag exists already in the cache: {tag}")
+        self.tags[tag.name] = tag
 
-    def get(self, tag_name_or_id):
-        return self.tags.get(tag_name_or_id)
-
-
-TC = TagCache()
+    def get(self, tag_name):
+        return self.tags.get(tag_name)
 
 
 class UbuntuTag:
     def __init__(self, tag, releases):
         self.tag = tag
-        self.name = tag.name
         self.releases = releases
-        self.source, self.version, self.series = releases[0]
-        self.id = f"{self.source}/{self.version}/{self.series}"
-        self.previous_tag = None
 
-        # Add ourselves to the cache
-        TC.add(self)
+        self.name = tag.name
+        self.release = releases[0]
+
+        # Find the previous existing release
+        self.prev_release = "None/None/None"
+        for release in self.releases[1:]:
+            tag_name = tagname_from_release(release)
+            try:
+                tag.repo.git.rev_parse(tag_name)
+                self.prev_release = release
+                break
+            except git.exc.GitCommandError:
+                pass
+
+    def __repr__(self):
+        return f"{self.tag.name} -- {self.release} -- {self.prev_release}"
 
     @classmethod
-    def from_tag(cls, tag):
+    def from_tag(cls, tag, cache=None):
         # Check the tag name
         if not RE_TAG.match(tag.name):
             # print(f"Invalid tag name: {tag.name}")
             return None
 
         # Check the cache first
-        cached = TC.get(tag.name)
-        if cached:
-            return cached
+        if cache:
+            cached = cache.get(tag.name)
+            if cached:
+                return cached
 
         # Get the changelog directory
         try:
@@ -74,59 +90,37 @@ class UbuntuTag:
             # print("Debian changelog not found")
             return None
 
-        # Check the source name and tag format
-        source, version, _ = parse_release(changelog[0])
-        if source == "linux" or source.startswith("linux-source-2.6"):
-            tag_name = f"Ubuntu-{version}"
-        elif source == "linux-unstable":
-            tag_name = f"Ubuntu-unstable-{version}"
-        else:
+        # Get the release info from the changelog
+        release = release_from_line(changelog[0])
+
+        # Check the source name
+        source, _, _ = release.split("/")
+        if not (source in ("linux", "linux-unstable") or source.startswith("linux-source-2.6")):
             # print(f"Invalid source name: {source}")
             return None
+
+        # Check the tag name
+        tag_name = tagname_from_release(release)
         if tag.name != tag_name:
             # print(f"Tag name mismatch: {tag.name} != {tag_name}")
             return None
 
+        # Pull the releases from the changelog
         releases = []
         for line in changelog:
             if line.startswith("linux"):
-                releases.append(parse_release(line))
+                releases.append(release_from_line(line))
 
         return cls(tag, releases)
 
-    def __repr__(self):
-        if self.previous_tag:
-            prev_release = self.previous_tag.releases[0]
-        else:
-            prev_release = ("None", "None", "None")
-        return f"{self.tag.name} -- {' '.join(self.releases[0])} -- {' '.join(prev_release)}"
 
-
-all_tags = {}
-
-# 1st pass: Collect all Ubuntu tags
 repo = git.Repo(".")
+
+cache = TagCache()
+
+# Collect all Ubuntu tags
 for repo_tag in repo.tags:
-    tag = UbuntuTag.from_tag(repo_tag)
-    if not tag:
-        continue
-#    print(tag)
-
-    key = "/".join(tag.releases[0])
-    if key in all_tags:
-        t = all_tags[key]
-        print(f"Tag exists: {t}")
-        sys.exit(1)
-    all_tags[key] = tag
-
-# 2nd pass: Determine the previous tag for each tag
-for tag in all_tags.values():
-    for release in tag.releases[1:]:
-        key = "/".join(release)
-        if key in all_tags:
-            tag.previous_tag = all_tags[key]
-            break
-
-# 3rd pass: Print the tags
-for tag in all_tags.values():
-    print(tag)
+    tag = UbuntuTag.from_tag(repo_tag, cache=cache)
+    if tag:
+        cache.add(tag, exclusive=True)
+        print(tag)
