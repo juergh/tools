@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
+#
+# Show Ubuntu tag information
+#
 
 import re
 
+import click
 import git
 
 RE_TAG = re.compile(r"^Ubuntu(-unstable)?-\d+\.\d+\.\d+-\d+\.\d+$")
@@ -124,13 +128,22 @@ class UbuntuTag:
         return cls(tag, releases)
 
 
-repo = git.Repo(".")
+@click.group()
+def cli():
+    pass
 
-cache = TagCache()
 
-# Collect all Ubuntu tags
-for repo_tag in repo.tags:
-    tag = UbuntuTag.from_tag(repo_tag, cache=cache)
-    if tag:
-        cache.add(tag, exclusive=True)
-        print(tag)
+@cli.command(name="list")
+def _list():
+    """List all Ubuntu main kernel tags"""
+    cache = TagCache()
+    repo = git.Repo(".")
+    for repo_tag in repo.tags:
+        tag = UbuntuTag.from_tag(repo_tag, cache=cache)
+        if tag:
+            cache.add(tag, exclusive=True)
+            print(tag)
+
+
+if __name__ == "__main__":
+    cli()
