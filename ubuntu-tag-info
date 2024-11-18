@@ -13,7 +13,9 @@ RE_TAG = re.compile(r"^Ubuntu(-unstable)?-\d+\.\d+\.\d+-\d+\.\d+$")
 
 def release_from_line(line):
     """Return source/version/series release string from a debian/changelog release line"""
-    source, version, series = line.translate({ord(i): None for i in "();"}).split(" ")[0:3]
+    source, version, series = line.translate({ord(i): None for i in "();"}).split(" ")[
+        0:3
+    ]
     series = series.split("-")[0]  # Fix series like jaunty-security
     return f"{source}/{version}/{series}"
 
@@ -62,7 +64,9 @@ def releases_from_tag(tag, cache=None):
 
     # Check the source name
     source, _, _ = release.split("/")
-    if not (source in ("linux", "linux-unstable") or source.startswith("linux-source-2.6")):
+    if not (
+        source in ("linux", "linux-unstable") or source.startswith("linux-source-2.6")
+    ):
         # print(f"Invalid source name: {source}")
         return None
 
