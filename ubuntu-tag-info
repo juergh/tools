@@ -74,7 +74,7 @@ def releases_from_tag(tag, cache=None):
     # Check the tag name
     tag_name = tagname_from_release(release)
     if tag.name != tag_name:
-        log.info(f"Tag name mismatch: {tag.name} != {tag_name}")
+        log.error(f"Tag name mismatch: {tag.name} != {tag_name}")
         return None
 
     # Pull the releases from the changelog
@@ -138,9 +138,12 @@ class UbuntuTag:
 @click.option("--verbose", help="Enable verbose messages.", is_flag=True)
 def cli(debug, verbose):
     if debug:
-        log.basicConfig(level=log.DEBUG)
+        log_level = log.DEBUG
     elif verbose:
-        log.basicConfig(level=log.INFO)
+        log_level = log.INFO
+    else:
+        log_level = log.WARNING
+    log.basicConfig(format="%(levelname)s: %(message)s", level=log_level)
 
 
 @cli.command(name="list")
