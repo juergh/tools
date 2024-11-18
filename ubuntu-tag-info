@@ -8,18 +8,73 @@ RE_TAG = re.compile(r"^Ubuntu(-unstable)?-\d+\.\d+\.\d+-\d+\.\d+$")
 
 
 def release_from_line(line):
+    """Return source/version/series release string from a debian/changelog release line"""
     source, version, series = line.translate({ord(i): None for i in "();"}).split(" ")[0:3]
     series = series.split("-")[0]  # Fix series like jaunty-security
     return f"{source}/{version}/{series}"
 
 
 def tagname_from_release(release):
+    """Return the tagname from a source/version/series release string"""
     source, version, _ = release.split("/")
     if source.startswith("linux-source-2.6"):
         prefix = ""
     else:
         prefix = source.removeprefix("linux")
     return f"Ubuntu{prefix}-{version}"
+
+
+def releases_from_tag(tag, cache=None):
+    """Return the list of release strings from debian/changelog of the provided tag"""
+    # Check the tag name
+    if not RE_TAG.match(tag.name):
+        # print(f"Invalid tag name: {tag.name}")
+        return None
+
+    # Check the cache first
+    if cache:
+        cached = cache.get(tag.name)
+        if cached:
+            return cached
+
+    # Get the changelog directory
+    try:
+        debian = tag.repo.git.show(f"{tag}:debian/debian.env").splitlines()[0]
+        debian = debian.split("=")[1]
+    except git.exc.GitCommandError:
+        debian = "debian"
+
+    # Get the changelog content
+    try:
+        changelog = tag.repo.git.show(f"{tag}:{debian}/changelog").splitlines()
+    except git.exc.GitCommandError:
+        changelog = None
+    if not changelog:
+        # print("Debian changelog not found")
+        return None
+
+    # Get the release info from the changelog
+    release = release_from_line(changelog[0])
+
+    # Check the source name
+    source, _, _ = release.split("/")
+    if not (source in ("linux", "linux-unstable") or source.startswith("linux-source-2.6")):
+        # print(f"Invalid source name: {source}")
+        return None
+
+    # Check the tag name
+    tag_name = tagname_from_release(release)
+    if tag.name != tag_name:
+        # print(f"Tag name mismatch: {tag.name} != {tag_name}")
+        return None
+
+    # Pull the releases from the changelog
+    releases = []
+    for line in changelog:
+        if line.startswith("linux"):
+            releases.append(release_from_line(line))
+
+    return releases
 
 
 class TagError(Exception):
@@ -63,54 +118,9 @@ class UbuntuTag:
 
     @classmethod
     def from_tag(cls, tag, cache=None):
-        # Check the tag name
-        if not RE_TAG.match(tag.name):
-            # print(f"Invalid tag name: {tag.name}")
+        releases = releases_from_tag(tag, cache=cache)
+        if not releases:
             return None
-
-        # Check the cache first
-        if cache:
-            cached = cache.get(tag.name)
-            if cached:
-                return cached
-
-        # Get the changelog directory
-        try:
-            debian = tag.repo.git.show(f"{tag}:debian/debian.env").splitlines()[0]
-            debian = debian.split("=")[1]
-        except git.exc.GitCommandError:
-            debian = "debian"
-
-        # Get the changelog content
-        try:
-            changelog = tag.repo.git.show(f"{tag}:{debian}/changelog").splitlines()
-        except git.exc.GitCommandError:
-            changelog = None
-        if not changelog:
-            # print("Debian changelog not found")
-            return None
-
-        # Get the release info from the changelog
-        release = release_from_line(changelog[0])
-
-        # Check the source name
-        source, _, _ = release.split("/")
-        if not (source in ("linux", "linux-unstable") or source.startswith("linux-source-2.6")):
-            # print(f"Invalid source name: {source}")
-            return None
-
-        # Check the tag name
-        tag_name = tagname_from_release(release)
-        if tag.name != tag_name:
-            # print(f"Tag name mismatch: {tag.name} != {tag_name}")
-            return None
-
-        # Pull the releases from the changelog
-        releases = []
-        for line in changelog:
-            if line.startswith("linux"):
-                releases.append(release_from_line(line))
-
         return cls(tag, releases)
 
 
