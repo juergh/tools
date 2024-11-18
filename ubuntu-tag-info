@@ -139,14 +139,24 @@ def cli():
 
 @cli.command(name="list")
 def _list():
-    """List all Ubuntu main kernel tags"""
+    """List Ubuntu main kernel tags"""
     cache = TagCache()
     repo = git.Repo(".")
     for repo_tag in repo.tags:
-        tag = UbuntuTag.from_tag(repo_tag, cache=cache)
-        if tag:
-            cache.add(tag, exclusive=True)
-            print(tag)
+        ubuntu_tag = UbuntuTag.from_tag(repo_tag, cache=cache)
+        if ubuntu_tag:
+            cache.add(ubuntu_tag, exclusive=True)
+            print(ubuntu_tag)
+
+
+@cli.command()
+@click.argument("tag")
+def show(tag):
+    """Show Ubuntu main kernel tag"""
+    repo = git.Repo(".")
+    repo_tag = repo.tag(tag)
+    ubuntu_tag = UbuntuTag.from_tag(repo_tag)
+    print(ubuntu_tag)
 
 
 if __name__ == "__main__":
