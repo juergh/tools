@@ -116,6 +116,7 @@ class UbuntuTag:
         self.releases = releases
 
         self.name = tag.name
+        self.committed_date = tag.commit.committed_date
         self.release = releases[0]
 
         # Find the previous (existing) release
@@ -134,7 +135,7 @@ class UbuntuTag:
                 pass
 
     def __repr__(self):
-        return f"{self.tag.name} -- {self.release} -- {self.prev_release}"
+        return f"{self.tag.name} -- {self.release} -- {self.prev_release} -- {self.committed_date}"
 
     @classmethod
     def from_tag(cls, tag, cache=None):
@@ -179,6 +180,7 @@ def show(detail, tag):
     ubuntu_tag = UbuntuTag.from_tag(repo_tag)
     if detail:
         print(f"tag: {ubuntu_tag.name}")
+        print(f"committed-date: {ubuntu_tag.committed_date}")
         print(f"release: {ubuntu_tag.release}")
         print(f"previous-release: {ubuntu_tag.prev_release}")
         print("releases:")
