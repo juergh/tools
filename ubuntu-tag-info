@@ -98,28 +98,39 @@ class TagCache:
         if exclusive and tag.name in self.tags:
             raise TagError(f"Tag exists already in the cache: {tag}")
         self.tags[tag.name] = tag
+        self.tags[tag.release] = tag
+        log.info(f"Cache add:  {tag.name} -- {tag.release}")
 
-    def get(self, tag_name):
-        return self.tags.get(tag_name)
+    def get(self, tag_name_or_release):
+        tag = self.tags.get(tag_name_or_release)
+        if tag:
+            log.info(f"Cache hit:  {tag_name_or_release}")
+            return tag
+        log.info(f"Cache miss: {tag_name_or_release}")
+        return None
 
 
 class UbuntuTag:
-    def __init__(self, tag, releases):
+    def __init__(self, tag, releases, cache=None):
         self.tag = tag
         self.releases = releases
 
         self.name = tag.name
         self.release = releases[0]
 
-        # Find the previous existing release
+        # Find the previous (existing) release
         self.prev_release = "None/None/None"
         for release in self.releases[1:]:
-            tag_name = tagname_from_release(release)
-            try:
-                tag.repo.git.rev_parse(tag_name)
+            # Try the cache first
+            if cache and cache.get(release):
                 self.prev_release = release
                 break
-            except git.exc.GitCommandError:
+            # Try to find it in the repo
+            tag_name = tagname_from_release(release)
+            try:
+                self.prev_release = releases_from_tag(tag.repo.tags[tag_name])[0]
+                break
+            except (IndexError, TypeError):
                 pass
 
     def __repr__(self):
@@ -130,7 +141,7 @@ class UbuntuTag:
         releases = releases_from_tag(tag, cache=cache)
         if not releases:
             return None
-        return cls(tag, releases)
+        return cls(tag, releases, cache=cache)
 
 
 @click.group()
