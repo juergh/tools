@@ -1,0 +1,89 @@
+#!/bin/bash -eu
+#
+# Fetch Ubuntu main kernels
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: ubuntu-kernel-fetch [-d] [-h] SELECTION
+
+Fetch main Ubuntu kernel branches and tags into the current repo.
+
+SELECTION:
+  devel          Development kernels.
+  supported      Supported non-ESM kernels.
+  supported-esm  Supported ESM kernels.
+
+  supported-all  supported + supported-esm.
+  active         devel + supported + supported-esm.
+
+  all            All kernels listed in kernel-series.json.
+
+
+Optional arguments:
+  -d, --dry-run
+  -h, --help     Show this help text and exit.
+EOF
+}
+
+dry_run=0
+selection=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			;;
+		-d|--dry-run)
+			dry_run=1
+			;;
+		*)
+			selection=${1}
+			break
+			;;
+	esac
+	shift
+done
+
+if [ -z "${selection}" ] ; then
+	usage
+	exit 2
+fi
+
+while read -r _yymm series source url branch ; do
+	# We only care about the main kernels
+	case "${source}" in
+		linux|linux-source-2.6*) true ;;
+		linux-unstable)          series=unstable ;;
+		*)                       continue ;;
+	esac
+
+	local_ref=${series}/${source}
+
+	# ESM is special
+	case "${url}" in
+		*"/~canonical-kernel-esm/"*)
+			local_ref=${series}-esm/${source}
+			;;
+	esac
+
+	echo "-- Fetch ${series}/${source}/${branch} -> ${local_ref} (${url})"
+	if [ $dry_run  -eq 1 ] ; then
+		continue
+	fi
+
+	if ! git fetch --no-tags "${url}" "+refs/heads/${branch}":"refs/heads/${local_ref}" ; then
+		if [ "${branch}" == "master-next" ] ; then
+			echo "-- Fetch  ${series}/${source}/master -> ${local_ref} (${url})"
+			git fetch --no-tags "${url}" "+refs/heads/master":"refs/heads/${local_ref}"
+		else
+			false
+		fi
+	fi
+	git fetch --no-tags "${url}" '+refs/tags/Ubuntu-*':'refs/tags/Ubuntu-*'
+
+done < <(ubuntu-kernel-info \
+         --pkg-format deb \
+         -f series.yymm,series.name,package.name,package.repo.url,package.repo.branch \
+         "${selection}" | sort -r)
