@@ -170,13 +170,22 @@ def _list():
 
 
 @cli.command()
+@click.option("--detail", is_flag=True)
 @click.argument("tag")
-def show(tag):
+def show(detail, tag):
     """Show Ubuntu main kernel tag."""
     repo = git.Repo(".")
-    repo_tag = repo.tag(tag)
+    repo_tag = repo.tags[tag]
     ubuntu_tag = UbuntuTag.from_tag(repo_tag)
-    print(ubuntu_tag)
+    if detail:
+        print(f"tag: {ubuntu_tag.name}")
+        print(f"release: {ubuntu_tag.release}")
+        print(f"previous-release: {ubuntu_tag.prev_release}")
+        print("releases:")
+        for release in ubuntu_tag.releases:
+            print(f"  {release}")
+    else:
+        print(ubuntu_tag)
 
 
 if __name__ == "__main__":
