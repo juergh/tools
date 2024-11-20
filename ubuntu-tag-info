@@ -3,6 +3,7 @@
 # Show Ubuntu tag information
 #
 
+import json
 import logging as log
 import re
 
@@ -144,6 +145,28 @@ class UbuntuTag:
             return None
         return cls(tag, releases, cache=cache)
 
+    def _to_dict(self):
+        return {
+            "name": self.name,
+            "committed-date": self.committed_date,
+            "release": self.release,
+            "prev-release": self.prev_release,
+            "releases": self.releases,
+        }
+
+    def print(self, format=None):
+        if format == "oneline":
+            d = self._to_dict()
+            del d["releases"]
+            print(json.dumps(d))
+            return
+
+        if format == "full":
+            print(json.dumps(self._to_dict(), indent=4))
+            return
+
+        print(self.name)
+
 
 @click.group()
 @click.option("--debug", help="Enable debug messages.", is_flag=True)
@@ -159,7 +182,8 @@ def cli(debug, verbose):
 
 
 @cli.command(name="list")
-def _list():
+@click.option("--format", type=click.Choice(["oneline", "full"]))
+def _list(format):
     """List Ubuntu main kernel tags."""
     cache = TagCache()
     repo = git.Repo(".")
@@ -167,27 +191,18 @@ def _list():
         ubuntu_tag = UbuntuTag.from_tag(repo_tag, cache=cache)
         if ubuntu_tag:
             cache.add(ubuntu_tag, exclusive=True)
-            print(ubuntu_tag)
+            ubuntu_tag.print(format=format)
 
 
 @cli.command()
-@click.option("--detail", is_flag=True)
+@click.option("--format", type=click.Choice(["oneline", "full"]))
 @click.argument("tag")
-def show(detail, tag):
+def show(format, tag):
     """Show Ubuntu main kernel tag."""
     repo = git.Repo(".")
     repo_tag = repo.tags[tag]
     ubuntu_tag = UbuntuTag.from_tag(repo_tag)
-    if detail:
-        print(f"tag: {ubuntu_tag.name}")
-        print(f"committed-date: {ubuntu_tag.committed_date}")
-        print(f"release: {ubuntu_tag.release}")
-        print(f"previous-release: {ubuntu_tag.prev_release}")
-        print("releases:")
-        for release in ubuntu_tag.releases:
-            print(f"  {release}")
-    else:
-        print(ubuntu_tag)
+    ubuntu_tag.print(format=format)
 
 
 if __name__ == "__main__":
