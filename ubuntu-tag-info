@@ -200,9 +200,29 @@ def _list(format):
 def show(format, tag):
     """Show Ubuntu main kernel tag."""
     repo = git.Repo(".")
-    repo_tag = repo.tags[tag]
-    ubuntu_tag = UbuntuTag.from_tag(repo_tag)
+    ubuntu_tag = UbuntuTag.from_tag(repo.tags[tag])
     ubuntu_tag.print(format=format)
+
+
+def walk_tag(tag, format=None):
+    """Walk backwards from tag"""
+    tag.print(format=format)
+    if tag.prev_release == "None/None/None":
+        return
+
+    prev_tagname = tagname_from_release(tag.prev_release)
+    prev_tag = UbuntuTag.from_tag(tag.tag.repo.tags[prev_tagname])
+    walk_tag(prev_tag, format=format)
+
+
+@cli.command()
+@click.option("--format", type=click.Choice(["oneline", "full"]))
+@click.argument("tag")
+def walk(format, tag):
+    """Walk backwards from an Ubuntu main kernel tag."""
+    repo = git.Repo(".")
+    ubuntu_tag = UbuntuTag.from_tag(repo.tags[tag])
+    walk_tag(ubuntu_tag, format=format)
 
 
 if __name__ == "__main__":
