@@ -10,7 +10,7 @@ function run_chroot()
 {
 	pr_info "Run in chroot (${CHROOT}):"
 	pr_info "+ ${*}"
-	run-chroot cranky--"${CHROOT}" -- "${@}"
+	run-chroot "${CHROOT}" -- "${@}"
 }
 
 function modules_laptop()
@@ -669,7 +669,7 @@ else
 	else
 		series=$(lsb_release -c -s 2>/dev/null)
 	fi
-	CHROOT=${series}
+	CHROOT=cranky--${series}
 fi
 
 #
