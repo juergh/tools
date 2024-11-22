@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Show Ubuntu tag information
+# Show Ubuntu kernel tag information
 #
 
 import json
