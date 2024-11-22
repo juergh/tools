@@ -12,6 +12,21 @@ import git
 
 RE_TAG = re.compile(r"^Ubuntu(-unstable)?-\d+\.\d+\.\d+-\d+\.\d+$")
 
+# Hard-coded previous tags
+PREVIOUS_TAGS = {
+    "Ubuntu-4.11.0-0.1": "Ubuntu-4.10.0-14.16",
+    "Ubuntu-2.6.30-1.1": "Ubuntu-2.6.28-9.31",
+    "Ubuntu-2.6.26-1.5": "Ubuntu-2.6.26-1.4",
+    "Ubuntu-2.6.26-1.4": "Ubuntu-2.6.26-1.3",
+    "Ubuntu-2.6.26-1.3": "Ubuntu-2.6.26-1.2",
+    "Ubuntu-2.6.26-1.2": "Ubuntu-2.6.26-1.1",
+    "Ubuntu-2.6.26-1.1": "Ubuntu-2.6.24-19.33",
+    "Ubuntu-2.6.22-1.3": "Ubuntu-2.6.22-1.2",
+    "Ubuntu-2.6.22-1.2": "Ubuntu-2.6.22-1.1",
+    "Ubuntu-2.6.22-1.1": "Ubuntu-2.6.20-15.27",
+    "Ubuntu-2.6.19-1.1": "Ubuntu-2.6.17-10.25",
+}
+
 
 def release_from_line(line):
     """Return source/version/series release string from a debian/changelog release line"""
@@ -115,28 +130,33 @@ class UbuntuTag:
     def __init__(self, tag, releases, cache=None):
         self.tag = tag
         self.releases = releases
+        self.cache = cache
 
         self.name = tag.name
         self.committed_date = tag.commit.committed_date
         self.release = releases[0]
+        self.prev_release = self.previous_release()
 
-        # Find the previous (existing) release
-        self.prev_release = "None/None/None"
+    def previous_release(self):
+        # Check if the previous tag is hard-coded
+        prev_tag_name = PREVIOUS_TAGS.get(self.name)
+        if prev_tag_name:
+            return releases_from_tag(self.tag.repo.tags[prev_tag_name])[0]
+
+        # Walk the changelog releases
         for release in self.releases[1:]:
             # Try the cache first
-            if cache and cache.get(release):
-                self.prev_release = release
-                break
+            if self.cache and self.cache.get(release):
+                return release
+
             # Try to find it in the repo
             tag_name = tagname_from_release(release)
             try:
-                self.prev_release = releases_from_tag(tag.repo.tags[tag_name])[0]
-                break
+                return releases_from_tag(self.tag.repo.tags[tag_name])[0]
             except (IndexError, TypeError):
                 pass
 
-    def __repr__(self):
-        return f"{self.tag.name} -- {self.release} -- {self.prev_release} -- {self.committed_date}"
+        return "None/None/None"
 
     @classmethod
     def from_tag(cls, tag, cache=None):
