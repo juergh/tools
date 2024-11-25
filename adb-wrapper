@@ -40,20 +40,43 @@ function adb_start_app()
 	adb -s "${SERIAL}" shell monkey -p "${app}" 1
 }
 
+
+function adb_get_storage_dirs()
+{
+	local rmt_dir
+
+	# The primary storage always exists
+	echo "/storage/self/primary"
+
+	while IFS= read -r rmt_dir ; do
+		case "${rmt_dir}" in
+			/storage/emulated|/storage/self)
+				continue
+				;;
+			*)
+				echo "${rmt_dir}"
+				;;
+		esac
+	done < <(adb -s "${SERIAL}" shell ls -d /storage/*)
+}
+
 function adb_pull_storage()
 {
 	local rmt_dir=${1} dst_dir=${2}
-	local rmt_dirs rmt_base_dir rmt_full_dir rmt_file
+	local rmt_dirs storage_dir rmt_file
 
 	echo "-- Pull files from ${SERIAL} to ${dst_dir}"
 
-	rmt_dirs=("/storage/self/primary/${rmt_dir}")
-	while IFS= read -r rmt_base_dir ; do
-		rmt_full_dir="${rmt_base_dir}/${rmt_dir}"
-		if adb -s "${SERIAL}" shell test -d "${rmt_full_dir}" ; then
-			rmt_dirs+=("${rmt_full_dir}")
+	rmt_dirs=()
+	while IFS= read -r storage_dir ; do
+		if adb -s "${SERIAL}" shell test -d "${storage_dir}"/"${rmt_dir}" ; then
+			rmt_dirs+=("${storage_dir}"/"${rmt_dir}")
 		fi
-	done < <(adb -s "${SERIAL}" shell ls -d /storage/*)
+	done < <(adb_get_storage_dirs)
+
+	if [ "${#rmt_dirs[@]}" -eq 0 ] ; then
+		return
+	fi
 
 	mkdir -p "${dst_dir}"
 	while IFS= read -r rmt_file ; do
@@ -72,9 +95,9 @@ function adb_push_storage()
 	local  rmt_dir=${1}
 	shift
 
-	echo "-- Push files to ${SERIAL}"
-
 	rmt_dir=/storage/self/primary/${rmt_dir}
+
+	echo "-- Push files to ${SERIAL}:${rmt_dir}"
 
 	if ! adb -s "${SERIAL}" shell test -d "${rmt_dir}" ; then
 		echo "-- No such remote directory: ${rmt_dir}" >&2
@@ -172,9 +195,14 @@ function do_pull()
 	adb_pull_storage "${1}" "${HOME}"/tmp/"${SERIAL}"/"${1}"
 }
 
-function do_push_download()
+function do_push()
 {
-	adb_push_storage Download "${@}"
+	if [ ${#} -lt 2 ] ; then
+		usage
+		exit 1
+	fi
+
+	adb_push_storage "${@}"
 }
 
 function do_scrcpy()
@@ -248,7 +276,7 @@ Porcelain commands:
   pull-download        Pull files from folder Download.
   pull-pictures        Pull files from folder Pictures.
   pull DIR             Pull files from folder <DIR> to ~/tmp/<SERIAL>/<DIR>.
-  push-download        Push files to folder Download.
+  push DIR ...         Push files to folder <DIR>.
   scrcpy               Run scrcpy.
   unlock               Unlock device.
 
@@ -281,12 +309,7 @@ while [ ${#} -gt 0 ] ; do
 		pull-all|pull-backup|pull-camera|pull-download|pull-pictures|scrcpy|unlock)
 			command=${1}
 			;;
-		pull)
-			command=${1}
-			shift
-			break
-			;;
-		push-download)
+		pull|push)
 			command=${1}
 			shift
 			break
