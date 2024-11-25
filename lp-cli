@@ -235,6 +235,18 @@ def do_show_rules(args):
     rules = git_repo.getRules()
     print(json.dumps(rules, indent=4))
 
+@add_help("Show official project tags or add tag(s) to a project")
+@add_arg("project", help="Project name")
+@add_arg("tag", nargs="*")
+def do_tag_project(args):
+    lp_project = args.lp.projects[args.project]
+    print(f"{lp_project.display_name} -- {lp_project.web_link}")
+    print(f"    Tags: {lp_project.official_bug_tags}")
+    if args.tag:
+        lp_project.official_bug_tags += args.tag
+        lp_project.lp_save()
+        print(f"    Tags: {lp_project.official_bug_tags}")
+
 # -----------------------------------------------------------------------------
 # Main entry point
 
