@@ -1,0 +1,41 @@
+#!/bin/bash -eu
+#
+# Add and commit packaging files from the given tag
+#
+
+tag=${1}
+
+git rm -rf debian* 2>/dev/null || true
+rm -rf debian*
+
+git checkout "${tag}" -- 'debian*'
+
+DEBIAN=debian
+if [ -e debian/debian.env ] ; then
+	. debian/debian.env
+fi
+changelog=${DEBIAN}/changelog
+
+source=$(dpkg-parsechangelog -l "${changelog}" -S Source)
+version=$(dpkg-parsechangelog -l "${changelog}" -S Version)
+series=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
+
+git show "${tag}":Makefile > .__makefile
+v1=$(head -10 .__makefile | sed -n 's/^VERSION\s*=\s*//p')
+v2=$(head -10 .__makefile | sed -n 's/^PATCHLEVEL\s*=\s*//p')
+v3=$(head -10 .__makefile | sed -n 's/^SUBLEVEL\s*=\s*//p')
+v4=$(head -10 .__makefile | sed -n 's/^EXTRAVERSION\s*=\s*//p')
+rm .__makefile
+kernelversion=${v1}.${v2}.${v3}${v4}
+
+git add debian*
+git commit -m "UBUNTU: [Packaging] ${tag} -- ${source}/${version}/${series} -- ${kernelversion}
+
+Add debian* packaging files from ${tag}.
+
+tag: ${tag}
+source: ${source}
+version: ${version}
+series: ${series}
+kernelversion: ${kernelversion}
+"
