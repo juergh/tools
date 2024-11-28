@@ -23,27 +23,16 @@ print(obj['${attr}'])
 
 function format_patch()
 {
-	local branch=${1} odir=${2} msg_id=${3}
-	local series start rev_range bug subject s subject_prefix opts msg_id new_msg_id f
+	local branch=${1} odir=${2} msg_id=${3} single_patch=${4}
+	local series start rev_range num_commits s subject_prefix opts bug subject new_msg_id f
 
 	rm -rf "${odir}"
 	mkdir -p "${odir}"
 
 	series=${branch#*/}
 	# FIXME: The following is not robust and flexible enough...
-	start=$(git merge-base "${branch}" linux-ubuntu/"${series}"/linux)
+	start=$(git merge-base "${branch}" linux-ubuntu/"${series}"/linux)  # FIXME
 	rev_range=${start}..${branch}
-
-	# Get the subject for the patch series
-	bug=$(git log --format=%b "${rev_range}" | grep -m1 -E '^BugLink: https://' | sed 's|.*/||')
-	subject="$(query_lp_bug "${bug}" title) (LP: #${bug})"
-
-	# Generate the cover letter
-	cat <<EOF > "${odir}"/cover-letter
-${subject}
-
-$(git log --format=%b "${rev_range}" | sed -n 's|^BugLink: https://|https://|p' | sort -u)
-EOF
 
 	# Generate the subject prefix
 	s=${series::1}
@@ -54,16 +43,33 @@ EOF
 
 	# git format-patch options
 	opts=(
-		"--cover-letter"
-		"--cover-from-description=subject"
-		"--description-file=${odir}/cover-letter"
 		"--thread=shallow"
 		"--output-directory=${odir}"
 		"--filename-max-length=50"
 		"--subject-prefix=${subject_prefix}"
 	)
+
 	if [ -n "${msg_id}" ] ; then
 		opts+=("--in-reply-to=${msg_id}")
+	fi
+
+	if [ "${single_patch}" -eq 0 ] ; then
+		# Get the subject for the patch series
+		bug=$(git log --format=%b "${rev_range}" | grep -m1 -E '^BugLink: https://' | sed 's|.*/||')
+		subject="$(query_lp_bug "${bug}" title) (LP: #${bug})"
+
+		# Generate the cover letter
+		cat <<EOF > "${odir}"/cover-letter
+${subject}
+
+$(git log --format=%b "${rev_range}" | sed -n 's|^BugLink: https://|https://|p' | sort -u)
+EOF
+
+		opts+=(
+			"--cover-letter"
+			"--cover-from-description=subject"
+			"--description-file=${odir}/cover-letter"
+		)
 	fi
 
 	# Create the patchset
@@ -73,16 +79,18 @@ EOF
 	# seconds-since-the-epoc as a unique identifier which results in identical
 	# cover letter message IDs for a multi-series submission. Ugh.
 	# Hack around that by adding the series name to the message ID.
-	msg_id=$(grep -m1 '^Message-ID: ' "${odir}"/0000-cover-letter.patch)
-	msg_id=${msg_id#*<}
-	msg_id=${msg_id%>*}
-	new_msg_id=${series}.${msg_id}
-	sed -i "s/${msg_id}/${new_msg_id}/g" "${odir}"/*.patch
+	if [ -e "${odir}"/0000-cover-letter.patch ] ; then
+		msg_id=$(grep -m1 '^Message-ID: ' "${odir}"/0000-cover-letter.patch)
+		msg_id=${msg_id#*<}
+		msg_id=${msg_id%>*}
+		new_msg_id=${series}.${msg_id}
+		sed -i "s/${msg_id}/${new_msg_id}/g" "${odir}"/*.patch
+	fi
 
 	# Add the series name to the patch filenames
 	for f in "${odir}"/0*.patch ; do
 		f=${f##*/}
-		mv "${odir}"/"${f}" "${odir}"/"${f%%-*}-${series}-${f#*-}"
+		mv "${odir}"/"${f}" "${odir}"/"${series}-${f}"
 	done
 }
 
@@ -169,6 +177,21 @@ if [ ${#series[@]} -gt 1 ] ; then
 fi
 
 #
+# Figure out if it's a single patch for all series
+#
+
+single_patch=1
+for s in "${series[@]}" ; do
+	branch=${branch_prefix}/${s}
+	start=$(git merge-base "${branch}" linux-ubuntu/"${s}"/linux)  # FIXME
+	num_commits=$(git log --oneline "${start}..${branch}" | wc -l)
+	if [ "${num_commits}" -ne 1 ] ; then
+		single_patch=0
+		break
+	fi
+done
+
+#
 # Create the patch series
 #
 
@@ -179,7 +202,7 @@ for s in "${series[@]}" ; do
 	odir=.ubuntu-${s}
 
 	echo "-- ${branch}"
-	format_patch "${branch}" "${odir}" "${msg_id}"
+	format_patch "${branch}" "${odir}" "${msg_id}" "${single_patch}"
 	echo
 done
 
@@ -198,18 +221,23 @@ rm -rf .ubuntu-*
 
 if [ -n "${msg_id}" ] ; then
 	# Get all buglinks from all patches
-	readarray -t buglinks < <(sed -n 's|^BugLink: https://|https://|p' .outgoing/0*.patch)
+	readarray -t buglinks < <(sed -n 's|^BugLink: https://|https://|p' .outgoing/*.patch)
 
+	# Submission subject
 	bug=${buglinks[0]}
 	bug=${bug##*/}
 	subject="$(query_lp_bug "${bug}" title) (LP: #${bug})"
 
+	# List of targeted series
 	series_list=$(printf "%.1s/" "${series[@]^}")
 	series_list=${series_list%/}
 
-	patch="PATCH 0/${#series[@]}"
+	patch="PATCH"
 	if [ -n "${VERSION}" ] ; then
 		patch="${patch} v${VERSION}"
+	fi
+	if [ "${single_patch}" -eq 0 ] ; then
+		patch="${patch} 0/${#series[@]}"
 	fi
 
 	{
@@ -222,7 +250,7 @@ if [ -n "${msg_id}" ] ; then
 		echo
 		query_lp_bug "${bug}" description
 		echo
-	} > .outgoing/0000-0-cover-letter.patch
+	} > .outgoing/0000-cover-letter.patch
 fi
 
 #
