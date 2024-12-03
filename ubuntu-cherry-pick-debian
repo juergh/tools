@@ -1,0 +1,19 @@
+#!/bin/bash -eu
+#
+# Cherry-pick (only the) debian* files from the provided commit
+#
+
+commit=${1}
+
+git rm -rf 'debian*' &>/dev/null || true
+git checkout "${commit}" -- 'debian'*
+
+if git diff --quiet HEAD &>/dev/null ; then
+	# No differences, nothing to commit
+	exit 0
+fi
+
+git commit -m "$(git log --format='%s%n%n%b' "${commit}" -1)
+
+(cherry picked debian* from commit $(git rev-parse "${commit}"))
+Signed-off-by: $(git config user.name) <$(git config user.email)>"
