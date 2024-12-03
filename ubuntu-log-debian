@@ -1,0 +1,73 @@
+#!/bin/bash
+#
+# List debian* commits between the provided Ubuntu kernel tags
+#
+
+function get_release()
+{
+	local commit=${1}
+
+	release=$(git show "${commit}":debian.master/changelog 2>/dev/null | head -1)
+	if [ -z "${release}" ] ; then
+		release=$(git show "${commit}":debian/changelog 2>/dev/null | head -1)
+	fi
+	echo "${release}"
+}
+
+function find_prev_commit()
+{
+	local tag=${1} prev_tag=${2}
+	local prev_tag_commit prev_tag_release found commit
+
+	prev_tag_commit=$(git rev-parse "${prev_tag}")
+	prev_tag_release=$(get_release "${prev_tag}")
+
+	found=0
+	while IFS= read -r line ; do
+		commit=${line%% *}
+		if [ "${commit}" = "${prev_tag_commit}" ] ; then
+			echo "${prev_line}"
+			return
+		fi
+
+		commit_release=$(get_release "${commit}")
+		if [ "${commit_release}" = "${prev_tag_release}" ] ; then
+			found=1
+		elif [ ${found} -eq 1 ] ; then
+			echo "${prev_line}"
+			return
+		fi
+		
+		prev_line=${line}
+	done < <(git log --format="%H %s" "${tag}" -- 'debian*')
+
+	echo "${line}"
+}
+
+function log_debian()
+{
+	local tag=${1} prev_tag=${2}
+	local prev_commit
+
+	prev_commit=$(find_prev_commit "${tag}" "${prev_tag}")
+	git log --oneline --reverse "${prev_commit%% *}".."${tag}" -- 'debian*'
+}
+
+export GIT_PAGER=
+
+if [ $# -eq 2 ] ; then
+	log_debian "$1" "$2"
+	exit
+fi
+
+# Read tags from stdin. Order is oldest to newest.
+perv_tag=
+while IFS= read -r tag ; do
+	if [ "${tag}" = "Ubuntu-2.6.15-1.1" ]; then
+		# Beginning of time
+		git log --oneline --reverse 962779861c6e -- 'debian*'
+	elif [ -n "${prev_tag}" ] ; then
+		log_debian "${tag}" "${prev_tag}"
+	fi
+	prev_tag=${tag}
+done
