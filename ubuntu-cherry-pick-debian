@@ -13,7 +13,13 @@ if git diff --quiet HEAD &>/dev/null ; then
 	exit 0
 fi
 
-git commit -m "$(git log --format='%s%n%n%b' "${commit}" -1)
+author=$(git log --format="%an <%ae>" "${commit}" -1)
+date=$(git log --format="%aD" "${commit}" -1)
+
+git commit \
+    --author="${author}" \
+    --date="${date}" \
+    -m "$(git log --format='%s%n%n%b' "${commit}" -1)
 
 (cherry picked debian* from commit $(git rev-parse "${commit}"))
 Signed-off-by: $(git config user.name) <$(git config user.email)>"
