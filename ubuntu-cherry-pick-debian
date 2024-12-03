@@ -23,3 +23,8 @@ git commit \
 
 (cherry picked debian* from commit $(git rev-parse "${commit}"))
 Signed-off-by: $(git config user.name) <$(git config user.email)>"
+
+# Tag it
+while IFS= read -r tag ; do
+	git tag "packaging/${tag}"
+done < <(git tag --points-at "${commit}" | grep '^Ubuntu-' || true)
