@@ -1,0 +1,55 @@
+#!/bin/bash -eu
+#
+# Generate minimal Ubuntu configs
+#
+
+function out()
+{
+	if [ -d CONFIGS.orig ] ; then
+		rm -rf CONFIGS
+		mv CONFIGS.orig CONFIGS
+	fi
+}
+
+if ! [ -f debian/debian.env ] ; then
+	echo "-- Not an Ubuntu kernel tree" >&2
+	exit 1
+fi
+
+trap out EXIT INT TERM HUP
+
+if [ -d CONFIGS ] ; then
+	mv CONFIGS CONFIGS.orig
+fi
+
+cranky fdr clean genconfigs
+
+mkdir -p MINCONFIGS
+for config in CONFIGS/* ; do
+	echo
+	echo "-- Process ${config}"
+
+	# Remove all modules
+	sed -i '/=m$/d' "${config}"
+
+	config=${config#*/}
+	arch=${config%%-*}
+	case "${arch}" in
+		amd64)   kernarch="x86_64"  ; ccompile=""                       ;;
+		arm64)   kernarch="arm64"   ; ccompile="aarch64-linux-gnu-"     ;;
+		armhf)   kernarch="arm"     ; ccompile="arm-linux-gnueabihf-"   ;;
+		ppc64el) kernarch="powerpc" ; ccompile="powerpc64le-linux-gnu-" ;;
+		s390x)   kernarch="s390"    ; ccompile="s390x-linux-gnu-"       ;;
+		riscv64) kernarch="riscv"   ; ccompile="riscv64-linux-gnu-"     ;;
+		*)       echo "-- Invalid architecture: ${arch}" >&2 ; exit 1   ;;
+	esac
+
+	rm -rf buildd
+	mkdir buildd
+
+	cp CONFIGS/"${config}" buildd/.config
+	ARCH=${kernarch} CROSS_COMPILE=${ccompile} \
+		cranky chroot run -- make O=buildd olddefconfig
+
+	mv buildd/.config MINCONFIGS/"${config}"
+done
