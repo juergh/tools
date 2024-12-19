@@ -1,0 +1,20 @@
+#!/bin/bash -eu
+#
+# Import Ubuntu kernel configs
+#
+
+configs=${1}
+
+for config in "${configs}"/*-config.flavour.* ; do
+	echo
+    echo "-- Process ${config}"
+
+	c=${config##*/}
+    arch=${c%%-*}
+	flavor=${c##*.}
+
+	./debian/scripts/misc/annotations --import "${config}" --arch "${arch}" --flavour "${flavor}"
+
+done
+
+cranky fdr updateconfigs
