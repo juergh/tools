@@ -92,11 +92,11 @@ function lpunpack_parts()
 
 function extract_parts()
 {
-	local outdir=${1}
+	local outdir=${1} indir=${2}
 	local part part_img part_outdir part_raw
 
 	for part in "system" "odm" "product" "system_ext" "vendor" ; do
-		part_img=${outdir}/${part}.img
+		part_img=${indir}/${part}.img
 		if ! [ -e "${part_img}" ]; then
 			continue
 		fi
@@ -126,23 +126,14 @@ function extract_parts()
 
 function extract_dtbo()
 {
-	local outdir=${1}
-	local dtbo_img
-
-	dtbo_img=${outdir}/dtbo.img
-	if ! [ -e "${dtbo_img}" ]; then
-		dtbo_img=${outdir}/../dtbo.img
-		if ! [ -e "${dtbo_img}" ]; then
-			return
-		fi
-	fi
+	local outdir=${1} infile=${2}
 
 	dtbo_outdir=${outdir}/dtbo
 	rm -rf "${dtbo_outdir}"
 	mkdir -p  "${dtbo_outdir}"
 
 	echo "-- Extract dtbo.img"
-	"${MKDTIMG}" dump "${dtbo_img}" -b "${dtbo_outdir}"/dtbo
+	"${MKDTIMG}" dump "${infile}" -b "${dtbo_outdir}"/dtbo
 	for f in  "${dtbo_outdir}"/dtbo.* ; do
 		if [ -e "${f}" ] ; then
 			ln -s "${f##*/}" "${dtbo_outdir}"/"${f##*.}".dtb
@@ -159,19 +150,10 @@ function extract_dtbo()
 
 function extract_bootimg()
 {
-	local outdir=${1}
-	local boot_img
-
-	boot_img=${outdir}/boot.img
-	if ! [ -e "${boot_img}" ]; then
-		boot_img=${outdir}/../boot.img
-		if ! [ -e "${boot_img}" ]; then
-			return
-		fi
-	fi
+	local outdir=${1} infile=${2}
 
 	echo "-- Extract boot.img"
-	"${UNPACK_BOOTIMG}" --boot_img "${boot_img}" --out "${outdir}"/boot
+	"${UNPACK_BOOTIMG}" --boot_img "${infile}" --out "${outdir}"/boot
 
 	ramdisk_img="${outdir}"/boot/ramdisk
 	if [ -e "${ramdisk_img}" ] ; then
@@ -207,6 +189,19 @@ else
 	lpunpack_parts "${outdir}" "${outdir}"/super.raw
 fi
 
-extract_parts "${outdir}"
-extract_dtbo "${outdir}"
-extract_bootimg "${outdir}"
+extract_parts "${outdir}" "${outdir}"
+
+dtbo_img=${outdir}/dtbo.img
+if ! [ -e "${dtbo_img}" ]; then
+	dtbo_img=${outdir}/../dtbo.img
+fi
+
+extract_dtbo "${outdir}" "${dtbo_img}"
+
+
+boot_img=${outdir}/boot.img
+if ! [ -e "${boot_img}" ]; then
+	boot_img=${outdir}/../boot.img
+fi
+
+extract_bootimg "${outdir}" "${boot_img}"
