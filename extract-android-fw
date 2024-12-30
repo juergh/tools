@@ -31,26 +31,25 @@ function out()
 	exit "${rc}"
 }
 
-function extract_img_data()
+function extract_image_data()
 {
-	local image_file="$1"
-	local out_dir="$2"
+	local infile=${1} outdir=${2}
+	local entry symlink_err
 
-	rm -rf "$out_dir"
-	mkdir -p "$out_dir"
+	rm -rf "${outdir}"
+	mkdir -p "${outdir}"
 
 	rm -f debugfs.log
-	debugfs -R 'ls -p' "$image_file" 2>/dev/null | cut -d '/' -f6 | while read -r entry
-	do
-		debugfs -R "rdump \"$entry\" \"$out_dir\"" "$image_file" >> debugfs.log 2>&1 || {
-			echo "[-] Failed to extract data from '$image_file'"
+	debugfs -R 'ls -p' "${infile}" 2>/dev/null | cut -d '/' -f6 | while read -r entry ; do
+		debugfs -R "rdump \"${entry}\" \"${outdir}\"" "${infile}" >> debugfs.log 2>&1 || {
+			echo "[-] Failed to extract data from '${infile}'"
 			abort 1
 		}
 	done
 
-	local symlink_err="rdump: Attempt to read block from filesystem resulted in short read while reading symlink"
-	if grep -Fq "$symlink_err" debugfs.log; then
-		echo "[-] Symlinks have not been properly processed from $image_file"
+	symlink_err="rdump: Attempt to read block from filesystem resulted in short read while reading symlink"
+	if grep -Fq "${symlink_err}" debugfs.log; then
+		echo "[-] Symlinks have not been properly processed from ${infile}"
 		echo "[!] You might not have a compatible debugfs version"
 		abort 1
 	fi
@@ -110,12 +109,12 @@ function extract_parts()
 				fsck.erofs --extract="${part_outdir}" "${part_img}"
 				;;
 			Linux*)
-				extract_img_data "${part_img}" "${part_outdir}"
+				extract_iamge_data "${part_img}" "${part_outdir}"
 				;;
 			Android*)
 				part_raw=${outdir}/${part}.raw
 				"${SIMG2IMG}" "${part_img}" "${part_raw}"
-				extract_img_data "${part_raw}" "${part_outdir}"
+				extract_image_data "${part_raw}" "${part_outdir}"
 				;;
 			*)
 				echo "Unsupported ${part_img}"
