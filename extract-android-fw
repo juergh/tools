@@ -55,18 +55,15 @@ function extract_image_data()
 	fi
 }
 
-function extract_super()
+function extract_super_raw()
 {
-	local outfile=${1}
-	shift
-
 	echo "-- Extract super.raw"
-	"${SIMG2IMG}" "${@}" "${outfile}"
+	"${SIMG2IMG}" "${@}"
 }
 
-function lpunpack_parts()
+function lpunpack_part_imgs()
 {
-	local outdir=${1} infile=${2}
+	local infile=${1} outdir=${2}
 	local part part_img
 
 	for part in "system" "odm" "product" "system_ext" "vendor" ; do
@@ -89,9 +86,9 @@ function lpunpack_parts()
 	done
 }
 
-function extract_parts()
+function extract_part_imgs()
 {
-	local outdir=${1} indir=${2}
+	local indir=${1} outdir=${2}
 	local part part_img part_outdir part_raw
 
 	for part in "system" "odm" "product" "system_ext" "vendor" ; do
@@ -109,7 +106,7 @@ function extract_parts()
 				fsck.erofs --extract="${part_outdir}" "${part_img}"
 				;;
 			Linux*)
-				extract_iamge_data "${part_img}" "${part_outdir}"
+				extract_image_data "${part_img}" "${part_outdir}"
 				;;
 			Android*)
 				part_raw=${outdir}/${part}.raw
@@ -123,9 +120,9 @@ function extract_parts()
 	done
 }
 
-function extract_dtbo()
+function extract_dtbo_img()
 {
-	local outdir=${1} infile=${2}
+	local infile=${1} outdir=${2}
 
 	dtbo_outdir=${outdir}/dtbo
 	rm -rf "${dtbo_outdir}"
@@ -147,9 +144,9 @@ function extract_dtbo()
 	done
 }
 
-function extract_bootimg()
+function extract_boot_img()
 {
-	local outdir=${1} infile=${2}
+	local infile=${1} outdir=${2}
 
 	echo "-- Extract boot.img"
 	"${UNPACK_BOOTIMG}" --boot_img "${infile}" --out "${outdir}"/boot
@@ -184,18 +181,18 @@ if [ -e "${indir}"/payload.bin ] ; then
 	"${OTA_EXTRACTOR}" -payload "${indir}/"payload.bin -output_dir "${outdir}"
 else
 	readarray -t infiles < <(find "${indir}" -name 'super.img_sparsechunk.*' | sort -V)
-	extract_super "${outdir}"/super.raw "${infiles[@]}"
-	lpunpack_parts "${outdir}" "${outdir}"/super.raw
+	extract_super_raw "${infiles[@]}" "${outdir}"/super.raw
+	lpunpack_part_imgs "${outdir}"/super.raw "${outdir}"
 fi
 
-extract_parts "${outdir}" "${outdir}"
+extract_part_imgs "${outdir}" "${outdir}"
 
 dtbo_img=${outdir}/dtbo.img
 if ! [ -e "${dtbo_img}" ]; then
 	dtbo_img=${outdir}/../dtbo.img
 fi
 
-extract_dtbo "${outdir}" "${dtbo_img}"
+extract_dtbo_img "${dtbo_img}" "${outdir}"
 
 
 boot_img=${outdir}/boot.img
@@ -203,4 +200,4 @@ if ! [ -e "${boot_img}" ]; then
 	boot_img=${outdir}/../boot.img
 fi
 
-extract_bootimg "${outdir}" "${boot_img}"
+extract_boot_img "${boot_img}" "${outdir}"
