@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+#
+# Download an apk from F-Droid and install it via adb
+#
+
+import argparse
+import json
+import os
+
+from subprocess import check_call
+
+import requests
+
+def download_apk(apk, dry_run=False):
+    apk_url = "https://f-droid.org/repo/" + apk
+    apk_tmp = "/tmp/" + apk
+
+    print(f"-- Download {apk}")
+    if not dry_run:
+        with requests.get(apk_url, timeout=5, stream=True) as r:
+            r.raise_for_status()
+            with open(apk_tmp, mode="wb") as fh:
+                for chunk in r.iter_content(chunk_size=8192):
+                    fh.write(chunk)
+    return apk_tmp
+
+
+def install_apk(apk_file, serial=None, dry_run=False):
+    if serial:
+        cmd = ["adb", "-s", serial, "install", apk_file]
+    else:
+        cmd = ["adb", "install", apk_file]
+
+    print(f"-- Install {apk_file}")
+    if not dry_run:
+        check_call(cmd, bufsize=0)
+
+
+parser = argparse.ArgumentParser(description="Download and install a package from F-Droid.")
+parser.add_argument("-n", "--dry-run", action="store_true")
+parser.add_argument("-s", "--serial")
+parser.add_argument("pkg", nargs="+")
+args = parser.parse_args()
+
+cache = os.path.join(os.path.expanduser("~"), ".cache", "f-droid.json")
+if not os.path.exists(cache):
+    r = requests.get("https://f-droid.org/repo/index-v1.json", timeout=5)
+    with open(cache, encoding="utf-8", mode="w") as fh:
+        json.dump(r.json(), fh)
+
+with open(cache, encoding="utf-8") as fh:
+    fdroid = json.load(fh)
+
+packages = fdroid["packages"]
+for pkg in args.pkg:
+    if pkg not in packages:
+        print(f"-- Not found in F-Droid repo: {pkg}")
+        continue
+
+    apk_file = download_apk(packages[pkg][0]["apkName"], dry_run=args.dry_run)
+    install_apk(apk_file, serial=args.serial, dry_run=args.dry_run)
