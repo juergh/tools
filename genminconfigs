@@ -11,6 +11,38 @@ function out()
 	fi
 }
 
+function usage()
+{
+	cat <<EOF
+Usage: genminconfigs [-h] [--import]
+
+Generate minimal Ubuntu configs in MINCONFIGS/.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
+  --import    Import generated configs into annotations.
+EOF
+}
+
+import=0
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		--import)
+			import=1
+			;;
+		*)
+			usage
+			exit 2
+			;;
+	esac
+	shift
+done
+
 if ! [ -f debian/debian.env ] ; then
 	echo "-- Not an Ubuntu kernel tree" >&2
 	exit 1
@@ -35,14 +67,16 @@ for config in CONFIGS/* ; do
 	config=${config#*/}
 	arch=${config%%-*}
 	case "${arch}" in
-		amd64)   kernarch="x86_64"  ; ccompile=""                       ;;
-		arm64)   kernarch="arm64"   ; ccompile="aarch64-linux-gnu-"     ;;
-		armhf)   kernarch="arm"     ; ccompile="arm-linux-gnueabihf-"   ;;
-		ppc64el) kernarch="powerpc" ; ccompile="powerpc64le-linux-gnu-" ;;
-		s390x)   kernarch="s390"    ; ccompile="s390x-linux-gnu-"       ;;
-		riscv64) kernarch="riscv"   ; ccompile="riscv64-linux-gnu-"     ;;
+		amd64)   kernarch="x86_64"  ;;
+		arm64)   kernarch="arm64"   ;;
+		armhf)   kernarch="arm"     ;;
+		i386)    kernarch="i386"    ;;
+		ppc64el) kernarch="powerpc" ;;
+		riscv64) kernarch="riscv"   ;;
+		s390x)   kernarch="s390"    ;;
 		*)       echo "-- Invalid architecture: ${arch}" >&2 ; exit 1   ;;
 	esac
+	ccompile=$(dpkg-architecture -qDEB_HOST_GNU_TYPE -a"${arch}" 2>/dev/null)-
 
 	rm -rf buildd
 	mkdir buildd
@@ -53,3 +87,17 @@ for config in CONFIGS/* ; do
 
 	mv buildd/.config MINCONFIGS/"${config}"
 done
+
+if [ ${import} -eq 1 ] ; then
+	for config in MINCONFIGS/* ; do
+		echo
+		echo "-- Import ${config}"
+
+		config=${config#*/}
+		arch=${config%%-*}
+		flavor=${config##*.}
+
+		./debian/scripts/misc/annotations --import MINCONFIGS/"${config}" \
+			--arch "${arch}" --flavour "${flavor}"
+	done
+fi
