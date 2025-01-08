@@ -78,7 +78,7 @@ class Message():
         return self.msg["replied-by"]
 
     def print(self, indent=0):
-        if "APPLIED" in self.subject:
+        if "APPLIED" in self.subject or "Applied" in self.subject:
             color = YELLOW
         elif "NACK" in self.subject or "NAK" in self.subject:
             color = RED
@@ -170,7 +170,7 @@ for msg in messages.iter_messages():
 
     ignore = False
     for m, _ in thread:
-        if args.filter_applied and "APPLIED" in m.subject:
+        if args.filter_applied and ("APPLIED" in m.subject or "Applied" in m.subject):
             ignore = True
             break
         if args.filter_nack and ("NACK" in m.subject or "NAK" in m.subject):
