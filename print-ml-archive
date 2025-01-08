@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+#
+# Print messages of a local Mailing list archive
+#
+
+import argparse
+import glob
+import gzip
+import json
+import mailbox
+import os
+import re
+
+from time import localtime, strftime
+
+from dateutil import parser
+
+COLS = int(os.popen("tput cols", "r").read().strip())
+
+RED = "\033[91m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+NC = "\033[00m"
+
+
+def create_json_gz(dirname, outfile):
+    print(f"-- Create {outfile} from {dirname}/*.txt")
+    msgs = []
+    for f in glob.glob(dirname + "/*.txt"):
+        for m in mailbox.mbox(f):
+            if m["message-id"]:
+                # Create a stripped message dict
+                msg = {}
+                for key in ("from", "date", "subject", "message-id", "in-reply-to"):
+                    msg[key] = m[key]
+
+                # Add timestamp (seconds since the epoch)
+                msg["timestamp"] = parser.parse(re.sub(r" \(.*\)", "", msg["date"])).timestamp()
+
+                # Add the stripped message dict to the list
+                msgs.append(msg)
+
+    with gzip.open(outfile, "w") as fh:
+        fh.write(json.dumps(msgs).encode("utf-8"))
+
+
+class Message():
+    def __init__(self, msg):
+        self.msg = msg
+        self.msg["subject"] = msg["subject"].replace("\n", "")
+        self.msg["replied-by"] = []
+
+    @property
+    def id(self):
+        return self.msg["message-id"]
+
+    @property
+    def subject(self):
+        return self.msg["subject"]
+
+    @property
+    def sender(self):
+        return self.msg["from"]
+
+    @property
+    def timestamp(self):
+        return self.msg["timestamp"]
+
+    @property
+    def in_reply_to(self):
+        return self.msg["in-reply-to"]
+
+    def add_replied_by(self, id):
+        self.msg["replied-by"].append(id)
+
+    @property
+    def replied_by(self):
+        return self.msg["replied-by"]
+
+    def print(self, indent=0):
+        if "APPLIED" in self.subject:
+            color = YELLOW
+        elif "NACK" in self.subject or "NAK" in self.subject:
+            color = RED
+        elif "ACK" in self.subject:
+            color = GREEN
+        else:
+            color = NC
+
+        text = " " * indent + self.subject
+        width = COLS - 50
+        if len(text) > width:
+            text = text[:(width - 3)] + "..."
+        else:
+            text = text + " " * width
+            text = text[:width]
+
+        sender = self.sender.split("(", 1)[1].rsplit(")", 1)[0].replace(" at ", "@")
+        sender = sender[:20]
+        date = strftime("%Y/%m/%d %H:%M", localtime(self.timestamp))
+
+        print(f"{color}{text}{NC}  {sender:<30}  {date}")
+
+
+class MessageCollection:
+    def __init__(self):
+        self.msgs = {}
+
+    def add_message(self, msg):
+        if msg.id:
+            self.msgs[msg.id] = msg
+
+    def get_message(self, id):
+        return self.msgs.get(id)
+
+    def from_json_gz(self, json_gz):
+        with gzip.open(json_gz, "r") as fh:
+            for msg in json.loads(fh.read().decode("utf-8")):
+                self.add_message(Message(msg))
+
+        for msg in self.iter_messages():
+            irt = self.get_message(msg.in_reply_to)
+            if irt:
+                irt.add_replied_by(msg.id)
+
+    def iter_messages(self, reverse=True):
+        for msg in sorted(self.msgs.values(), key=lambda x: x.timestamp, reverse=reverse):
+            yield msg
+
+    def get_thread(self, id, _msgs=None, _indent=0):
+        if _msgs is None:
+            _msgs = []
+
+        msg = self.get_message(id)
+        if msg:
+            _msgs.append([msg, _indent])
+            for msg_id in msg.replied_by:
+                self.get_thread(msg_id, _msgs=_msgs, _indent=_indent + 2)
+        return _msgs
+
+aparser = argparse.ArgumentParser(description="Print email messages.")
+aparser.add_argument("--force", action="store_true", help="Recreate the json.gz file")
+aparser.add_argument("--filter", action="store_true", help="Filter non-patch emails")
+aparser.add_argument("--filter-nack", action="store_true", help="Filter NACK'ed emails")
+aparser.add_argument("--filter-applied", action="store_true", help="Filter APPLIED emails")
+aparser.add_argument("directory", help="Directory containing the Mailing list archive files")
+args = aparser.parse_args()
+
+json_gz = args.directory + ".json.gz"
+
+if args.force and os.path.exists(json_gz):
+    os.remove(json_gz)
+
+if not os.path.exists(json_gz):
+    create_json_gz(args.directory, json_gz)
+
+messages = MessageCollection()
+messages.from_json_gz(json_gz)
+
+for msg in messages.iter_messages():
+    if msg.in_reply_to:
+        # Ignore replies
+        continue
+
+    if args.filter and "PATCH" not in msg.subject:
+        # Ignore non-patch emails
+        continue
+
+    thread = messages.get_thread(msg.id)
+
+    ignore = False
+    for m, _ in thread:
+        if args.filter_applied and "APPLIED" in m.subject:
+            ignore = True
+            break
+        if args.filter_nack and ("NACK" in m.subject or "NAK" in m.subject):
+            ignore = True
+            break
+    if ignore:
+        continue
+
+    for m, i in thread:
+        m.print(indent=i)
