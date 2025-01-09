@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+#
+# Commit mbox messages to a git repo
+#
+
+import argparse
+import mailbox
+import os
+import sys
+
+from email.header import decode_header
+from email.parser import Parser
+from email.policy import default
+from email.utils import parsedate_to_datetime
+
+import git
+from git.util import Actor as git_actor
+
+
+def decompose_address(sender):
+    msg = Parser(policy=default).parsestr(f"from: {sender}")
+    address = msg["from"].addresses[0]
+
+    display_name = address.display_name
+    addr_spec = address.addr_spec
+    if not display_name:
+        display_name = addr_spec.replace("@", ".")
+
+    return display_name, addr_spec
+
+
+def decode_header_field(header_text):
+    headers = []
+    for content, encoding in decode_header(header_text):
+#        try:
+#            headers.append(content.decode(encoding or "utf-8"))
+#        except AttributeError:
+#            headers.append(content.replace("\n\t", " ").replace("\n ", " "))
+        try:
+            content = content.decode(encoding or "utf-8")
+        except AttributeError:
+            pass
+        headers.append(content.replace("\n\t", " ").replace("\n", ""))
+    return "".join(headers)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Commit mbox messages to the current git repo.")
+    parser.add_argument("mbox_file")
+    args = parser.parse_args()
+
+    repo = git.Repo(".")
+
+    msg_id = None
+    if os.path.exists("m"):
+        with open("m", mode="rb") as fh:
+            msg = mailbox.mboxMessage(fh.read())
+        msg_id = msg["message-id"]
+        if not msg_id:
+            print("-- Failed to determine Message-ID from file")
+            sys.exit(1)
+
+    for msg in mailbox.mbox(args.mbox_file):
+        try:
+            if msg_id:
+                if msg["message-id"] == msg_id:
+                    msg_id = None
+                continue
+
+            if not msg["subject"]:
+                del msg["subject"]
+                msg["subject"] = "No subject"
+
+            sender = decode_header_field(msg["from"])
+            date = decode_header_field(msg["date"])
+            subject = decode_header_field(msg["subject"])
+
+            print(f"{subject} ({sender})")
+
+            # Construct the git author
+            display_name, addr_spec = decompose_address(sender)
+            author = git_actor(display_name, addr_spec)
+
+            # Construct the git author_date
+            author_date = parsedate_to_datetime(date.replace("-0000", "+0000"))
+            if not author_date.tzinfo:
+                author_date = parsedate_to_datetime(date + " +0000")
+
+            # Write the message
+            with open("m", mode="wb") as fh:
+                fh.write(msg.as_bytes())
+
+            # Commit the message
+            repo.index.add(["m"])
+            repo.index.commit(subject, author=author, author_date=author_date)
+
+        except Exception as e:
+            print(msg)
+            raise e
+
+
+if __name__ == "__main__":
+    main()
