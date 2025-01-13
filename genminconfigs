@@ -54,7 +54,7 @@ if [ -d CONFIGS ] ; then
 	mv CONFIGS CONFIGS.orig
 fi
 
-cranky fdr clean genconfigs
+cranky fdr clean genconfigs || true
 
 mkdir -p MINCONFIGS
 for config in CONFIGS/* ; do
@@ -100,4 +100,7 @@ if [ ${import} -eq 1 ] ; then
 		./debian/scripts/misc/annotations --import MINCONFIGS/"${config}" \
 			--arch "${arch}" --flavour "${flavor}"
 	done
+
+	cranky updateconfigs || true
 fi
+
