@@ -106,9 +106,9 @@ class Message():
         return self.msg["replied-by"]
 
     def print(self, indent=0):
-        if "APPLIED" in self.subject or "Applied" in self.subject:
+        if "APPLIED" in self.subject or "Applied" in self.subject or "DUPLICATED" in self.subject:
             color = YELLOW
-        elif "NACK" in self.subject or "NAK" in self.subject:
+        elif "NACK" in self.subject or "NAK" in self.subject or "REJECTED" in self.subject:
             color = RED
         elif "ACK" in self.subject:
             color = GREEN
@@ -179,8 +179,14 @@ aparser.add_argument("--force", action="store_true", help="Recreate the json.gz 
 aparser.add_argument("--filter", action="store_true", help="Filter non-patch emails")
 aparser.add_argument("--filter-nack", action="store_true", help="Filter NACK'ed emails")
 aparser.add_argument("--filter-applied", action="store_true", help="Filter APPLIED emails")
+aparser.add_argument("--since", help="Print messages since the provided date")
 aparser.add_argument("directory", help="Directory containing the Mailing list archive files")
 args = aparser.parse_args()
+
+if args.since:
+    since_ts = parser.parse(args.since).timestamp()
+else:
+    since_ts = 0
 
 json_gz = os.path.basename(args.directory.rstrip("/")) + ".json.gz"
 
@@ -194,18 +200,24 @@ for msg in messages.iter_messages():
         # Ignore replies
         continue
 
-    if args.filter and "PATCH" not in msg.subject:
-        # Ignore non-patch emails
-        continue
+    if args.filter:
+        if not msg.subject.startswith("["):
+            continue
+        if "PATCH" not in msg.subject and "PULL" not in msg.subject:
+            continue
 
     thread = messages.get_thread(msg.id)
 
+    if since_ts and thread[0][0].timestamp < since_ts:
+        # Bail ouf it current message is too old
+        break
+
     ignore = False
     for m, _ in thread:
-        if args.filter_applied and ("APPLIED" in m.subject or "Applied" in m.subject):
+        if args.filter_applied and ("APPLIED" in m.subject or "Applied" in m.subject or "DUPLICATED" in m.subject):
             ignore = True
             break
-        if args.filter_nack and ("NACK" in m.subject or "NAK" in m.subject):
+        if args.filter_nack and ("NACK" in m.subject or "NAK" in m.subject or "REJECTED" in m.subject):
             ignore = True
             break
     if ignore:
