@@ -33,6 +33,9 @@ def yield_messages(f):
         msg = {}
         for key in ("from", "date", "subject", "message-id", "in-reply-to"):
             msg[key] = m[key]
+        if msg[key]:
+            # Remove trailing junk
+            msg[key] = msg[key].split(">")[0] + ">"
 
         # Add timestamp (seconds since the epoch)
         msg["timestamp"] = parser.parse(re.sub(r" \(.*\)", "", msg["date"])).timestamp()
