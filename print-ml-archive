@@ -183,6 +183,7 @@ aparser.add_argument("--filter", action="store_true", help="Filter non-patch ema
 aparser.add_argument("--filter-nack", action="store_true", help="Filter NACK'ed emails")
 aparser.add_argument("--filter-applied", action="store_true", help="Filter APPLIED emails")
 aparser.add_argument("--since", help="Print messages since the provided date")
+aparser.add_argument("--dump", action="store_true", help="Dump the messages and exit")
 aparser.add_argument("directory", help="Directory containing the Mailing list archive files")
 args = aparser.parse_args()
 
@@ -197,6 +198,11 @@ if args.force and os.path.exists(json_gz):
     os.remove(json_gz)
 
 messages = load_messages(json_gz, args.directory)
+
+if args.dump:
+    for msg in messages.iter_messages():
+        print(json.dumps(msg.msg, indent=2))
+    sys.exit(0)
 
 for msg in messages.iter_messages():
     if msg.in_reply_to:
