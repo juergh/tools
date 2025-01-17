@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+#
+# Download a mailman archive mbox
+#
+
+import argparse
+import os
+import subprocess
+import sys
+
+import requests
+
+parser = argparse.ArgumentParser()
+parser.add_argument("mbox", help="Mbox filename")
+args = parser.parse_args()
+
+name = os.path.basename(args.mbox).split(".")[0]
+
+if name == "kernel-team":
+    url = f"https://lists.ubuntu.com/archives/{name}.mbox/{name}.mbox"
+else:
+    print(f"-- Error: Unable to handle local mbox: {args.mbox}", file=sys.stderr)
+    sys.exit(1)
+
+headers = {"referer": "https://ubuntu.com/"}
+timeout = 5
+
+if os.path.exists(args.mbox):
+    #
+    # Get latest/newest message ID from the mbox file
+    #
+
+    (rc, mid) = subprocess.getstatusoutput(f"tac {args.mbox} | grep -m1 '^Message-ID: '")
+    mid = mid.strip()
+    if rc:
+        print(f"-- Error: Failed to get message ID from local mbox: {mid} (rc={rc})")
+        sys.exit(1)
+    print(f"-- Latest message ID from local mbox: {mid}")
+
+    #
+    # Determine the remote mbox size
+    #
+
+    r = requests.request("HEAD", url, headers=headers, timeout=timeout)
+    mbox_size = int(r.headers.get("Content-length"))
+    print(f"-- Remote mbox size: {mbox_size}")
+
+    #
+    # Download the mbox in chunks - starting at the end - until we find our message ID
+    #
+
+    print(f"-- Partial download of: {url}")
+
+    found = False
+    data = b""
+
+    from_b = mbox_size
+    to_b = mbox_size
+
+    print("-- ", end="", flush=True)
+    while from_b > 0:
+        print(".", end="", flush=True)
+        to_b = from_b
+        from_b = max(from_b - 100 * 1024, 0)
+        headers["Range"] = f"bytes={from_b}-{to_b}"
+
+        r = requests.get(url, headers=headers, timeout=timeout)
+        r.raise_for_status()
+        chunk = r.content
+        data = chunk + data
+
+        if mid.encode() in chunk:
+            break
+    print()
+
+    #
+    # Remove the leading junk up until the beginning of the next message and
+    # write the data to file
+    #
+
+    mbox = data.partition(mid.encode())[2]
+    if b"\nFrom " in mbox:
+        mbox = b"".join(mbox.partition(b"\nFrom ")[1:])
+
+        print(f"-- Update local mbox: {args.mbox}")
+        with open(args.mbox, mode="ab") as fh:
+            fh.write(mbox)
+
+        # print(f"-- Write new mbox: {mbox_new}")
+        # with open(mbox_new, mode="wb") as fh:
+        #     fh.write(mbox)
+
+    else:
+        print(f"-- Loca mbox is already up to date: {args.mbox}")
+
+else:
+    # Full download
+    print(f"-- Full download of: {url}")
+    r = requests.get(url, headers=headers, stream=True, timeout=timeout)
+    r.raise_for_status()
+    with open(args.mbox, mode="wb") as fh:
+        for chunk in r.iter_content(chunk_size=1024 * 1024):
+            print(".", end="", flush=True)
+            fh.write(chunk)
+    print()

@@ -1,0 +1,295 @@
+#!/usr/bin/env python3
+#
+# Print message threads of an mbox file
+#
+
+import argparse
+import email
+import gzip
+import json
+import mailbox
+import os
+import re
+import sys
+
+from email.policy import default
+from subprocess import PIPE, CalledProcessError, Popen
+from time import localtime, strftime
+
+from dateutil import parser
+
+COLS = int(os.popen("tput cols", "r").read().strip())
+
+RED = "\033[91m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+NC = "\033[00m"
+
+
+def message_from_bytes(bytes):
+    return mailbox.Message(email.message_from_bytes(bytes, policy=default))
+
+
+def trim_line(line, width):
+    """Trim a line to the exact width"""
+    if len(line) > width:
+        return line[:(width - 3)] + "..."
+    return line + " " * (width - len(line))
+
+
+def fix_id(line):
+    if not line:
+        return line
+
+    line = line.strip(" <>")
+    if ">" in line:
+        # Strip trailing garbage
+        line = line.split(">", 1)[0]
+    return "<" + line + ">"
+
+
+class Mbox:
+    def __init__(self, mbox):
+        self.mbox = mbox
+
+    def _iter_messages(self):
+        """Walk through all messages"""
+        with open(self.mbox, mode="rb") as fh:
+            append = False
+            lines = []
+            while True:
+                line = fh.readline()
+
+                # Start of a new message
+                if line.startswith(b"From "):
+                    append = True
+                    if lines:
+                        # Return the previous message
+                        yield message_from_bytes(b"".join(lines[:-1]))
+                        lines = []
+                    continue
+
+                # EOF
+                if line == b"":
+                    if lines:
+                        yield message_from_bytes(b"".join(lines))
+                    return
+
+                if append:
+                    lines.append(line)
+
+    def iter_messages(self, reverse=False):
+        return self._iter_messages()
+
+
+class Message():
+    def __init__(self, msg):
+        if isinstance(msg, mailbox.Message):
+            m = {}
+            for key in ("from", "date", "subject", "message-id", "in-reply-to"):
+                m[key] = (msg[key] or "").replace("\n", "")
+                if key in ("message-id", "in-reply-to"):
+                    m[key] = fix_id(m[key])
+
+            # Add timestamp (seconds since the epoch)
+            m["timestamp"] = parser.parse(re.sub(r" \(.*\)", "", m["date"])).timestamp()
+
+        else:
+            m = msg
+
+        self.msg = m
+        self.msg["replied-by"] = []
+
+    def __str__(self):
+        return json.dumps(self.msg, indent=2)
+
+    @property
+    def id(self):
+        return self.msg["message-id"]
+
+    @property
+    def subject(self):
+        return self.msg["subject"]
+
+    @property
+    def sender(self):
+        return self.msg["from"]
+
+    @property
+    def timestamp(self):
+        return self.msg["timestamp"]
+
+    @property
+    def replied_by(self):
+        return self.msg["replied-by"]
+
+    @property
+    def in_reply_to(self):
+        return self.msg["in-reply-to"]
+
+    def add_replied_by(self, mid):
+        if mid not in self.msg["replied-by"]:
+            self.msg["replied-by"].append(mid)
+
+    def set_replied_by(self, val):
+        self.msg["replied-by"] = val
+
+    def print(self, indent=0):
+        if "APPLIED" in self.subject or "Applied" in self.subject or "DUPLICATED" in self.subject:
+            color = YELLOW
+        elif "NACK" in self.subject or "NAK" in self.subject or "REJECTED" in self.subject:
+            color = RED
+        elif "ACK" in self.subject:
+            color = GREEN
+        else:
+            color = NC
+
+        subject = trim_line(" " * indent + self.subject, COLS-50)
+        sender = trim_line(self.sender.split("<")[0], 28)
+        date = strftime("%Y/%m/%d %H:%M", localtime(self.timestamp))
+
+        print(f"{color}{subject}{NC} | {sender} | {date}")
+
+
+class MessageSet:
+    def __init__(self, mbox=None, cache=None):
+        self.msgs = {}
+
+        is_stale = False
+
+        # Load the cache
+        if os.path.exists(cache):
+            print(f"-- Load cache: {cache}", file=sys.stderr)
+            with gzip.open(cache, "r") as fh:
+                for msg in json.loads(fh.read().decode("utf-8")):
+                    self.add_message(Message(msg))
+
+        # Load the mbox
+        if os.path.exists(mbox):
+            mb = Mbox(mbox)
+            if os.path.exists(cache):
+                print(f"-- Update from mbox: {mbox}", file=sys.stderr)
+                # FIXME
+                #is_stale = True
+            else:
+                is_stale = True
+                # Load the whole mbox
+                print(f"-- Load mbox: {mbox}", file=sys.stderr)
+                for msg in mb.iter_messages():
+                    self.add_message(Message(msg))
+
+        # Remove me
+        print("-- Rebuild threads", file=sys.stderr)
+        self.rebuild_threads()
+
+        if is_stale:
+            # Rebuild the threads
+            print("-- Rebuild threads", file=sys.stderr)
+            self.rebuild_threads()
+
+            # Update the cache
+            if cache:
+                print(f"-- Update cache: {cache}", file=sys.stderr)
+                with gzip.open(cache, "w") as fh:
+                    fh.write(json.dumps([m.msg for m in self.msgs.values()]).encode("utf-8"))
+
+    def add_message(self, msg):
+        if msg.id:
+            self.msgs[msg.id] = msg
+
+    def get_message(self, mid):
+        return self.msgs.get(mid)
+
+    def message_exists(self, mid):
+        return mid in self.msgs
+
+    def iter_messages(self, reverse=True):
+        for msg in sorted(self.msgs.values(), key=lambda x: x.timestamp, reverse=reverse):
+            yield msg
+
+    def rebuild_threads(self):
+        for msg in self.iter_messages():
+            msg.set_replied_by([])
+
+        for msg in self.iter_messages():
+            irt = self.get_message(msg.in_reply_to)
+            if irt:
+                irt.add_replied_by(msg.id)
+
+    def get_thread(self, id, _msgs=None, _indent=0):
+        if _msgs is None:
+            _msgs = []
+
+        msg = self.get_message(id)
+        if msg:
+            _msgs.append([msg, _indent])
+            for msg_id in msg.replied_by:
+                self.get_thread(msg_id, _msgs=_msgs, _indent=_indent + 2)
+        return _msgs
+
+aparser = argparse.ArgumentParser(description="Print email message threads.")
+aparser.add_argument("--force", action="store_true", help="Recreate the cache")
+aparser.add_argument("--filter", action="store_true", help="Filter non-patch emails")
+aparser.add_argument("--filter-nack", action="store_true", help="Filter NACK'ed emails")
+aparser.add_argument("--filter-applied", action="store_true", help="Filter APPLIED emails")
+aparser.add_argument("--filter-patch", action="store_true", help="Filter PATCH and PULL emails")
+aparser.add_argument("--filter-rfc", action="store_true", help="Filter RFC emails")
+aparser.add_argument("--since", help="Print messages since the provided date")
+aparser.add_argument("--dump", action="store_true", help="Dump the messages and exit")
+aparser.add_argument("mbox", help="Mbox file")
+args = aparser.parse_args()
+
+if args.since:
+    since_ts = parser.parse(args.since).timestamp()
+else:
+    since_ts = 0
+
+cache = args.mbox + ".json.gz"
+
+if args.force and os.path.exists(cache):
+    os.remove(cache)
+
+messages = MessageSet(mbox=args.mbox, cache=cache)
+
+if args.dump:
+    for msg in messages.iter_messages():
+        print(msg)
+    sys.exit(0)
+
+for msg in messages.iter_messages():
+    if msg.in_reply_to:
+        # Ignore replies
+        continue
+
+    if args.filter:
+        if not msg.subject.startswith("["):
+            continue
+        if "PATCH" not in msg.subject and "PULL" not in msg.subject:
+            continue
+
+    thread = messages.get_thread(msg.id)
+
+    if since_ts and thread[0][0].timestamp < since_ts:
+        # Bail ouf it current message is too old
+        break
+
+    ignore = False
+    for m, _ in thread:
+        if args.filter_applied and ("APPLIED" in m.subject or "Applied" in m.subject or "DUPLICATED" in m.subject):
+            ignore = True
+            break
+        if args.filter_nack and ("NACK" in m.subject or "NAK" in m.subject or "REJECTED" in m.subject):
+            ignore = True
+            break
+        if args.filter_patch and ("PATCH" in m.subject or "PULL" in m.subject or "SRU" in m.subject):
+            ignore = True
+            break
+        if args.filter_rfc and ("RFC" in m.subject):
+            ignore = True
+            break
+    if ignore:
+        continue
+
+    print()
+    for m, i in thread:
+        m.print(indent=i)
