@@ -10,9 +10,10 @@ prev_cycle=
 
 while IFS= read -r line ; do
 
-	# Filter out 'Complete' tasks
+	# Filter out 'Complete' tasks and bogus lines
 	case "${line}" in
 		*" Complete "*) continue ;;
+		[0-9]*) continue ;;
 	esac
 
 	cycle=$(echo "${line}" | awk '{print $5}')
