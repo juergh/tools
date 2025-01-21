@@ -1,261 +1,273 @@
-#!/bin/bash -eu
-
-function out()
-{
-	local rc=${?}
-
-	trap - EXIT INT TERM HUP
-	[ ${rc} -eq 0 ] || echo "Error: Script failed" >&2
-	exit ${rc}
-}
-
-function query_lp_bug()
-{
-	local bug=${1} attr=${2}
-
-	curl -s -S --get "https://api.launchpad.net/devel/bugs/${bug}" | \
-		python3 -c "\
-import json,sys
-obj = json.load(sys.stdin)
-print(obj['${attr}'])
-"
-}
-
-function format_patch()
-{
-	local branch=${1} odir=${2} msg_id=${3} single_patch=${4}
-	local series start rev_range num_commits s subject_prefix opts bug subject new_msg_id f
-
-	rm -rf "${odir}"
-	mkdir -p "${odir}"
-
-	series=${branch#*/}
-	# FIXME: The following is not robust and flexible enough...
-	start=$(git merge-base "${branch}" linux-ubuntu/"${series}"/linux)  # FIXME
-	rev_range=${start}..${branch}
-
-	# Generate the subject prefix
-	s=${series::1}
-	subject_prefix="SRU][${s^}][PATCH"
-	if [ -n "${VERSION}" ] ; then
-		subject_prefix="${subject_prefix} v${VERSION}"
-	fi
-
-	# git format-patch options
-	opts=(
-		"--thread=shallow"
-		"--output-directory=${odir}"
-		"--filename-max-length=50"
-		"--subject-prefix=${subject_prefix}"
-	)
-
-	if [ -n "${msg_id}" ] ; then
-		opts+=("--in-reply-to=${msg_id}")
-	fi
-
-	if [ "${single_patch}" -eq 0 ] ; then
-		# Get the subject for the patch series
-		bug=$(git log --format=%b "${rev_range}" | grep -m1 -E '^BugLink: https://' | sed 's|.*/||')
-		subject="$(query_lp_bug "${bug}" title) (LP: #${bug})"
-
-		# Generate the cover letter
-		cat <<EOF > "${odir}"/cover-letter
-${subject}
-
-$(git log --format=%b "${rev_range}" | sed -n 's|^BugLink: https://|https://|p' | sort -u)
-EOF
-
-		opts+=(
-			"--cover-letter"
-			"--cover-from-description=subject"
-			"--description-file=${odir}/cover-letter"
-		)
-	fi
-
-	# Create the patchset
-	git format-patch "${opts[@]}" "${rev_range}"
-
-	# HACK: git format-patch creates a cover letter message ID that only contains
-	# seconds-since-the-epoc as a unique identifier which results in identical
-	# cover letter message IDs for a multi-series submission. Ugh.
-	# Hack around that by adding the series name to the message ID.
-	if [ -e "${odir}"/0000-cover-letter.patch ] ; then
-		msg_id=$(grep -m1 '^Message-ID: ' "${odir}"/0000-cover-letter.patch)
-		msg_id=${msg_id#*<}
-		msg_id=${msg_id%>*}
-		new_msg_id=${series}.${msg_id}
-		sed -i "s/${msg_id}/${new_msg_id}/g" "${odir}"/*.patch
-	fi
-
-	# Add the series name to the patch filenames
-	for f in "${odir}"/0*.patch ; do
-		f=${f##*/}
-		mv "${odir}"/"${f}" "${odir}"/"${series}-${f}"
-	done
-}
-
-function sort_series()
-{
-	while IFS= read -r line ; do
-		case "${line}" in
-			trusty|xenial) echo "1 ${line}" ;;
-			*)             echo "2 ${line}" ;;
-		esac
-	done | sort -rV | sed 's/^..//'
-}
-
-function usage()
-{
-	cat <<EOF
-Usage: ubuntu-format-patch [-h] [-v NUM] [SERIES [SERIES...]]
-
-Positional arguments:
-  SERIES  Series name. If not provided, is determined from the available branches.
-
-Optional arguments:
-  -h, --help         Show this help text and exit.
-  -v, --version NUM  Patch submission version.
-EOF
-}
-
-VERSION=
-series=()
-
-while [ ${#} -gt 0 ] ; do
-	case "${1}" in
-		-h|--help)
-			usage
-			exit
-			;;
-		-v|--version)
-			shift
-			VERSION=${1}
-			;;
-		*)
-			series=("${@}")
-			break
-			;;
-	esac
-	shift
-done
-
-trap out EXIT INT TERM HUP
-
-branch_prefix=$(git rev-parse --abbrev-ref HEAD | sed 's,/.*,,')
-
-if [ ${#series[@]} -eq 0 ] ; then
-	readarray -t series < <(git branch | sed -n "s,^..${branch_prefix}/,,p")
-fi
-
-sha1=$(date -R | sha1sum | awk '{ print $1 }')
-
+#!/usr/bin/env python3
 #
-# Sanity check
+# Format patches for submission to an Ubuntu kernel mailing list
 #
 
-private=0
-public=0
-for s in "${series[@]}" ; do
-	case "${s}" in
-		trusty|xenial|bionic) private=1 ;;
-		*) public=1 ;;
-	esac
-done
+import gzip
+import json
+import os
+import shutil
+import sys
+from datetime import datetime
+from email.utils import format_datetime, make_msgid
+from subprocess import check_call
 
-if [ ${private} -eq 1 ] && [ ${public} -eq 1 ] ; then
-	echo "Can't mix private and public kernels in a single patch series submission" >&2
-	exit 1
-fi
+import click
+import requests
+from debian.changelog import Changelog
 
-#
-# Create a top-level message ID for multi-series submissions
-#
+import git
 
-msg_id=
-if [ ${#series[@]} -gt 1 ] ; then
-	msg_id="<${sha1}.$(date +%s).git.$(git config user.email)>"
-fi
+CACHEDIR = os.path.join(os.path.expanduser("~"), ".cache", "ubuntu-format-patch")
 
-#
-# Figure out if it's a single patch for all series
-#
 
-single_patch=1
-for s in "${series[@]}" ; do
-	branch=${branch_prefix}/${s}
-	start=$(git merge-base "${branch}" linux-ubuntu/"${s}"/linux)  # FIXME
-	num_commits=$(git log --oneline "${start}..${branch}" | wc -l)
-	if [ "${num_commits}" -ne 1 ] ; then
-		single_patch=0
-		break
-	fi
-done
+def get_debian_dir():
+    if os.path.exists("debian/debian.env"):
+        with open("debian/debian.env", encoding="utf-8") as fh:
+            return fh.readline().split("=")[1].strip()
+    return "debian"
 
-#
-# Create the patch series
-#
 
-rm -rf .ubuntu-*
+def get_handle(debian_dir):
+    with open(os.path.join(debian_dir, "changelog"), encoding="utf-8") as fh:
+        ch = Changelog(fh, max_blocks=1)
+    return ch.distributions, ch.package
 
-for s in "${series[@]}" ; do
-	branch=${branch_prefix}/${s}
-	odir=.ubuntu-${s}
 
-	echo "-- ${branch}"
-	format_patch "${branch}" "${odir}" "${msg_id}" "${single_patch}"
-	echo
-done
+def get_series_data(ks, series):
+    for _, series_data in ks.items():
+        if series_data.get("codename") == series:
+            return series_data
+    print(f"Error: Series '{series}' not found in kernel-series", file=sys.stderr)
+    sys.exit(1)
 
-#
-# Combine the patch series
-#
 
-rm -rf .outgoing
-mkdir .outgoing
-mv .ubuntu-*/*.patch .outgoing/
-rm -rf .ubuntu-*
+def get_source_data(series_data, source):
+    for _, source_data in series_data["sources"].items():
+        for package, _ in source_data["packages"].items():
+            if package == source:
+                return source_data
+    print(f"Error: Source '{source}' not found in kernel-series", file=sys.stderr)
+    sys.exit(1)
 
-#
-# Create a top-level cover letter for multi-series submissions
-#
 
-if [ -n "${msg_id}" ] ; then
-	# Get all buglinks from all patches
-	readarray -t buglinks < <(sed -n 's|^BugLink: https://|https://|p' .outgoing/*.patch)
+class KernelPackage:
+    def __init__(self, ks, handle):
+        self.series, self.source = handle
 
-	# Submission subject
-	bug=${buglinks[0]}
-	bug=${bug##*/}
-	subject="$(query_lp_bug "${bug}" title) (LP: #${bug})"
+        series_data = get_series_data(ks, self.series)
+        source_data = get_source_data(series_data, self.source)
 
-	# List of targeted series
-	series_list=$(printf "%.1s/" "${series[@]^}")
-	series_list=${series_list%/}
+        series_devel = series_data.get("development", False)
+        series_supported = series_data.get("supported", False)
+        series_esm = series_data.get("esm", False)
 
-	patch="PATCH"
-	if [ -n "${VERSION}" ] ; then
-		patch="${patch} v${VERSION}"
-	fi
-	if [ "${single_patch}" -eq 0 ] ; then
-		patch="${patch} 0/${#series[@]}"
-	fi
+        self.is_devel = source_data.get("development", series_devel)
+        self.is_supported = source_data.get("supported", True) if series_supported else False
+        self.is_esm = series_esm
 
-	{
-		echo "From ${sha1} Mon Sep 17 00:00:00 2001"
-		echo "Message-Id: ${msg_id}"
-		echo "References: ${msg_id}"
-		echo "Subject: [SRU][${series_list}][${patch}] ${subject}"
-		echo
-		printf "%s\n" "${buglinks[@]}" | sort -u
-		echo
-		query_lp_bug "${bug}" description
-		echo
-	} > .outgoing/0000-cover-letter.patch
-fi
+    def subject_tag(self):
+        """Return the patch subject tag for this kernel package"""
+        s = self.series[0].upper()
+        p = self.source.removeprefix("linux").removeprefix("-")
+        if p:
+            return f"{s}:{p}"
+        return s
 
-#
-# Done
-#
 
-echo "-- Final patch series in .outgoing/"
-ls -1 .outgoing/*
+class Submission:
+    def __init__(self, id_, init=False, subject=None, message_id=None):
+        self.dir = os.path.join(CACHEDIR, id_)
+        self.info = {}
+        self._ks = None
+
+        if init:
+            self.init(subject=subject, message_id=message_id)
+
+        if not os.path.exists(self.dir):
+            print("Error: Not initialized", file=sys.stderr)
+            sys.exit(1)
+
+        self.load()
+
+    def load(self):
+        """Load info from file"""
+        with open(os.path.join(self.dir, "info.json"), encoding="utf-8") as fh:
+            self.info = json.load(fh)
+
+    def save(self):
+        """Save info to file"""
+        with open(os.path.join(self.dir, "info.json"), "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(self.info))
+
+    def init(self, **kwargs):
+        """Initialize environment"""
+        if os.path.exists(self.dir):
+            shutil.rmtree(self.dir)
+        os.makedirs(self.dir)
+
+        # Save initial info data
+        self.info = kwargs
+        self.save()
+
+        # Save description file
+        with open(os.path.join(self.dir, "description"), "w", encoding="utf-8") as fh:
+            fh.write(kwargs["subject"] + "\n")
+
+        # Cache kernel-series.json
+        ks = os.path.join(self.dir, "ks.gz")
+        r = requests.get("https://kernel.ubuntu.com/info/kernel-series.json.gz", timeout=5)
+        with open(ks, "wb") as fh:
+            fh.write(r.content)
+
+    def ks(self):
+        """Return cached kernel-series data"""
+        if not self._ks:
+            with gzip.open(os.path.join(self.dir, "ks.gz")) as fh:
+                self._ks = json.load(fh)
+        return self._ks
+
+
+@click.group()
+def cli():
+    pass
+
+
+@cli.command()
+@click.option("--id", "id_", required=True, help="Patch submission ID.")
+@click.option("--subject", required=True, help="Email subject for patch submission.")
+def init(id_, subject):
+    """Initialize a new patchset submission."""
+    Submission(id_, init=True, subject=subject, message_id=make_msgid())
+
+
+@cli.command()
+@click.option("--id", "id_", required=True, help="Patchset ID.")
+@click.argument("revision-range", nargs=-1, type=click.UNPROCESSED)
+def format_patch(id_, revision_range):
+    """Format patches."""
+    sub = Submission(id_)
+    repo = git.Repo()
+
+    debian_dir = get_debian_dir()
+    handle = get_handle(debian_dir)
+    kp = KernelPackage(sub.ks(), handle)
+
+    ktag = kp.subject_tag()
+
+    if kp.is_supported:
+        subject_prefix = f"SRU][{ktag}][PATCH"
+        sub.info["sru"] = True
+        sub.save()
+    else:
+        subject_prefix = f"{ktag}][PATCH"
+
+    out_dir = os.path.join(sub.dir, ktag)
+    if os.path.exists(out_dir):
+        shutil.rmtree(out_dir)
+
+    # Create the patchset
+    opts = [
+        f"--output-directory={out_dir}",
+        "--cover-letter",
+        "--cover-from-description=subject",
+        f"--description-file={sub.dir}/description",
+        "--thread=shallow",
+        f"--in-reply-to={sub.info['message_id']}",
+        f"--subject-prefix={subject_prefix}",
+    ] + list(revision_range)
+    repo.git.format_patch(opts)
+
+
+@cli.command()
+@click.option("--id", "id_", required=True, help="Patchset ID.")
+def format_thread(id_):
+    """Format thread."""
+    sub = Submission(id_)
+    repo = git.Repo()
+
+    # Collect the patchsets
+    patchsets = []
+    for item in sorted(os.listdir(sub.dir)):
+        if os.path.isdir(os.path.join(sub.dir, item)):
+            patchsets.append(item)
+
+    if not patchsets:
+        print("Error: No patchsets found", file=sys.stderr)
+        sys.exit(1)
+
+    name = repo.config_reader().get_value("user", "name")
+    email = repo.config_reader().get_value("user", "email")
+    date = format_datetime(datetime.now().astimezone())
+
+    # Construct the subject
+    if sub.info.get("sru"):
+        subject = "[SRU]"
+    else:
+        subject = ""
+    subject += "[" + "][".join(patchsets) + "]"
+    subject += "[PATCH 0/" + str(len(patchsets)) + "]"
+    subject += " " + sub.info["subject"]
+
+    # Generate the cover letter
+    cover_letter = os.path.join(sub.dir, "0000-cover-letter.patch")
+    with open(cover_letter, "w", encoding="utf-8") as fh:
+        fh.write(f"From {email} Mon Sep 17 00:00:00 2001\n")
+        fh.write(f"Message-ID: {sub.info['message_id']}\n")
+        fh.write(f"From: {name} <{email}>\n")
+        fh.write(f"Date: {date}\n")
+        fh.write(f"Subject: {subject}\n")
+        fh.write("\n")
+        fh.write("*** BLURB HERE ***\n")
+        fh.write("\n")
+
+
+@cli.command()
+@click.option("--id", "id_", required=True, help="Patchset ID.")
+@click.option("--print", "print_", is_flag=True, help="Print the cover letter.")
+def edit_cv(id_, print_):
+    """Edit patch submission cover letter."""
+    sub = Submission(id_)
+    cover_letter = os.path.join(sub.dir, "0000-cover-letter.patch")
+
+    if print_:
+        with open(cover_letter, encoding="utf-8") as fh:
+            print(fh.read(), end="")
+        return
+    os.system(f"{os.getenv('EDITOR')} {cover_letter}")
+
+
+@cli.command()
+@click.option("--id", "id_", required=True, help="Patchset ID.")
+@click.option("--dry-run", is_flag=True)
+@click.option("--to")
+def send_email(id_, dry_run, to):
+    """Send that patches to the mailing list."""
+    sub = Submission(id_)
+    # repo = git.Repo()
+
+    patches = [os.path.join(sub.dir, "0000-cover-letter.patch")]
+    for item in sorted(os.listdir(sub.dir)):
+        d = os.path.join(sub.dir, item)
+        if os.path.isdir(d):
+            for f in sorted(os.listdir(d)):
+                if not f.endswith(".patch"):
+                    continue
+                patches.append(os.path.join(d, f))
+
+    if not to:
+        to = "kernel-team@lists.ubuntu.com"
+
+    opts = ["--dry-run"] if dry_run else []
+    opts += [
+        "--suppress-cc=all",
+        f"--to={to}",
+    ] + patches
+
+    cmd = ["git", "send-email"] + opts
+    print(cmd)
+    check_call(cmd)
+
+
+if __name__ == "__main__":
+    cli()
