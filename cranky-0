@@ -169,7 +169,7 @@ function do_close()
 		args+=("--force")
 	fi
 
-	run "${CRANKY}" close
+	run "${CRANKY}" close --use-cuc
 	run "${CRANKY}" tag "${args[@]}"
 }
 
