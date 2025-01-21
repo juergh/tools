@@ -76,8 +76,9 @@ class KernelPackage:
 
 
 class Submission:
-    def __init__(self, id_, init=False, subject=None, message_id=None):
-        self.dir = os.path.join(CACHEDIR, id_)
+    def __init__(self, sid=None, init=False, subject=None, message_id=None):
+        self.sid = sid or "default"
+        self.dir = os.path.join(CACHEDIR, self.sid)
         self.info = {}
         self._ks = None
 
@@ -111,8 +112,9 @@ class Submission:
         self.save()
 
         # Save description file
+        subject = kwargs["subject"] or ""
         with open(os.path.join(self.dir, "description"), "w", encoding="utf-8") as fh:
-            fh.write(kwargs["subject"] + "\n")
+            fh.write(subject + "\n")
 
         # Cache kernel-series.json
         ks = os.path.join(self.dir, "ks.gz")
@@ -134,19 +136,19 @@ def cli():
 
 
 @cli.command()
-@click.option("--id", "id_", required=True, help="Patch submission ID.")
-@click.option("--subject", required=True, help="Email subject for patch submission.")
-def init(id_, subject):
+@click.option("--sid", help="Submission ID.")
+@click.option("--subject", help="Email subject for patch submission.")
+def init(sid, subject):
     """Initialize a new patchset submission."""
-    Submission(id_, init=True, subject=subject, message_id=make_msgid())
+    Submission(sid=sid, init=True, subject=subject, message_id=make_msgid())
 
 
 @cli.command()
-@click.option("--id", "id_", required=True, help="Patchset ID.")
+@click.option("--sid", help="Submission ID.")
 @click.argument("revision-range", nargs=-1, type=click.UNPROCESSED)
-def format_patch(id_, revision_range):
+def format_patch(sid, revision_range):
     """Format patches."""
-    sub = Submission(id_)
+    sub = Submission(sid=sid)
     repo = git.Repo()
 
     debian_dir = get_debian_dir()
@@ -180,15 +182,15 @@ def format_patch(id_, revision_range):
 
 
 @cli.command()
-@click.option("--id", "id_", required=True, help="Patchset ID.")
-def format_thread(id_):
+@click.option("--sid", help="Submission ID.")
+def format_thread(sid):
     """Format thread."""
-    sub = Submission(id_)
+    sub = Submission(sid=sid)
     repo = git.Repo()
 
     # Collect the patchsets
     patchsets = []
-    for item in sorted(os.listdir(sub.dir)):
+    for item in sorted(os.listdir(sub.dir), reverse=True):
         if os.path.isdir(os.path.join(sub.dir, item)):
             patchsets.append(item)
 
@@ -223,11 +225,11 @@ def format_thread(id_):
 
 
 @cli.command()
-@click.option("--id", "id_", required=True, help="Patchset ID.")
+@click.option("--sid", help="Submission ID.")
 @click.option("--print", "print_", is_flag=True, help="Print the cover letter.")
-def edit_cv(id_, print_):
+def edit_cv(sid, print_):
     """Edit patch submission cover letter."""
-    sub = Submission(id_)
+    sub = Submission(sid=sid)
     cover_letter = os.path.join(sub.dir, "0000-cover-letter.patch")
 
     if print_:
@@ -238,16 +240,16 @@ def edit_cv(id_, print_):
 
 
 @cli.command()
-@click.option("--id", "id_", required=True, help="Patchset ID.")
+@click.option("--sid", help="Submission ID.")
 @click.option("--dry-run", is_flag=True)
 @click.option("--to")
-def send_email(id_, dry_run, to):
+def send_email(sid, dry_run, to):
     """Send that patches to the mailing list."""
-    sub = Submission(id_)
+    sub = Submission(sid=sid)
     # repo = git.Repo()
 
     patches = [os.path.join(sub.dir, "0000-cover-letter.patch")]
-    for item in sorted(os.listdir(sub.dir)):
+    for item in sorted(os.listdir(sub.dir), reverse=True):
         d = os.path.join(sub.dir, item)
         if os.path.isdir(d):
             for f in sorted(os.listdir(d)):
@@ -266,7 +268,32 @@ def send_email(id_, dry_run, to):
 
     cmd = ["git", "send-email"] + opts
     print(cmd)
+    print()
+
     check_call(cmd)
+
+
+@cli.command()
+@click.option("--sid", help="Submission ID.")
+def list_patches(sid):
+    """List patches."""
+    sub = Submission(sid=sid)
+
+    cover_letter = "0000-cover-letter.patch"
+
+    patches = []
+    if os.path.exists(os.path.join(sub.dir, cover_letter)):
+        patches.append(cover_letter)
+
+    for item in sorted(os.listdir(sub.dir), reverse=True):
+        d = os.path.join(sub.dir, item)
+        if os.path.isdir(d):
+            for f in sorted(os.listdir(d)):
+                if not f.endswith(".patch"):
+                    continue
+                patches.append(f"{item}/{f}")
+
+    print("\n".join(patches))
 
 
 if __name__ == "__main__":
