@@ -6,6 +6,7 @@
 import argparse
 import email
 import gzip
+import hashlib
 import json
 import mailbox
 import os
@@ -115,14 +116,19 @@ class Message():
                 if key in ("message-id", "in-reply-to"):
                     m[key] = fix_id(m[key])
 
-            # Add timestamp (seconds since the epoch)
-            m["timestamp"] = parser.parse(re.sub(r" \(.*\)", "", m["date"])).timestamp()
+            # Ugg!
+            if not m["message-id"]:
+                s = json.dumps(m, sort_keys=True).encode("utf-8")
+                m["message-id"] = "<" + hashlib.md5(s).hexdigest() + "@fake.message.id>"
 
+            # Add timestamp (seconds since the epoch) and replied-by helper list
+            m["timestamp"] = int(parser.parse(re.sub(r" \(.*\)", "", m["date"])).timestamp())
+            m["replied-by"] = []
         else:
             m = msg
 
         self.msg = m
-        self.msg["replied-by"] = []
+
 
     def __str__(self):
         return json.dumps(self.msg, indent=2)
@@ -177,62 +183,76 @@ class Message():
 
 class MessageSet:
     def __init__(self, mbox=None, cache=None):
+        self.mbox = mbox
+        self.cache = cache
         self.msgs = {}
 
-        is_stale = False
-
         # Load the cache
-        if os.path.exists(cache):
-            print(f"-- Load cache: {cache}", file=sys.stderr)
-            with gzip.open(cache, "r") as fh:
-                for msg in json.loads(fh.read().decode("utf-8")):
-                    self.add_message(Message(msg))
+        self.load_cache()
 
         # Load the mbox
-        if os.path.exists(mbox):
-            mb = Mbox(mbox)
-            if os.path.exists(cache):
+        count = self.load_mbox()
+        if count:
+            # Rebuild the threads and save the cache
+            self.rebuild_threads()
+            self.save_cache()
+
+    def load_mbox(self):
+        """Load messages from the mbox"""
+        count = 0
+        if os.path.exists(self.mbox):
+            mb = Mbox(self.mbox)
+            if self.msgs:
+                pass
                 # Walk the mbox in reverse order and add new messages
-                print(f"-- Update from mbox: {mbox}", file=sys.stderr)
-                for msg in mb.iter_messages(reverse=True):
-                    m = Message(msg)
-                    if self.message_exists(m.id):
-                        break
-                    self.add_message(m)
-                    is_stale = True
+                #print(f"-- Update from mbox: {mbox}", file=sys.stderr)
+                #count = 0
+                #for msg in mb.iter_messages(reverse=True):
+                #    m = Message(msg)
+                #    if m.id in self.msgs and self.msgs[m.id].timestamp == m.timestamp:
+                #        break
+                #    self.add_message(m)
+                #    count += 1
             else:
-                is_stale = True
                 # Load the whole mbox
-                print(f"-- Load mbox: {mbox}", file=sys.stderr)
+                print(f"-- Load mbox: {self.mbox}", file=sys.stderr)
                 for msg in mb.iter_messages():
                     self.add_message(Message(msg))
+                    count += 1
+            print(f"-- Loaded {count} messages", file=sys.stderr)
+        return count
 
-        if is_stale:
-            # Rebuild the threads
-            print("-- Rebuild threads", file=sys.stderr)
-            self.rebuild_threads()
+    def load_cache(self):
+        """Load messages from the cache"""
+        count = 0
+        if os.path.exists(self.cache):
+            print(f"-- Load cache: {self.cache}", file=sys.stderr)
+            with gzip.open(self.cache, "r") as fh:
+                for msg in json.loads(fh.read().decode("utf-8")):
+                    self.add_message(Message(msg))
+                    count += 1
+            print(f"-- Loaded {count} messages", file=sys.stderr)
+        return count
 
-            # Update the cache
-            if cache:
-                print(f"-- Update cache: {cache}", file=sys.stderr)
-                with gzip.open(cache, "w") as fh:
-                    fh.write(json.dumps([m.msg for m in self.msgs.values()]).encode("utf-8"))
+    def save_cache(self):
+        """Save messages to the cache"""
+        if self.cache:
+            print(f"-- Save cache: {self.cache}", file=sys.stderr)
+            with gzip.open(self.cache, "w") as fh:
+                fh.write(json.dumps([m.msg for m in self.msgs.values()]).encode("utf-8"))
 
     def add_message(self, msg):
-        if msg.id:
-            self.msgs[msg.id] = msg
+        self.msgs[msg.id] = msg
 
     def get_message(self, mid):
         return self.msgs.get(mid)
-
-    def message_exists(self, mid):
-        return mid in self.msgs
 
     def iter_messages(self, reverse=True):
         for msg in sorted(self.msgs.values(), key=lambda x: x.timestamp, reverse=reverse):
             yield msg
 
     def rebuild_threads(self):
+        print("-- Rebuild threads", file=sys.stderr)
         for msg in self.iter_messages():
             msg.set_replied_by([])
 
@@ -253,7 +273,7 @@ class MessageSet:
         return _msgs
 
 aparser = argparse.ArgumentParser(description="Print email message threads.")
-aparser.add_argument("--force", action="store_true", help="Recreate the cache")
+aparser.add_argument("--cache", action="store_true", help="Recreate the cache")
 aparser.add_argument("--filter", action="store_true", help="Filter non-patch emails")
 aparser.add_argument("--filter-nack", action="store_true", help="Filter NACK'ed emails")
 aparser.add_argument("--filter-applied", action="store_true", help="Filter APPLIED emails")
@@ -273,7 +293,7 @@ else:
 
 cache = args.mbox + ".json.gz"
 
-if args.force and os.path.exists(cache):
+if args.cache and os.path.exists(cache):
     os.remove(cache)
 
 ### Debug
@@ -287,8 +307,13 @@ if args.dump_mbox or args.dump_mbox_reverse:
 
 messages = MessageSet(mbox=args.mbox, cache=cache)
 
+if args.cache:
+    sys.exit(0)
+
 ### Debug
 if args.dump:
+#    messages.rebuild_threads()
+#    messages.save_cache()
     for msg in messages.iter_messages():
         print(msg)
     sys.exit(0)
