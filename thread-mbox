@@ -13,7 +13,6 @@ import re
 import sys
 
 from email.policy import default
-from subprocess import PIPE, CalledProcessError, Popen
 from time import localtime, strftime
 
 from dateutil import parser
@@ -26,8 +25,8 @@ YELLOW = "\033[93m"
 NC = "\033[00m"
 
 
-def message_from_bytes(bytes):
-    return mailbox.Message(email.message_from_bytes(bytes, policy=default))
+def message_from_bytes(bytes_):
+    return mailbox.Message(email.message_from_bytes(bytes_, policy=default))
 
 
 def trim_line(line, width):
@@ -78,7 +77,32 @@ class Mbox:
                 if append:
                     lines.append(line)
 
+    def _iter_messages_reverse(self):
+        """Walk through all messages in reverse order"""
+        with open(self.mbox, mode="rb") as fh:
+            fh.seek(0, 2)
+            pos = fh.tell()
+            data = b""
+            while pos > 0:
+                pos = pos - 1024
+                if pos > 0:
+                    fh.seek(pos)
+                    data = fh.read(1024) + data
+                else:
+                    # Special case: begin of file
+                    fh.seek(0)
+                    data = b"\n" + fh.read(1024 + pos) + data
+
+                if b"\nFrom " in data:
+                    parts = data.partition(b"\nFrom ")
+                    data, msgs = parts[0], b"".join(parts[1:])
+                    for msg in reversed(re.split(b"\nFrom ", msgs)):
+                        if msg:
+                            yield message_from_bytes(b"From " + msg)
+
     def iter_messages(self, reverse=False):
+        if reverse:
+            return self._iter_messages_reverse()
         return self._iter_messages()
 
 
@@ -87,7 +111,7 @@ class Message():
         if isinstance(msg, mailbox.Message):
             m = {}
             for key in ("from", "date", "subject", "message-id", "in-reply-to"):
-                m[key] = (msg[key] or "").replace("\n", "")
+                m[key] = (msg[key] or "").replace("\n", "").replace("\t", " ")
                 if key in ("message-id", "in-reply-to"):
                     m[key] = fix_id(m[key])
 
@@ -144,7 +168,7 @@ class Message():
         else:
             color = NC
 
-        subject = trim_line(" " * indent + self.subject, COLS-50)
+        subject = trim_line(" " * indent + self.subject, COLS - 50)
         sender = trim_line(self.sender.split("<")[0], 28)
         date = strftime("%Y/%m/%d %H:%M", localtime(self.timestamp))
 
@@ -168,19 +192,20 @@ class MessageSet:
         if os.path.exists(mbox):
             mb = Mbox(mbox)
             if os.path.exists(cache):
+                # Walk the mbox in reverse order and add new messages
                 print(f"-- Update from mbox: {mbox}", file=sys.stderr)
-                # FIXME
-                #is_stale = True
+                for msg in mb.iter_messages(reverse=True):
+                    m = Message(msg)
+                    if self.message_exists(m.id):
+                        break
+                    self.add_message(m)
+                    is_stale = True
             else:
                 is_stale = True
                 # Load the whole mbox
                 print(f"-- Load mbox: {mbox}", file=sys.stderr)
                 for msg in mb.iter_messages():
                     self.add_message(Message(msg))
-
-        # Remove me
-        print("-- Rebuild threads", file=sys.stderr)
-        self.rebuild_threads()
 
         if is_stale:
             # Rebuild the threads
@@ -216,11 +241,11 @@ class MessageSet:
             if irt:
                 irt.add_replied_by(msg.id)
 
-    def get_thread(self, id, _msgs=None, _indent=0):
+    def get_thread(self, id_, _msgs=None, _indent=0):
         if _msgs is None:
             _msgs = []
 
-        msg = self.get_message(id)
+        msg = self.get_message(id_)
         if msg:
             _msgs.append([msg, _indent])
             for msg_id in msg.replied_by:
@@ -236,6 +261,8 @@ aparser.add_argument("--filter-patch", action="store_true", help="Filter PATCH a
 aparser.add_argument("--filter-rfc", action="store_true", help="Filter RFC emails")
 aparser.add_argument("--since", help="Print messages since the provided date")
 aparser.add_argument("--dump", action="store_true", help="Dump the messages and exit")
+aparser.add_argument("--dump-mbox", action="store_true", help="Dump the mbox messages and exit")
+aparser.add_argument("--dump-mbox-reverse", action="store_true", help="Dump the mbox messages in reverse order and exit")
 aparser.add_argument("mbox", help="Mbox file")
 args = aparser.parse_args()
 
@@ -249,12 +276,23 @@ cache = args.mbox + ".json.gz"
 if args.force and os.path.exists(cache):
     os.remove(cache)
 
+### Debug
+if args.dump_mbox or args.dump_mbox_reverse:
+    mbox = Mbox(args.mbox)
+    for msg in mbox.iter_messages(reverse=args.dump_mbox_reverse):
+        print(YELLOW + "#" * int(os.popen("tput cols", "r").read().strip()) + NC)
+        print(msg)
+    sys.exit(0)
+### Debug
+
 messages = MessageSet(mbox=args.mbox, cache=cache)
 
+### Debug
 if args.dump:
     for msg in messages.iter_messages():
         print(msg)
     sys.exit(0)
+### Debug
 
 for msg in messages.iter_messages():
     if msg.in_reply_to:
