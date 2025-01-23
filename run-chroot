@@ -103,7 +103,7 @@ function usage()
 	arch=$(hostarch "${release}")
 
 	cat <<EOF
-Usage: run-chroot [-d] [-h] [-l c|s] [-p] [-u USER] [CHROOT[-ARCH]] [--]
+Usage: run-chroot [-d] [-h] [-l|-lc|-ls] [-p] [-u USER] [CHROOT[-ARCH]] [--]
        [COMMAND [ARGS]]
 
 Run a chroot session. Create it first, if it doesn't exist.
@@ -118,8 +118,9 @@ Positional arguments:
 Optional 
   -d, --destroy          Destroy a session.
   -h, --help             Show this help text and exit.
-  -l, --list [chroot|session|all]
-                         List existing chroots or sessions or all.
+  -l, --list             List chroots and sessions.
+  -lc, --list-chroots    List chroots.
+  -ls, --list-sessions   List sessions.
   -p, --no-preserve-env  Don't preserve the user's environment inside
                          the chroot.
   -u, --user USER        Run the session as the user USER.
@@ -141,15 +142,18 @@ while [ $# -gt 0 ] ; do
 			exit
 			;;
 		-l|--list)
-			shift
-			case "${1:-}" in
-				a|all|"")  echo "-- All --"; regex="^" ;;
-				c|chroot)  echo "-- Chroots --" ; regex="^source:" ;;
-				s|session) echo "-- Sessions --" ; regex="^session:" ;;
-				r|source)  echo "-- Sources --" ; regex="^source:" ;;
-				*)         echo "Invalid type: ${1}" >&2 ; exit 2 ;;
-			esac
-			schroot -l --all | sed -n "s/${regex}//p" | sort
+			echo "-- All --"
+			schroot -l --all | sort
+			exit
+			;;
+		-lc|--list-chroots)
+			echo "-- Chroots --"
+			schroot -l --all | sed -n 's/^chroot://p' | sort
+			exit
+			;;
+		-ls|--list-sessions)
+			echo "-- Sessions --"
+			schroot -l --all | sed -n 's/^session://p' | sort
 			exit
 			;;
 		-p|--no-preserve-env)
