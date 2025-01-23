@@ -97,8 +97,8 @@ function destroy_session()
 
 function update_session()
 {
-	local seesion=${1}
-	local debs
+	local session=${1}
+	local series yymm debs
 
 	pr_info "Update session ${session}"
 
@@ -110,6 +110,13 @@ EOF
 
 	# Special case: Builder session
 	if [ "${session%--*}" = "build" ] ; then
+		series=${session#*--}
+		series=${series%%-*}
+		yymm=$(ubuntu-distro-info -a -f | grep -i "\"${series} " | awk '{print $2}' | tr -d '.')
+		if [ -z "${yymm}" ] ; then
+			yymm=9999
+		fi
+
 		# Base packages for kernel builds
 		debs=(
 			asciidoc
@@ -142,15 +149,19 @@ EOF
 		)
 
 		# Rust
-		debs+=(
-			# noble
-			bindgen-0.65
-
-			bindgen
-			rust-src
-			rustfmt
-			rustc
-		)
+		if [ "${yymm}" -gt 2210 ] || [ "${series}" = "jammy" ] ; then
+			debs+=(
+				bindgen
+				rust-src
+				rustfmt
+				rustc
+			)
+			case "${series}" in
+				noble)
+					debs+=(bindgen-0.65)
+					;;
+			esac
+		fi
 
 		cat << EOF | schroot -r -c "${session}" -u root -- bash -
 for deb in ${debs[*]} ; do
