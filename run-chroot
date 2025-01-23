@@ -95,6 +95,74 @@ function destroy_session()
 	schroot -e -c "${session}"
 }
 
+function update_session()
+{
+	local seesion=${1}
+	local debs
+
+	pr_info "Update session ${session}"
+
+	if false ; then
+	cat << EOF | schroot -r -c "${session}" -u root -- bash -
+apt-get --yes --force-yes update
+apt-get --yes --force-yes dist-upgrade
+apt-get --yes --force-yes autoremove
+EOF
+	fi
+
+	# Special case: Builder session
+	if [ "${session%--*}" = "build" ] ; then
+		# Base packages for kernel builds
+		debs=(
+			asciidoc
+			bc
+			bison
+			build-essential
+			cpio
+			debhelper
+			default-jdk-headless
+			dwarfdump
+			flex
+			less
+			libcap-dev
+			libelf-dev
+			libpci-dev
+			libssl-dev
+			libtraceevent-dev
+			libtracefs-dev
+			libudev-dev
+			openssl
+			pahole
+			pkg-config
+			python3
+			python3-dev
+			python3-docutils
+			python3-setuptools
+			rsync
+			xmlto
+			zstd
+		)
+
+		# Rust
+		debs+=(
+			# noble
+			bindgen-0.65
+
+			bindgen
+			rust-src
+			rustfmt
+			rustc
+		)
+
+		cat << EOF | schroot -r -c "${session}" -u root -- bash -
+for deb in ${debs[*]} ; do
+    echo "-- Install \$deb"
+    apt-get --yes --force-yes --no-install-recommends install \$deb
+done
+EOF
+	fi
+}
+
 function usage()
 {
 	local release arch
@@ -103,7 +171,7 @@ function usage()
 	arch=$(hostarch "${release}")
 
 	cat <<EOF
-Usage: run-chroot [-d] [-h] [-l|-lc|-ls] [-p] [-u USER] [CHROOT[-ARCH]] [--]
+Usage: run-chroot [-d] [-h] [-l|-lc|-ls] [-p] [--update] [-u USER] [CHROOT[-ARCH]] [--]
        [COMMAND [ARGS]]
 
 Run a chroot session. Create it first, if it doesn't exist.
@@ -123,12 +191,14 @@ Optional
   -ls, --list-sessions   List sessions.
   -p, --no-preserve-env  Don't preserve the user's environment inside
                          the chroot.
+  --update               Update a session.
   -u, --user USER        Run the session as the user USER.
 EOF
 }
 
 destroy=0
 preserve_env=1
+update=0
 user=${USER}
 chroot=
 
@@ -158,6 +228,9 @@ while [ $# -gt 0 ] ; do
 			;;
 		-p|--no-preserve-env)
 			preserve_env=0
+			;;
+		--update)
+			update=1
 			;;
 		-u|--user)
 			shift
@@ -220,6 +293,12 @@ if ! session_exists "${session}" ; then
 		create_chroot "${chroot}"
 	fi
 	create_session "${session}" "${chroot}"
+fi
+
+# Update the session if --update is provided
+if [ "${update}" -eq 1 ] ; then
+	update_session "${session}"
+	exit
 fi
 
 # Assemble the PS1 prefix
