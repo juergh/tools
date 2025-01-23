@@ -64,6 +64,12 @@ for config in CONFIGS/* ; do
 	# Remove all modules
 	sed -i '/=m$/d' "${config}"
 
+	# Add some important modules back (for local testing)
+	cat <<EOF >>"${config}"
+CONFIG_ISO9660_FS=m
+CONFIG_NLS_ISO8859_1=m
+EOF
+
 	config=${config#*/}
 	arch=${config%%-*}
 	case "${arch}" in
