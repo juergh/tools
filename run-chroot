@@ -102,13 +102,11 @@ function update_session()
 
 	pr_info "Update session ${session}"
 
-	if false ; then
 	cat << EOF | schroot -r -c "${session}" -u root -- bash -
 apt-get --yes --force-yes update
 apt-get --yes --force-yes dist-upgrade
 apt-get --yes --force-yes autoremove
 EOF
-	fi
 
 	# Special case: Builder session
 	if [ "${session%--*}" = "build" ] ; then
