@@ -170,6 +170,42 @@ function do_close()
 	fi
 
 	run "${CRANKY}" close --use-cuc
+
+	if [ "$(sed -n 's/DEBIAN=//p' debian/debian.env)" = "debian.raspi-realtime" ] ; then
+		run git reset --hard HEAD~1
+
+		cranky=$HOME/git/ubuntu/kteam-tools/cranky/cranky
+		cl=debian.raspi-realtime/changelog
+
+		#
+		# raspi
+		#
+		version=$(dpkg-parsechangelog -l debian.raspi/changelog -S Version -o1 -c1)
+		run "$cranky" update-changelog --changelog "$cl" --from-version "${version}" --from-changelog debian.raspi/changelog
+
+		#
+		# realtime
+		#
+		version=$(dpkg-parsechangelog -l debian.realtime/changelog -S Version -o1 -c1)
+		from_commit=$(git log --format="%h __%s__" | grep -m1 -F "__UBUNTU: Ubuntu-realtime-${version}__" | sed 's/ .*//')
+		version=$(dpkg-parsechangelog -l debian.realtime/changelog -S Version)
+		to_commit=$(git log --format="%h __%s__" | grep -m1 -F "__UBUNTU: Ubuntu-realtime-${version}__" | sed 's/ .*//')
+		run "$cranky" update-changelog --changelog "$cl" --commit-range "${from_commit}..${to_commit}"
+
+		#
+		# raspi-realtime
+		#
+		version=$(dpkg-parsechangelog -l debian.raspi-realtime/changelog -S Version -o1 -c1)
+		from_commit=$(git log --format="%h __%s__" | grep -m1 -F "__UBUNTU: Ubuntu-raspi-realtime-${version}__" | sed 's/ .*//')
+		run "$cranky" update-changelog --changelog "$cl" --from-commit "${from_commit}"
+
+		run git add "$cl"
+		series=$(dpkg-parsechangelog -l "$cl" -SDistribution -o1 -c1)
+		version=$(dpkg-parsechangelog -l "$cl" -SVersion)
+		run dch --nomultimaint -c "$cl" -r -D "$series" ''
+		run git commit -sam "UBUNTU: Ubuntu-raspi-realtime-$version"
+	fi
+
 	run "${CRANKY}" tag "${args[@]}"
 }
 
