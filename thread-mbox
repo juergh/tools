@@ -203,16 +203,20 @@ class MessageSet:
         if os.path.exists(self.mbox):
             mb = Mbox(self.mbox)
             if self.msgs:
-                pass
                 # Walk the mbox in reverse order and add new messages
-                #print(f"-- Update from mbox: {mbox}", file=sys.stderr)
-                #count = 0
-                #for msg in mb.iter_messages(reverse=True):
-                #    m = Message(msg)
-                #    if m.id in self.msgs and self.msgs[m.id].timestamp == m.timestamp:
-                #        break
-                #    self.add_message(m)
-                #    count += 1
+                print(f"-- Update from mbox: {mbox}", file=sys.stderr)
+                found = False
+                count = 0
+                for msg in mb.iter_messages(reverse=True):
+                    m = Message(msg)
+                    if m.id in self.msgs and self.msgs[m.id].timestamp == m.timestamp:
+                        found = True
+                        break
+                    self.add_message(m)
+                    count += 1
+                if not found:
+                    print("-- Error: No cache hit", file=sys.stderr)
+                    sys.exit(1)
             else:
                 # Load the whole mbox
                 print(f"-- Load mbox: {self.mbox}", file=sys.stderr)
