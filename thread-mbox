@@ -283,7 +283,7 @@ aparser.add_argument("--since", help="Print messages since the provided date")
 aparser.add_argument("--dump", action="store_true", help="Dump the messages and exit")
 aparser.add_argument("--dump-mbox", action="store_true", help="Dump the mbox messages and exit")
 aparser.add_argument("--dump-mbox-reverse", action="store_true", help="Dump the mbox messages in reverse order and exit")
-aparser.add_argument("mbox", help="Mbox file")
+aparser.add_argument("mbox", help="Mbox name")
 args = aparser.parse_args()
 
 if args.since:
@@ -291,21 +291,22 @@ if args.since:
 else:
     since_ts = 0
 
-cache = args.mbox + ".json.gz"
+mbox = args.mbox + ".mbox"
+cache = mbox + ".json.gz"
 
 if args.cache and os.path.exists(cache):
     os.remove(cache)
 
 ### Debug
 if args.dump_mbox or args.dump_mbox_reverse:
-    mbox = Mbox(args.mbox)
+    mbox = Mbox(mbox)
     for msg in mbox.iter_messages(reverse=args.dump_mbox_reverse):
         print(YELLOW + "#" * int(os.popen("tput cols", "r").read().strip()) + NC)
         print(msg)
     sys.exit(0)
 ### Debug
 
-messages = MessageSet(mbox=args.mbox, cache=cache)
+messages = MessageSet(mbox=mbox, cache=cache)
 
 if args.cache:
     sys.exit(0)
