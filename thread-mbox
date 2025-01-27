@@ -129,7 +129,6 @@ class Message():
 
         self.msg = m
 
-
     def __str__(self):
         return json.dumps(self.msg, indent=2)
 
@@ -182,26 +181,14 @@ class Message():
 
 
 class MessageSet:
-    def __init__(self, mbox=None, cache=None):
-        self.mbox = mbox
-        self.cache = cache
+    def __init__(self):
         self.msgs = {}
 
-        # Load the cache
-        self.load_cache()
-
-        # Load the mbox
-        count = self.load_mbox()
-        if count:
-            # Rebuild the threads and save the cache
-            self.rebuild_threads()
-            self.save_cache()
-
-    def load_mbox(self):
+    def load_mbox(self, mbox):
         """Load messages from the mbox"""
         count = 0
-        if os.path.exists(self.mbox):
-            mb = Mbox(self.mbox)
+        if os.path.exists(mbox):
+            mb = Mbox(mbox)
             if self.msgs:
                 # Walk the mbox in reverse order and add new messages
                 print(f"-- Update from mbox: {mbox}", file=sys.stderr)
@@ -219,31 +206,34 @@ class MessageSet:
                     sys.exit(1)
             else:
                 # Load the whole mbox
-                print(f"-- Load mbox: {self.mbox}", file=sys.stderr)
+                print(f"-- Load mbox: {mbox}", file=sys.stderr)
                 for msg in mb.iter_messages():
                     self.add_message(Message(msg))
                     count += 1
             print(f"-- Loaded {count} messages", file=sys.stderr)
+
+        if count:
+            self.rebuild_threads()
+
         return count
 
-    def load_cache(self):
+    def load_cache(self, cache):
         """Load messages from the cache"""
         count = 0
-        if os.path.exists(self.cache):
-            print(f"-- Load cache: {self.cache}", file=sys.stderr)
-            with gzip.open(self.cache, "r") as fh:
+        if os.path.exists(cache):
+            print(f"-- Load cache: {cache}", file=sys.stderr)
+            with gzip.open(cache, "r") as fh:
                 for msg in json.loads(fh.read().decode("utf-8")):
                     self.add_message(Message(msg))
                     count += 1
             print(f"-- Loaded {count} messages", file=sys.stderr)
         return count
 
-    def save_cache(self):
+    def save_cache(self, cache):
         """Save messages to the cache"""
-        if self.cache:
-            print(f"-- Save cache: {self.cache}", file=sys.stderr)
-            with gzip.open(self.cache, "w") as fh:
-                fh.write(json.dumps([m.msg for m in self.msgs.values()]).encode("utf-8"))
+        print(f"-- Save cache: {cache}", file=sys.stderr)
+        with gzip.open(cache, "w") as fh:
+            fh.write(json.dumps([m.msg for m in self.msgs.values()]).encode("utf-8"))
 
     def add_message(self, msg):
         self.msgs[msg.id] = msg
@@ -276,55 +266,74 @@ class MessageSet:
                 self.get_thread(msg_id, _msgs=_msgs, _indent=_indent + 2)
         return _msgs
 
+
 aparser = argparse.ArgumentParser(description="Print email message threads.")
-aparser.add_argument("--cache", action="store_true", help="Recreate the cache")
+# Cache options
+aparser.add_argument("--rebuild-cache", action="store_true", help="Rebuild the cache")
+aparser.add_argument("--update-cache", action="store_true", help="Update the cache")
+# Normal operation options
 aparser.add_argument("--filter", action="store_true", help="Filter non-patch emails")
 aparser.add_argument("--filter-nack", action="store_true", help="Filter NACK'ed emails")
 aparser.add_argument("--filter-applied", action="store_true", help="Filter APPLIED emails")
 aparser.add_argument("--filter-patch", action="store_true", help="Filter PATCH and PULL emails")
 aparser.add_argument("--filter-rfc", action="store_true", help="Filter RFC emails")
 aparser.add_argument("--since", help="Print messages since the provided date")
-aparser.add_argument("--dump", action="store_true", help="Dump the messages and exit")
+# Debug options
+aparser.add_argument("--dump-cache", action="store_true", help="Dump the cache and exit")
 aparser.add_argument("--dump-mbox", action="store_true", help="Dump the mbox messages and exit")
 aparser.add_argument("--dump-mbox-reverse", action="store_true", help="Dump the mbox messages in reverse order and exit")
+# Postional arguments
 aparser.add_argument("mbox", help="Mbox name")
 args = aparser.parse_args()
-
-if args.since:
-    since_ts = parser.parse(args.since).timestamp()
-else:
-    since_ts = 0
 
 mbox = args.mbox + ".mbox"
 cache = mbox + ".json.gz"
 
-if args.cache and os.path.exists(cache):
+#
+# Cache operations
+#
+
+if args.rebuild_cache and os.path.exists(cache):
     os.remove(cache)
 
-### Debug
+if args.rebuild_cache or args.update_cache:
+    ms = MessageSet()
+    ms.load_cache(cache)
+    ms.load_mbox(mbox)
+    ms.save_cache(cache)
+    sys.exit(0)
+
+#
+# Debug
+#
+
+if args.dump_cache:
+    ms = MessageSet()
+    ms.load_cache(cache)
+    for msg in ms.iter_messages():
+        print(msg)
+    sys.exit(0)
+
 if args.dump_mbox or args.dump_mbox_reverse:
     mbox = Mbox(mbox)
     for msg in mbox.iter_messages(reverse=args.dump_mbox_reverse):
         print(YELLOW + "#" * int(os.popen("tput cols", "r").read().strip()) + NC)
         print(msg)
     sys.exit(0)
-### Debug
 
-messages = MessageSet(mbox=mbox, cache=cache)
+#
+# Normal operation
+#
 
-if args.cache:
-    sys.exit(0)
+if args.since:
+    since_ts = parser.parse(args.since).timestamp()
+else:
+    since_ts = 0
 
-### Debug
-if args.dump:
-#    messages.rebuild_threads()
-#    messages.save_cache()
-    for msg in messages.iter_messages():
-        print(msg)
-    sys.exit(0)
-### Debug
+ms = MessageSet()
+ms.load_cache(cache)
 
-for msg in messages.iter_messages():
+for msg in ms.iter_messages():
     if msg.in_reply_to:
         # Ignore replies
         continue
@@ -335,7 +344,7 @@ for msg in messages.iter_messages():
         if "PATCH" not in msg.subject and "PULL" not in msg.subject:
             continue
 
-    thread = messages.get_thread(msg.id)
+    thread = ms.get_thread(msg.id)
 
     if since_ts and thread[0][0].timestamp < since_ts:
         # Bail ouf it current message is too old
