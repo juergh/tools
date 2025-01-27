@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Copyright 2017 Tal Wrii
+# Copied from https://github.com/talwrii/curlfire
+
+die() {
+	echo >&2 "$*"
+	exit 1
+}
+
+cleanup() {
+	rm -f "$tmpfile"
+}
+
+trap cleanup EXIT INT QUIT TERM
+
+if [ "$#" -gt 1 ]; then
+	die "usage: $0 [profile]"
+fi
+
+extract_cookies() {
+	local sqlfile="$1"
+
+	if ! [ -r "$sqlfile" ]; then
+		die "Error. File $sqlfile is not readable."
+	fi
+
+	# Copy cookies.sqlite to avoid lock issues
+	cp "$sqlfile" "$tmpfile"
+
+	echo "# Netscape HTTP Cookie File"
+	sqlite3 -separator $'\t' "$tmpfile" <<-EOF
+.mode tabs
+.header off
+select host,
+case substr(host,1,1)='.' when 0 then 'FALSE' else 'TRUE' end,
+path,
+case isSecure when 0 then 'FALSE' else 'TRUE' end,
+expiry,
+name,
+value
+from moz_cookies;
+EOF
+}
+
+profile=${1:-}
+if [ -z "$profile"] ; then
+	profile=$(grep -m1 '^Default=' "$HOME"/.mozilla/firefox/profiles.ini | sed 's/.*=//')
+fi
+
+tmpfile="$(mktemp /tmp/cookies.sqlite.XXXXXXXXXX)"
+cookie_file="$HOME/.mozilla/firefox/$profile/cookies.sqlite"
+
+if ! [ -f "$cookie_file" ]; then
+	die "No cookies.sqlite file found for profile '$profile'."
+fi
+
+extract_cookies "$cookie_file"
