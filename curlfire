@@ -1,0 +1,16 @@
+#!/bin/bash -eu
+# Inspired by https://github.com/talwrii/curlfire
+
+cookies=${HOME}/.cache/curlfire.cookies
+
+if [ -n "$(find "${cookies}" -mtime +1 -print 2>/dev/null)" ] ; then
+	# Remove cached cookies if older than 1 day
+	rm -f "${cookies}"
+fi
+
+if ! [ -e "${cookies}" ] ; then
+	./cookiefire > "${cookies}"
+	chmod 600 "${cookies}"
+fi
+
+exec curl --cookie "${cookies}" "${@}"
