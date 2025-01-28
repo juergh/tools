@@ -169,8 +169,8 @@ __EOF__
 			  "contain_subject('kernel-snaps')"
 
 	# Move Gitea mail
-	move_mail_gitea "Canonical/gitea"
-	move_mail_gitea_done "Canonical/gitea" "Canonical/gitea/00-done"
+#	move_mail_gitea "Canonical/gitea"
+#	move_mail_gitea_done "Canonical/gitea" "Canonical/gitea/00-done"
 
 	# Move noise mail (needs to come last)
 	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
@@ -185,6 +185,9 @@ __EOF__
 					"contain_subject('CI build of ~canonical-kernel-team')"
 	move_mail_noise "Launchpad-Message-For/juergh" \
 					"contain_subject('-proposed tracker')"
+	move_mail "Launchpad-Message-For" \
+			  "Launchpad-Message-For/00-noise" \
+			  "contain_from('Launchpad Buildd System')"
 }
 
 function filter_proton()
