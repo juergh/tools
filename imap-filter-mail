@@ -175,16 +175,21 @@ __EOF__
 	# Move noise mail (needs to come last)
 	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
 					"contain_from('kernel-team-bot@canonical.com')"
+
 	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
 					"contain_subject(' -proposed tracker')"
 	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
 					"contain_from('Ubuntu Kernel Bot')"
-	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
-					"contain_from('Launchpad Buildd System')"
+#	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
+#					"contain_from('Launchpad Buildd System')"
 	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
 					"contain_subject('CI build of ~canonical-kernel-team')"
+	move_mail_noise "Launchpad-Message-For/canonical-kernel-team" \
+					"contain_subject('ABI testing report')"
+
 	move_mail_noise "Launchpad-Message-For/juergh" \
 					"contain_subject('-proposed tracker')"
+
 	move_mail "Launchpad-Message-For" \
 			  "Launchpad-Message-For/00-noise" \
 			  "contain_from('Launchpad Buildd System')"
