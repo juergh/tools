@@ -1,0 +1,43 @@
+#!/bin/bash
+
+function usage()
+{
+	cat <<EOF
+Usage: $(bashname "${0}") [-d] [HOST]
+
+Sync various files from and Android device.
+
+Optional arguments:
+  -d, --dry-run
+  -h, --help     Show this help text.
+EOF
+}
+
+host=moto-miami
+opts=()
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-d|--dry-run)
+			echo "-- Dry-run"
+			opts+=("--dry-run")
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-*)
+			usage
+			exit 2
+			;;
+		*)
+			host="${1}"
+			break
+			;;
+	esac
+	shift
+done
+
+rsync -av "${opts[@]}" \
+	  --exclude "Android/data" --exclude "Android/obb" --exclude "**/.thumbnails" \
+      -e ssh "${host}":/storage/emulated/0/ "${HOME}"/Sync/"${host}"/
