@@ -62,7 +62,6 @@ def parse_kernel_series(ks):
     """
     Parse kernel-series JSON and return a list of package dicts
     """
-    pkgs = []
     for series, series_data in ks.items():
         codename = series_data.get("codename")
         if not codename:
@@ -134,9 +133,7 @@ def parse_kernel_series(ks):
                     entry.update(package_entry)
                     for _key, _val in dict(entry).items():
                         entry[_key] = str(_val).lower()
-                    pkgs.append(entry)
-
-    return pkgs
+                    yield entry
 
 
 def filter_packages(pkgs, f):
@@ -144,12 +141,9 @@ def filter_packages(pkgs, f):
     Return a list of filtered kernel packages
     """
     # Filter the packages
-    filtered = []
     for pkg in pkgs:
         if f.items() <= pkg.items():
-            filtered.append(pkg)
-
-    return filtered
+            yield pkg
 
 
 def print_package(pkg, fields=None, verbose=False):
