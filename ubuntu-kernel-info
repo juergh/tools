@@ -20,11 +20,13 @@ PKG_FIELDS = (
     "series.supported",
     "series.lts",
     "series.esm",
+    "series.active",
     # Source
     "source.name",
     "source.owner",
     "source.devel",
     "source.supported",
+    "source.active",
     "source.forwardport",
     "source.backport",
     "source.invalid-tasks",
@@ -67,20 +69,28 @@ def parse_kernel_series(ks):
         if not codename:
             continue
 
-        series_routing_map = series_data.get("routing-map", {})
         series_devel = series_data.get("development", False)
+        series_supported = series_data.get("supported", False)
+        series_lts = series_data.get("lts", False)
         series_esm = series_data.get("esm", False)
+        series_active = (series_devel or series_supported)
+        series_routing_map = series_data.get("routing-map", {})
 
         series_entry = {
             "series.yymm": series,
             "series.name": codename,
             "series.devel": series_devel,
-            "series.supported": series_data.get("supported", False),
-            "series.lts": series_data.get("lts", False),
+            "series.supported": series_supported,
+            "series.lts": series_lts,
             "series.esm": series_esm,
+            "series.active": series_active,
         }
 
         for source, source_data in series_data.get("sources", {}).items():
+            devel = source_data.get("development", series_devel)
+            supported = source_data.get("supported", True) if series_supported else False
+            active = (series_active and (devel or supported))
+
             # Source package routing
             default = "devel" if series_devel else "esm" if series_esm else "default"
             routing = source_data.get("routing", default)
@@ -98,8 +108,9 @@ def parse_kernel_series(ks):
             source_entry = {
                 "source.name": source,
                 "source.owner": source_data.get("owner"),
-                "source.devel": source_data.get("development", False),
-                "source.supported": source_data.get("supported", True),
+                "source.devel": devel,
+                "source.supported": supported,
+                "source.active": active,
                 "source.forwardport": source_data.get("copy_forward", False),
                 "source.backport": source_data.get("backport", False),
                 "source.invalid-tasks": ",".join(
