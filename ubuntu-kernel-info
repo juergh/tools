@@ -68,28 +68,28 @@ def parse_kernel_series(ks):
         if not codename:
             continue
 
-        # Fully mapped routing table for this series
-        routing_table = series_data.get("routing-table", {})
-        routing_map = series_data.get("routing-map", {})
-        for key, val in routing_map.items():
-            routing_table[key] = routing_table[val]
+        series_routing_map = series_data.get("routing-map", {})
+        series_devel = series_data.get("development", False)
+        series_esm = series_data.get("esm", False)
 
         series_entry = {
             "series.yymm": series,
             "series.name": codename,
-            "series.devel": series_data.get("development", False),
+            "series.devel": series_devel,
             "series.supported": series_data.get("supported", False),
             "series.lts": series_data.get("lts", False),
-            "series.esm": series_data.get("esm", False),
+            "series.esm": series_esm,
         }
 
         for source, source_data in series_data.get("sources", {}).items():
             # Source package routing
-            routing = source_data.get("routing", "default")
-            if isinstance(routing, str):
-                routing = routing_table[routing]
+            default = "devel" if series_devel else "esm" if series_esm else "default"
+            routing = source_data.get("routing", default)
+            routing = series_routing_map.get(routing, routing)
+            routing_table = ks["defaults"]["routing-table"][routing]
+
             routing_list = []
-            for key, val in routing.items():
+            for key, val in routing_table.items():
                 if val:
                     for v in val:
                         routing_list.append(f"{key}|{'|'.join(v)}")
