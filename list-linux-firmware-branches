@@ -3,6 +3,36 @@
 # List unreleased commits on linux-firmware branches
 #
 
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [--head]
+
+Optional arguments:
+  --head      Show branch HEADs.
+  -h, --help  Show this help text and exit.
+EOF
+}
+
+head=0
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		--head)
+			head=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			usage
+			exit 2
+			;;
+	esac
+	shift
+done
+
 git fetch origin
 
 while IFS= read -r branch ; do
@@ -11,6 +41,10 @@ while IFS= read -r branch ; do
 		echo "Branch does not exist"
 		echo
 		continue
+	fi
+
+	if [ ${head} -eq 1 ] ; then
+		git --no-pager log --oneline "${branch}" -1
 	fi
 
 	version=$(git show "${branch}":debian/changelog | \
@@ -26,6 +60,9 @@ while IFS= read -r branch ; do
 	git --no-pager log --oneline "${branch}"..origin/"${branch}"
 	echo
 done < <(
+	if [ ${head} -eq 1 ] ; then
+		echo "main"
+	fi
 	{
 		ubuntu-distro-info --supported-esm
 		ubuntu-distro-info --supported
