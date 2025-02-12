@@ -1,0 +1,72 @@
+#!/bin/bash -eu
+#
+# Read an Aegis backup and add the entries to the password store
+#
+
+HERE=$(dirname "$(readlink -f "${0}")")
+
+function parse_db()
+{
+	local db=${1}
+
+	data=$("${HERE}"/aegis-decrypt --input "${db}" | tr -d '\n' | sed 's|\\/|/|g')
+
+	python3 -c "
+import json
+
+data = json.loads('${data}')
+for e in data['entries']:
+    print(e['issuer'] + ',' + e['name'] + ',' + e['info']['secret'])
+"
+}
+
+usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-f] [-h] INFILE
+
+Read an Aegis backup file and add the entries to the password store.
+
+Optional arguments:
+  -f, --force  Overwrite exisiting entries.
+  -h, --help   Show this help text and exit.
+EOF
+}
+
+force=0
+infile=
+
+while [ $# -ne 0 ] ; do
+	case "${1}" in
+		-f|--force)
+			force=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${infile}" ] ; then
+				usage
+				exit 2
+			fi
+			infile=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${infile}" ] ; then
+	usage
+	exit 2
+fi
+
+while IFS="," read -r issuer name secret ; do
+	name=totp/${issuer}/${name}
+	if [ -e "${HOME}"/.password-store/"${name}".gpg ] && [ ${force} -eq 0 ] ; then
+		echo "-- Skip existing: ${name}"
+		continue
+	fi
+	echo "-- Add: ${name}"
+	echo "${secret}" | pass insert --echo --force "${name}"
+done < <(parse_db "${infile}")
