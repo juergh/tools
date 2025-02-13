@@ -6,17 +6,15 @@ from launchpadlib.launchpad import Launchpad
 
 ppa = sys.argv[1]
 
-if ppa.startswith("ppa:"):
-    owner, _, name = ppa.split(":")[1].split("/")
-else:
-    owner, name = ppa.spit("/")
-ppa_url = f"launchpadcontent.net/{owner}/{name}/ubuntu"
+ppa = ppa.removeprefix("ppa:")
+comps = ppa.split("/")
+ppa = f"ppa:{comps[0]}/ubuntu/{comps[-1]}"
 
 lp = Launchpad.login_with("tools", "production", version="devel")
 
 lp_ppa = lp.archives.getByReference(reference=ppa)
 if not lp_ppa:
-    print("PPA not found", file.sys.stderr)
+    print("PPA not found", file=sys.stderr)
     sys.exit(1)
 
 # HACK (see https://answers.launchpad.net/launchpad/+question/697954)
