@@ -34,7 +34,7 @@ ubuntu-kernel-info supported -f series.name,package.name --pkg-format deb --pkg-
 	if [ -n "$(lp_lookup_source "$series" "${source}")" ] ; then
 		~/git/ubuntu/kteam-tools/cranky/cranky shell-helper source-packages-name -t "${series}:${source}" | while read -r t n ; do
 			case "$t" in
-				main|meta|signed)
+				main|meta|signed|lrm)
 					echo "/usr/share/apport/package-hooks/source_linux.py /usr/share/apport/package-hooks/source_$n.py"
 					;;
 			esac
