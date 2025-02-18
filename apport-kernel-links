@@ -27,12 +27,12 @@ if ps:
 
 series=$1
 
-ubuntu-kernel-info supported -f series.name,package.name --pkg-format deb --pkg-type main | awk '$1 == "'"$1"'" { print $2 }' | while read -r source ; do
-	if [ "${source}" = "linux" ] ; then
-		continue
-	fi
+ubuntu-kernel-info active -f series.name,package.name --pkg-format deb --pkg-type main | awk '$1 == "'"$1"'" { print $2 }' | while read -r source ; do
 	if [ -n "$(lp_lookup_source "$series" "${source}")" ] ; then
 		~/git/ubuntu/kteam-tools/cranky/cranky shell-helper source-packages-name -t "${series}:${source}" | while read -r t n ; do
+			if [ "$n" = "linux" ] ; then
+				continue
+			fi
 			case "$t" in
 				main|meta|signed|lrm)
 					echo "/usr/share/apport/package-hooks/source_linux.py /usr/share/apport/package-hooks/source_$n.py"
