@@ -40,25 +40,6 @@ PKG_FIELDS = (
     "package.repo.branch",
 )
 
-# Predefined package selection filters
-PKG_FILTERS = {
-    "devel": {
-        "series.devel": "true",
-        # "source.devel": "true",
-    },
-    "supported": {
-        "series.supported": "true",
-        "source.supported": "true",
-        "series.esm": "false",
-    },
-    "supported-esm": {
-        "series.supported": "true",
-        "source.supported": "true",
-        "series.esm": "true",
-    },
-    "all": {},
-}
-
 
 def parse_kernel_series(ks):
     """
@@ -147,16 +128,6 @@ def parse_kernel_series(ks):
                     yield entry
 
 
-def filter_packages(pkgs, f):
-    """
-    Return a list of filtered kernel packages
-    """
-    # Filter the packages
-    for pkg in pkgs:
-        if f.items() <= pkg.items():
-            yield pkg
-
-
 def print_package(pkg, fields=None, verbose=False):
     """
     Print a single package
@@ -240,60 +211,51 @@ Kernel selections:
     fields = args.field.split(",") if args.field else None
     selections = set(args.selection.split(","))
 
-    super_sets = {
-        "supported-all": ["supported", "supported-esm"],
-        "active": ["devel", "supported", "supported-esm"],
-    }
-
-    for key, val in super_sets.items():
-        if key in selections:
-            selections.remove(key)
-            selections.update(val)
-    if "all" in selections:
-        selections = set(["all"])
-    if "dump" in selections:
-        selections = set(["dump"])
-
-    # Special selection
-    dump = "dump" in selections
-
-    # Create the filter list
-    if not dump:
-        pkg_filters = []
-        for sel in selections:
-            if sel not in PKG_FILTERS:
-                print(f"ubuntu-kernel-info: error: invalid argument: {sel}")
-                sys.exit(2)
-            f = PKG_FILTERS[sel]
-            if args.pkg_type:
-                f["package.type"] = args.pkg_type
-            if args.pkg_name:
-                f["package.name"] = args.pkg_name
-            if args.pkg_format:
-                f["package.format"] = args.pkg_format
-            if args.src_name:
-                f["source.name"] = args.src_name
-            pkg_filters.append(f)
+    if "supported-all" in selections:
+        selections.add("supported")
+        selections.add("supported-esm")
+    if "active" in selections:
+        selections.add("devel")
+        selections.add("supported")
+        selections.add("supported-esm")
 
     # Download and gunzip kernel-series.json
     r = requests.get("https://kernel.ubuntu.com/info/kernel-series.json.gz", timeout=5)
     with gzip.open(io.BytesIO(r.content)) as fh:
         ks = json.load(fh)
 
-    if dump:
+    if "dump" in selections:
         print(json.dumps(ks, indent=4))
         sys.exit(0)
 
     # Parse kernel-series
     pkgs = parse_kernel_series(ks)
 
-    # Filter the package list
-    pkgs_filtered = []
-    for f in pkg_filters:
-        pkgs_filtered.extend(filter_packages(pkgs, f))
+    # Filter the packages and print them
+    for pkg in pkgs:
+        keep = False
+        if "all" in selections:
+            keep = True
+        if "devel" in selections and pkg["series.devel"] == "true":
+            keep = True
+        if (("supported" in selections and
+             (pkg["series.supported"], pkg["source.supported"], pkg["series.esm"]) == ("true", "true", "false"))):
+            keep = True
+        if (("supported-esm" in selections and
+             (pkg["series.supported"], pkg["source.supported"], pkg["series.esm"]) == ("true", "true", "true"))):
+            keep = True
+        if not keep:
+            continue
 
-    # Print the filtered list
-    for pkg in pkgs_filtered:
+        if args.pkg_type and pkg["package.type"] != args.pkg_type:
+            continue
+        if args.pkg_name and pkg["package.name"] != args.pkg_name:
+            continue
+        if args.pkg_format and pkg["package.format"] != args.pkg_format:
+            continue
+        if args.src_name and pkg["source.name"] != args.src_name:
+            continue
+
         print_package(pkg, fields=fields, verbose=args.verbose)
 
 
