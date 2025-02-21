@@ -19,13 +19,13 @@ Wrapper aroung 'cranky rebase'.
 Optional wrapper arguments:
   -h, --help     Show this help text and exit.
   -t, --tag TAG  Rebase onto tag TAG.
+  -d, --dry-run  Dry run (do not rebase).
 
 Optional 'cranky rebase' arguments:
   -r RELEASE_REPO   Git repository to fetch the reference branch from.
   -b REMOTE_BRANCH  Remote branch to fetch from.
   -l LOCAL_BRANCH   Use LOCAL_BRANCH as the reference branch.
   -o                Rebase against own kernel.
-  -d                Dry run (do not rebase).
 EOF
 }
 
@@ -43,6 +43,9 @@ while [ $# -gt  0 ] ; do
 		-t|--tag)
 			shift
 			tag=${1}
+			;;
+		-d|--dry-run)
+			args+=("-d")
 			;;
 		*)
 			args+=("${1}")

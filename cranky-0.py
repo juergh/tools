@@ -57,7 +57,7 @@ def main():
 @main.command()
 def fix():
     series = parse_changelog().distributions
-    if series != "UNRELEASED":
+    if series == "UNRELEASED":
         print(f"Invalid series: {series}", file=sys.stderr)
         sys.exit(1)
 
@@ -66,7 +66,8 @@ def fix():
 
 @main.command()
 @click.option("--dry-run", is_flag=True)
-def rebase(dry_run):
+@click.argument("tag")
+def rebase(dry_run, tag):
     opts = []
     if dry_run:
         opts += ["--dry-run"]
@@ -77,8 +78,7 @@ def rebase(dry_run):
         run(["cranky-update-to"] + opts + ["--strategy", "cherry-pick", "realtime"])
         return
 
-    print("Error: Not implemented yet")
-    sys.exit(1)
+    run(["cranky-rebase", "--tag", tag] + opts)
 
 
 @main.command(name="open")
