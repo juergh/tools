@@ -163,7 +163,7 @@ def close_(force):
         to_commit = os.popen("git log --format='%h __%s__' |" +
                              f"grep -m1 -F '__UBUNTU: Ubuntu-realtime-{version}__' | sed 's/ .*//'",
                              "r").read().strip()
-        run(["/home/juergh/git/ubuntu/kteam-tools/cranky/cranky", "update-changelog", "--changelog", cl,
+        run([CRANKY, "update-changelog", "--changelog", cl,
              "--commit-range", f"{from_commit}..{to_commit}"])
 
         #
@@ -227,6 +227,15 @@ def push():
 @click.argument("ppa")
 def dput(ppa):
     run([CRANKY, "dput-sources", ppa])
+
+
+@main.command()
+@click.option("--dry-run", is_flag=True)
+def checkout(dry_run):
+    opts = []
+    if dry_run:
+        opts += ["--dry-run"]
+    run(["cranky-checkout"] + opts)
 
 
 if __name__ == "__main__":
