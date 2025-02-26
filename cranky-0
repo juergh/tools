@@ -1,451 +1,315 @@
-#!/bin/bash -eu
-
-CRANKY=${CRANKY:-cranky}
-export CRANKY
-
-function out()
-{
-	local rc=${?}
-
-	trap - EXIT INT TERM HUP
-
-	if [ "${rc}" -ne 0 ] ; then
-		echo "Script failed" >&2
-	fi
-
-	exit "${rc}"
-}
-
-function pr_banner()
-{
-	local txt
-
-	if [ -z "${__COLS:-}" ] ; then
-		__COLS=$(tput cols)
-	fi
-	txt=${*}$(printf "%${__COLS}s")
-	echo -e "\033[48;5;160m${txt::${__COLS}}\033[0m"
-}
-
-function run()
-{
-	echo
-	pr_banner "${*}"
-	if [ "${DRY_RUN}" -eq 1 ] ; then
-		echo "${*}"
-		echo "Skip (dry-run)"
-	else
-		"${@}"
-	fi
-}
-
-function source_debian_env()
-{
-	if [ -z "${DEBIAN:-}" ] ; then
-		# shellcheck disable=SC1091
-		. debian/debian.env
-	fi
-}
-
-# checkout --------------------------------------------------------------------
-
-# shellcheck disable=SC2034
-checkout_opt_args=(
-	"[-r] || -r, --rebase || Rebase onto the latest tag if HEAD is untagged."
-)
-
-function do_checkout()
-{
-	local args
-
-	args=()
-	if [ "${REBASE}" -eq 1 ] ; then
-		args+=("--rebase")
-	fi
-
-	run cranky-checkout -u "${args[@]}"
-}
-
-# fix -------------------------------------------------------------------------
-
-function do_fix()
-{
-
-	source_debian_env
-
-	series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S distribution)
-	if [ "${series}" = "UNRELEASED" ] ; then
-		echo "Invalid series: ${series}" >&2
-		exit 1
-	fi
-
-	run "${CRANKY}" fix
-}
-
-# rebase ----------------------------------------------------------------------
-
-# shellcheck disable=SC2034
-rebase_opt_args=(
-	"[-t TAG] || -t, --tag TAG || Rebase onto tag TAG."
-)
-
-function do_rebase()
-{
-	local args
-
-	args=()
-	if [ -n "${TAG}" ] ; then
-		args+=("--tag" "${TAG}")
-	fi
-
-	run cranky-rebase "${args[@]}"
-}
-
-# open ------------------------------------------------------------------------
-
-function do_open()
-{
-	run git clean -dxf
-	run "${CRANKY}" open
-}
-
-# configs ---------------------------------------------------------------------
-
-function do_configs()
-{
-	run "${CRANKY}" updateconfigs
-}
-
-# link ------------------------------------------------------------------------
-
-# shellcheck disable=SC2034
-link_opt_args=(
-	"[-r] || -r, --rerun || Rerun the commands."
-)
-# shellcheck disable=SC2034
-link_pos_args=(
-	"SRU_CYCLE || SRU_CYCLE || SRU cycle name (2022.05.30, d2022.10.12, ...)."
-)
-
-function do_link()
-{
-	local args
-
-	args=()
-	if [ "${RERUN}" -eq 1 ] ; then
-		args+=("--re-run")
-	fi
-	if [ -n "${SRU_CYCLE}" ] ; then
-		args+=("--sru-cycle" "${SRU_CYCLE}")
-	fi
-
-	run "${CRANKY}" link-tb "${args[@]}"
-}
-
-# dkms ------------------------------------------------------------------------
-
-function do_dkms()
-{
-	if [ -e ./update-dkms-versions ] ; then
-		run ./update-dkms-versions
-	else
-		run "${CRANKY}" update-dkms-versions
-	fi
-}
-
-# close -----------------------------------------------------------------------
-
-# shellcheck disable=SC2034
-close_opt_args=(
-	"[-r] || -r, --rerun || Rerun the commands."
-)
-
-function do_close()
-{
-	local args
-
-	args=()
-	if [ "${RERUN}" -eq 1 ] ; then
-		args+=("--force")
-	fi
-
-	run "${CRANKY}" close --use-cuc
-
-	if [ "$(sed -n 's/DEBIAN=//p' debian/debian.env)" = "debian.raspi-realtime" ] ; then
-		run git reset --hard HEAD~1
-
-		cranky=$HOME/git/ubuntu/kteam-tools/cranky/cranky
-		cl=debian.raspi-realtime/changelog
-
-		#
-		# raspi
-		#
-		version=$(dpkg-parsechangelog -l debian.raspi/changelog -S Version -o1 -c1)
-		run "$cranky" update-changelog --changelog "$cl" --from-version "${version}" --from-changelog debian.raspi/changelog
-
-		#
-		# realtime
-		#
-		version=$(dpkg-parsechangelog -l debian.realtime/changelog -S Version -o1 -c1)
-		from_commit=$(git log --format="%h __%s__" | grep -m1 -F "__UBUNTU: Ubuntu-realtime-${version}__" | sed 's/ .*//')
-		version=$(dpkg-parsechangelog -l debian.realtime/changelog -S Version)
-		to_commit=$(git log --format="%h __%s__" | grep -m1 -F "__UBUNTU: Ubuntu-realtime-${version}__" | sed 's/ .*//')
-		run "$cranky" update-changelog --changelog "$cl" --commit-range "${from_commit}..${to_commit}"
-
-		#
-		# raspi-realtime
-		#
-		version=$(dpkg-parsechangelog -l debian.raspi-realtime/changelog -S Version -o1 -c1)
-		from_commit=$(git log --format="%h __%s__" | grep -m1 -F "__UBUNTU: Ubuntu-raspi-realtime-${version}__" | sed 's/ .*//')
-		run "$cranky" update-changelog --changelog "$cl" --from-commit "${from_commit}"
-
-		run git add "$cl"
-		series=$(dpkg-parsechangelog -l "$cl" -SDistribution -o1 -c1)
-		version=$(dpkg-parsechangelog -l "$cl" -SVersion)
-		run dch --nomultimaint -c "$cl" -r -D "$series" ''
-		run git commit -sam "UBUNTU: Ubuntu-raspi-realtime-$version"
-	fi
-
-	run "${CRANKY}" tag "${args[@]}"
-}
-
-# dependents ------------------------------------------------------------------
-
-function do_dependents()
-{
-	run cranky-update-dependents -f
-}
-
-# verify ----------------------------------------------------------------------
-
-function do_verify()
-{
-	run cranky-verify-release-ready
-}
-
-# build -----------------------------------------------------------------------
-
-# shellcheck disable=SC2034
-build_pos_args=(
-	"POCKET|OFFSET|ABI || POCKET|OFFSET|ABI || Pocket containing the previous source package or changelog entry offset (-1 == previous entry) or previous ABI."
-)
-
-function do_build()
-{
-	run cranky-build-sources -f "${POCKET_OFFSET_ABI}"
-}
-
-# review ----------------------------------------------------------------------
-
-# shellcheck disable=SC2034
-review_pos_args=("${build_pos_args[@]}")
-
-function do_review()
-{
-	run cranky-review-sources "${POCKET_OFFSET_ABI}"
-	run cranky-reduce-debdiff
-
-	run cranky-review-sources | less
-	run review-debdiff -r | less
-}
-
-# cbd -------------------------------------------------------------------------
-
-# shellcheck disable=SC2034
-cbd_pos_args=(
-	"[-- CBD_ARGS...] || CBD_ARGS || Additional CBD arguments, e.g., -o amd64 -o generic."
-)
-
-function do_cbd()
-{
-	run cbd-cli -n build "${CBD_ARGS[@]}"
-}
-
-# push ------------------------------------------------------------------------
-
-function do_push()
-{
-	local tmp
-
-	run cranky-push-all --dry-run
-	echo -n "Push (y|n)? "
-	read -r tmp
-	if [ "${tmp}" != "y" ] ; then
-        exit
-	fi
-
-	run cranky-push-all
-}
-
-# dput ------------------------------------------------------------------------
-
-# shellcheck disable=SC2034
-dput_pos_args=(
-	"PPA || PPA || Build PPA."
-)
-
-function do_dput()
-{
-	run "${CRANKY}" dput-sources "${PPA}"
-}
-
-# ----------------------------------------------------------------------------
-# Usage
-
-function usage()
-{
-	echo -n "Usage: $(basename "${0}")"
-	for arg in "${OPT_ARGS[@]}" ; do
-		echo -n " ${arg%% || *}"
-	done
-	for arg in "${POS_ARGS[@]}" ; do
-		echo -n " ${arg%% || *}"
-	done
-	echo
-
-	echo
-	echo "Ubuntu kernel source package preparation, build, review and" \
-		 "upload helper."
-	echo
-
-	if [ ${#POS_ARGS[@]} -ne 0 ] ; then
-		echo "Positional arguments:"
-		for arg in "${POS_ARGS[@]}" ; do
-			arg=${arg#* || }
-			printf "  %-26s %s\n" "${arg%% || *}" "${arg#* || }"
-		done
-		echo
-	fi
-
-	echo "Optional arguments:"
-	for arg in "${OPT_ARGS[@]}" ; do
-		arg=${arg#* || }
-		printf "  %-26s %s\n" "${arg%% || *}" "${arg#* || }"
-	done
-}
-
-# ----------------------------------------------------------------------------
-# Main entry point
-
-if [ "${0##*/}" = "cranky-0" ] ; then
-	# Direct invocation: First argument is the command
-	cmds=("${1}")
-	shift
-else
-	# Collect the commands from the link name
-	readarray -t cmds < <(echo "${0##*--}" | tr "-" "\n")
-fi
-
-DRY_RUN=0
-help=0
-RERUN=0
-REBASE=0
-TAG=
-
-while [ ${#} -gt 0 ] ; do
-	case "${1}" in
-		-d|--dry-run)
-			DRY_RUN=1
-			;;
-		-h|--help)
-			help=1
-			;;
-		-r)
-			REBASE=1
-			RERUN=1
-			;;
-		--rebase)
-			REBASE=1
-			;;
-		--rerun)
-			RERUN=1
-			;;
-		-t|--tag)
-			shift
-			TAG=${1}
-			;;
-		--)
-			shift
-			break
-			;;
-		*)
-			break
-			;;
-	esac
-	shift
-done
-
-OPT_ARGS=(
-	"[-d] || -d, --dry-run || "
-	"[-h] || -h, --help || Show this help text and exit."
-)
-
-POS_ARGS=()
-
-# Collect the optional and positional arguments for the selected commands
-for cmd in "${cmds[@]}" ; do
-	# shellcheck disable=SC2178
-	declare -n args=${cmd}_opt_args
-	OPT_ARGS+=("${args[@]}")
-
-	# shellcheck disable=SC2178
-	declare -n args=${cmd}_pos_args
-	POS_ARGS+=("${args[@]}")
-done
-
-# Sort the arguments and weed out duplicates
-if [ ${#OPT_ARGS[@]} -gt 0 ] ; then
-	readarray -t OPT_ARGS < <(printf "%s\n" "${OPT_ARGS[@]}" | sort -u)
-fi
-if [ ${#POS_ARGS[@]} -gt 0 ] ; then
-	readarray -t POS_ARGS < <(printf "%s\n" "${POS_ARGS[@]}" | sort -u)
-fi
-
-# Process the positional arguments
-for arg in "${POS_ARGS[@]}" ; do
-	case "${arg%% || *}" in
-		"POCKET|OFFSET|ABI")
-			if [ ${#} -eq 0 ] ; then
-				usage
-				exit 2
-			fi
-			POCKET_OFFSET_ABI=${1}
-			;;
-		PPA)
-			if [ ${#} -eq 0 ] ; then
-				usage
-				exit 2
-			fi
-			PPA=${1}
-			;;
-		SRU_CYCLE)
-			if [ ${#} -eq 0 ] ; then
-				usage
-				exit 2
-			fi
-			SRU_CYCLE=${1}
-			;;
-		"[-- CBD_ARGS...]")
-			CBD_ARGS=("${@}")
-			while [ ${#} -gt 0 ] ; do shift ; done
-			break
-			;;
-		*)
-			echo "Unsupported argument name: ${arg}" >&2
-			exit 1
-			;;
-	esac
-	shift
-done
-
-if [ ${#} -gt 0 ] || [ ${help} -eq 1 ] ; then
-	usage
-	exit 2
-fi
-
-trap out EXIT INT TERM HUP
-
-# Run the command(s)
-for cmd in "${cmds[@]}" ; do
-	do_"${cmd}"
-done
+#!/usr/bin/env python3
+
+import os
+import sys
+from subprocess import CalledProcessError, check_call
+
+import click
+from debian.changelog import Changelog
+
+CRANKY = os.getenv("CRANKY", "cranky")
+COLS = int(os.popen("tput cols", "r").read().strip())
+
+
+def source_debian_env():
+    with open("debian/debian.env", encoding="utf-8") as fh:
+        for line in fh:
+            if line.startswith("DEBIAN="):
+                return line.strip().split("=")[1]
+    return None
+
+
+def parse_changelog(changelog=None, offset=0):
+    if not changelog:
+        changelog = f"{source_debian_env()}/changelog"
+
+    with open(changelog, encoding="utf-8") as fh:
+        return Changelog(fh)[offset]
+
+
+def print_banner(cmd, invert=True, color=9):
+    txt = " ".join(cmd) + " " * COLS
+    x = 48 if invert else 38
+    print(f"\033[{x};5;{color}m{txt[:COLS]}\033[0m")
+
+
+def run(cmd, shell=False):
+    print()
+    print_banner(cmd)
+    try:
+        if cmd[0] == "cranky":
+            print_banner([os.popen("which cranky", "r").read().strip()], invert=False)
+
+        if shell:
+            check_call(" ".join(cmd), bufsize=0, shell=True)
+        else:
+            check_call(cmd, bufsize=0)
+    except CalledProcessError as e:
+        print("Error: " + str(e))
+        sys.exit(1)
+
+
+@click.group()
+def main():
+    pass
+
+
+@main.command()
+def fix():
+    series = parse_changelog().distributions
+    if series == "UNRELEASED":
+        print(f"Invalid series: {series}", file=sys.stderr)
+        sys.exit(1)
+
+    run([CRANKY, "fix"])
+
+
+@main.command()
+@click.option("--dry-run", is_flag=True)
+@click.argument("tag")
+def rebase(dry_run, tag):
+    opts = []
+    if dry_run:
+        opts += ["--dry-run"]
+
+    ch = parse_changelog()
+    if ch.package == "linux-raspi-realtime":
+        run(["cranky-update-to"] + opts + ["--strategy", "rebase", "raspi"])
+        run(["cranky-update-to"] + opts + ["--strategy", "cherry-pick", "realtime"])
+        return
+
+    run(["cranky-rebase", "--tag", tag] + opts)
+
+
+@main.command(name="open")
+def open_():
+    series = parse_changelog().distributions
+    if series == "UNRELEASED":
+        print(f"Invalid series: {series}", file=sys.stderr)
+        sys.exit(1)
+
+    run(["git", "clean", "-dxf"])
+    run([CRANKY, "open"])
+
+
+@main.command()
+def configs():
+    run([CRANKY, "updateconfigs"])
+
+
+@main.command()
+@click.option("--dry-run", is_flag=True)
+@click.option("--re-run", is_flag=True)
+@click.option("--cycle", required=True, help="SRU cycle name.")
+def link(dry_run, re_run, cycle):
+    opts = []
+    if dry_run:
+        opts += ["--dry-run"]
+    if re_run:
+        opts += ["--re-run"]
+
+    run([CRANKY, "link-tb", "--sru-cycle", cycle] + opts)
+
+
+@main.command()
+def dkms():
+    if os.path.exists("update-dkms-versions"):
+        print("Error: ./update-dkms-versions exists. This is unexpected!")
+        sys.exit(1)
+
+    run([CRANKY, "update-dkms-versions"])
+
+
+@main.command(name="close")
+@click.option("--force", is_flag=True)
+def close_(force):
+    series = parse_changelog().distributions
+    if series != "UNRELEASED":
+        print(f"Invalid series: {series}", file=sys.stderr)
+        sys.exit(1)
+
+    opts = []
+    if force:
+        opts += ["--force"]
+
+    run([CRANKY, "close", "--use-cuc"])
+
+    if parse_changelog().package == "linux-raspi-realtime":
+        print()
+        print("*** FIXME ***")
+        print()
+
+        # Reset HEAD
+        run(["git", "reset", "--hard", "HEAD~1"])
+
+        cl = "debian.raspi-realtime/changelog"
+
+        #
+        # raspi
+        #
+        version = str(parse_changelog("debian.raspi/changelog", offset=1).version)
+        run([CRANKY, "update-changelog", "--changelog", cl,
+             "--from-version", version,
+             "--from-changelog", "debian.raspi/changelog"])
+
+        #
+        # realtime
+        #
+        version = str(parse_changelog("debian.realtime/changelog", offset=1).version)
+        from_commit = os.popen("git log --format='%h __%s__' |" +
+                               f"grep -m1 -F '__UBUNTU: Ubuntu-realtime-{version}__' | sed 's/ .*//'",
+                               "r").read().strip()
+        version = str(parse_changelog("debian.realtime/changelog").version)
+        to_commit = os.popen("git log --format='%h __%s__' |" +
+                             f"grep -m1 -F '__UBUNTU: Ubuntu-realtime-{version}__' | sed 's/ .*//'",
+                             "r").read().strip()
+        run([CRANKY, "update-changelog", "--changelog", cl,
+             "--commit-range", f"{from_commit}..{to_commit}"])
+
+        #
+        # raspi-realtime
+        #
+        version = str(parse_changelog("debian.raspi-realtime/changelog", offset=1).version)
+        from_commit = os.popen("git log --format='%h __%s__' |" +
+                               f"grep -m1 -F '__UBUNTU: Ubuntu-raspi-realtime-{version}__' | sed 's/ .*//'",
+                               "r").read().strip()
+        run([CRANKY, "update-changelog", "--changelog", cl,
+             "--from-commit", from_commit])
+
+        # Commit
+        series = parse_changelog(cl, offset=1).distributions
+        version = str(parse_changelog(cl).version)
+        run(["git", "add", cl])
+        run(["dch", "--nomultimaint", "-c", cl, "-r", "-D", series, ""])
+        run(["git", "commit", "-sam", f"UBUNTU: Ubuntu-raspi-realtime-{version}"])
+
+    run([CRANKY, "tag"] + opts)
+
+
+@main.command()
+def dependents():
+    run(["cranky-update-dependents", "-f"])
+
+
+@main.command()
+def verify():
+    run(["cranky-verify-release-ready"])
+
+
+@main.command()
+@click.argument("pocket_offset_abi")
+def build(pocket_offset_abi):
+    run(["cranky-build-sources", "-f", pocket_offset_abi])
+
+
+@main.command()
+@click.argument("pocket_offset_abi")
+def review(pocket_offset_abi):
+    run(["cranky-review-sources", pocket_offset_abi])
+    run(["cranky-reduce-debdiff"])
+
+    run(["cranky-review-sources", "|", "less"], shell=True)
+    run(["review-debdiff", "-r", "|", "less"], shell=True)
+
+
+@main.command()
+def push():
+    run(["cranky-push-all", "--dry-run"])
+
+    val = ""
+    while val != "y":
+        val = input("Push (y|n)? ")
+
+    run(["cranky-push-all"])
+
+
+@main.command()
+@click.argument("ppa")
+def dput(ppa):
+    run([CRANKY, "dput-sources", ppa])
+
+
+@main.command()
+@click.option("--dry-run", is_flag=True)
+def checkout(dry_run):
+    opts = []
+    if dry_run:
+        opts += ["--dry-run"]
+    run(["cranky-checkout"] + opts)
+
+
+@main.command(context_settings=dict(ignore_unknown_options=True,))
+@click.argument("cbd_args", nargs=-1, type=click.UNPROCESSED)
+def cbd(cbd_args):
+    run(["cbd-cli", "-n", "build"] + list(cbd_args))
+
+
+# ---------------------------------------------------------------------------------------------------
+
+@main.command(name="1-checkout")
+@click.option("--dry-run", is_flag=True)
+@click.pass_context
+def x1(ctx, dry_run):
+    ctx.invoke(checkout, dry_run=dry_run)
+
+
+@main.command(name="2-fix-rebase-fix-open")
+@click.option("--dry-run", is_flag=True)
+@click.argument("tag")
+@click.pass_context
+def x2(ctx, dry_run, tag):
+    ctx.invoke(fix)
+    ctx.invoke(rebase, tag, dry_run=dry_run)
+    ctx.invoke(fix)
+    ctx.invoke(open_)
+
+
+@main.command(name="3-configs")
+@click.pass_context
+def x3(ctx):
+    ctx.invoke(configs)
+
+
+@main.command(name="4-link-dkms-close-dependents-verify")
+@click.option("--dry-run", is_flag=True)
+@click.option("--re-run", is_flag=True)
+@click.option("--cycle", required=True, help="SRU cycle name.")
+@click.option("--force", is_flag=True)
+@click.pass_context
+def x4(ctx, dry_run, re_run, cycle):
+    ctx.invoke(link, dry_run=dry_run, re_run=re_run, cycle=cycle)
+    ctx.invoke(dkms)
+    ctx.invoke(close, force=force)
+    ctx.invoke(dependents)
+    ctx.invoke(verify)
+
+
+@main.command(name="5-build-review")
+@click.argument("pocket_offset_abi")
+@click.pass_context
+def x5(ctx, pocket_offset_abi):
+    ctx.invoke(build, pocket_offset_abi)
+    ctx.invoke(review, pocket_offset_abi)
+
+
+@main.command(name="6-cbd",
+              context_settings=dict(ignore_unknown_options=True,))
+@click.argument("cbd_args", nargs=-1, type=click.UNPROCESSED)
+def x6(cbd_args):
+    ctx.invoke(cbd, cbd_args)
+
+
+@main.command(name="7-push-dput")
+@click.argument("ppa")
+@click.pass_context
+def x7(ctx, ppa):
+    ctx.invoke(push)
+    ctx.invoke(dput, ppa)
+
+
+if __name__ == "__main__":
+    if "--" in sys.argv[0]:
+        subcmd = sys.argv[0].split("--", 1)[1]
+        sys.argv.insert(1, subcmd)
+        print(sys.argv)
+    main()
