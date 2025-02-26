@@ -238,5 +238,78 @@ def checkout(dry_run):
     run(["cranky-checkout"] + opts)
 
 
+@main.command(context_settings=dict(ignore_unknown_options=True,))
+@click.argument("cbd_args", nargs=-1, type=click.UNPROCESSED)
+def cbd(cbd_args):
+    run(["cbd-cli", "-n", "build"] + list(cbd_args))
+
+
+# ---------------------------------------------------------------------------------------------------
+
+@main.command(name="1-checkout")
+@click.option("--dry-run", is_flag=True)
+@click.pass_context
+def x1(ctx, dry_run):
+    ctx.invoke(checkout, dry_run=dry_run)
+
+
+@main.command(name="2-fix-rebase-fix-open")
+@click.option("--dry-run", is_flag=True)
+@click.argument("tag")
+@click.pass_context
+def x2(ctx, dry_run, tag):
+    ctx.invoke(fix)
+    ctx.invoke(rebase, tag, dry_run=dry_run)
+    ctx.invoke(fix)
+    ctx.invoke(open_)
+
+
+@main.command(name="3-configs")
+@click.pass_context
+def x3(ctx):
+    ctx.invoke(configs)
+
+
+@main.command(name="4-link-dkms-close-dependents-verify")
+@click.option("--dry-run", is_flag=True)
+@click.option("--re-run", is_flag=True)
+@click.option("--cycle", required=True, help="SRU cycle name.")
+@click.option("--force", is_flag=True)
+@click.pass_context
+def x4(ctx, dry_run, re_run, cycle):
+    ctx.invoke(link, dry_run=dry_run, re_run=re_run, cycle=cycle)
+    ctx.invoke(dkms)
+    ctx.invoke(close, force=force)
+    ctx.invoke(dependents)
+    ctx.invoke(verify)
+
+
+@main.command(name="5-build-review")
+@click.argument("pocket_offset_abi")
+@click.pass_context
+def x5(ctx, pocket_offset_abi):
+    ctx.invoke(build, pocket_offset_abi)
+    ctx.invoke(review, pocket_offset_abi)
+
+
+@main.command(name="6-cbd",
+              context_settings=dict(ignore_unknown_options=True,))
+@click.argument("cbd_args", nargs=-1, type=click.UNPROCESSED)
+def x6(cbd_args):
+    ctx.invoke(cbd, cbd_args)
+
+
+@main.command(name="7-push-dput")
+@click.argument("ppa")
+@click.pass_context
+def x7(ctx, ppa):
+    ctx.invoke(push)
+    ctx.invoke(dput, ppa)
+
+
 if __name__ == "__main__":
+    if "--" in sys.argv[0]:
+        subcmd = sys.argv[0].split("--", 1)[1]
+        sys.argv.insert(1, subcmd)
+        print(sys.argv)
     main()
