@@ -67,29 +67,32 @@ def fix():
 @main.command()
 @click.option("--dry-run", is_flag=True)
 @click.argument("tag")
-def rebase(dry_run, tag):
+@click.argument("tag2", nargs=-1)
+def rebase(dry_run, tag, tag2):
     opts = []
     if dry_run:
         opts += ["--dry-run"]
 
+    run(["cranky-rebase", "--tag", tag] + opts)
+
     ch = parse_changelog()
     if ch.package == "linux-raspi-realtime":
-        run(["cranky-update-to"] + opts + ["--strategy", "rebase", "raspi"])
-        run(["cranky-update-to"] + opts + ["--strategy", "cherry-pick", "realtime"])
-        return
-
-    run(["cranky-rebase", "--tag", tag] + opts)
+        run(["cranky-update-tree"] + opts + ["--strategy", "cherry-pick", "realtime", tag2[0]])
 
 
 @main.command(name="open")
-def open_():
+@click.option("--dry-run", is_flag=True)
+def open_(dry_run):
+    opts = []
+    if dry_run:
+        opts += ["--dry-run"]
+
     series = parse_changelog().distributions
     if series == "UNRELEASED":
         print(f"Invalid series: {series}", file=sys.stderr)
         sys.exit(1)
 
-    run(["git", "clean", "-dxf"])
-    run([CRANKY, "open"])
+    run([CRANKY, "open"] + opts)
 
 
 @main.command()
@@ -256,12 +259,13 @@ def x1(ctx, dry_run):
 @main.command(name="2--fix-rebase-fix-open")
 @click.option("--dry-run", is_flag=True)
 @click.argument("tag")
+@click.argument("tag2", nargs=-1)
 @click.pass_context
-def x2(ctx, dry_run, tag):
+def x2(ctx, dry_run, tag, tag2):
     ctx.invoke(fix)
-    ctx.invoke(rebase, tag, dry_run=dry_run)
+    ctx.invoke(rebase, dry_run=dry_run, tag=tag, tag2=tag2)
     ctx.invoke(fix)
-    ctx.invoke(open_)
+    ctx.invoke(open_, dry_run=dry_run)
 
 
 @main.command(name="3--configs")
@@ -276,10 +280,10 @@ def x3(ctx):
 @click.option("--cycle", required=True, help="SRU cycle name.")
 @click.option("--force", is_flag=True)
 @click.pass_context
-def x4(ctx, dry_run, re_run, cycle):
+def x4(ctx, dry_run, re_run, cycle, force):
     ctx.invoke(link, dry_run=dry_run, re_run=re_run, cycle=cycle)
     ctx.invoke(dkms)
-    ctx.invoke(close, force=force)
+    ctx.invoke(close_, force=force)
     ctx.invoke(dependents)
     ctx.invoke(verify)
 
@@ -288,15 +292,16 @@ def x4(ctx, dry_run, re_run, cycle):
 @click.argument("pocket_offset_abi")
 @click.pass_context
 def x5(ctx, pocket_offset_abi):
-    ctx.invoke(build, pocket_offset_abi)
-    ctx.invoke(review, pocket_offset_abi)
+    ctx.invoke(build, pocket_offset_abi=pocket_offset_abi)
+    ctx.invoke(review, pocket_offset_abi=pocket_offset_abi)
 
 
 @main.command(name="6--cbd",
               context_settings=dict(ignore_unknown_options=True,))
 @click.argument("cbd_args", nargs=-1, type=click.UNPROCESSED)
-def x6(cbd_args):
-    ctx.invoke(cbd, cbd_args)
+@click.pass_context
+def x6(ctx, cbd_args):
+    ctx.invoke(cbd, cbd_args=cbd_args)
 
 
 @main.command(name="7--push-dput")
@@ -304,7 +309,7 @@ def x6(cbd_args):
 @click.pass_context
 def x7(ctx, ppa):
     ctx.invoke(push)
-    ctx.invoke(dput, ppa)
+    ctx.invoke(dput, ppa=ppa)
 
 
 if __name__ == "__main__":
