@@ -310,5 +310,6 @@ def x7(ctx, ppa):
 if __name__ == "__main__":
     if "--" in sys.argv[0]:
         subcmd = os.path.basename(sys.argv[0]).removeprefix("cranky-")
+        sys.argv[0] = sys.argv[0].removesuffix(f"-{subcmd}")
         sys.argv.insert(1, subcmd)
     main()
