@@ -1,0 +1,39 @@
+#!/bin/bash -eu
+#
+# Uninstall unwanted packages
+#
+
+function adb_uninstall()
+{
+	local serial=$1 pkg=$2
+
+	echo "-- $pkg"
+	adb -s "$serial" uninstall --user 0 "$pkg" || true
+	adb -s "$serial" uninstall "$pkg" || true
+}
+
+if [ $# -lt 1 ] ; then
+	echo "Usage: $(basename "$0") <SERIAL> [PACKAGE...]" >&2
+	exit 2
+fi
+
+serial=$1
+shift
+
+model=$(adb -s "$serial" shell getprop ro.product.model | tr ' ' '-')
+
+echo "-- Model: $model"
+echo
+
+if [ $# -gt 0 ] ; then
+	for pkg in "$@" ; do
+		adb_uninstall "$serial" "$pkg"
+	done
+else
+	while read -r pkg _ ; do
+		case "$pkg" in
+			"#"*|"") ;;
+			*) adb_uninstall "$serial" "$pkg" ;;
+		esac
+	done < "$(dirname "$0")"/android/"$model".packages
+fi
