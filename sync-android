@@ -3,7 +3,7 @@
 function usage()
 {
 	cat <<EOF
-Usage: $(bashname "${0}") [-d] [HOST]
+Usage: $(basename "${0}") [-d] [HOST]
 
 Sync various files from and Android device.
 
