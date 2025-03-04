@@ -3,26 +3,22 @@
 # Push branches and tags
 #
 
+function pr_yellow() { echo -e "\033[33m${*}\033[0m" ; }
+
 function push_all()
 {
-	local tag branch tracking tmp tracking_remote tracking_branch force
-	local push_tag push_branch push_branch_opts
+	local tag branch remote_branch
+	local push_branch_opts force push_tag push_branch do_tag
 
 	tag=$(git describe --exact-match HEAD 2>/dev/null || true)
 	branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
 
-	tracking=$(git rev-parse --abbrev-ref '@{u}' 2>/dev/null || true)
-	if [ -z "${tracking}" ] ; then
-		case "${branch}" in
-			cranky/master-next-*) tmp=cranky/master-next ;;
-			cranky/master-*)      tmp=cranky/master ;;
-			*)                    tmp= ;;
-		esac
-		tracking=$(git for-each-ref --format='%(refname:short) %(upstream:short)' refs/heads | \
-		           grep "^${tmp} " | sed 's/.* //')
-	fi
-	tracking_remote=${tracking%%/*}
-	tracking_branch=${tracking#*/}
+	remote_branch=
+	while read -r refname upstream ; do
+		if [ "${upstream}" = "${REMOTE}/${refname}" ]; then
+			remote_branch=${refname}
+		fi
+	done < <(git for-each-ref --format='%(refname:short) %(upstream:short)' refs/heads)
 
 	push_branch_opts=()
 
@@ -36,16 +32,13 @@ function push_all()
 		fi
 	fi
 
-	REMOTE=${tracking_remote}
-	if [ "${REMOTE}" = "${tracking_remote}" ] ; then
-		push_branch_opts+=("${branch}:${tracking_branch}")
-	fi
+	push_branch_opts+=("${branch}:${remote_branch}")
 
 	echo "${PWD}"
 	echo "  Remote:         ${REMOTE}"
 	echo "  Tag:            ${tag}"
 	echo "  Current branch: ${branch}"
-	echo "  Tracking:       ${tracking}"
+	echo "  Remote branch:  ${REMOTE}/${remote_branch}"
 	echo "  Force push:     ${force}"
 
 	if [ -z "${tag}" ] || [ -z "${branch}" ] ; then
@@ -59,13 +52,13 @@ function push_all()
 
 	do_tag=1
 
-	echo "${push_branch[@]}"
+	pr_yellow "${push_branch[@]}"
 	if [ "${DRY_RUN}" -eq 0 ] ; then
 		"${push_branch[@]}" || do_tag=0
 	fi
 
 	if [ ${do_tag} -eq 1 ] ; then
-		echo "${push_tag[@]}"
+		pr_yellow "${push_tag[@]}"
 		if [ "${DRY_RUN}" -eq 0 ] ; then
 			"${push_tag[@]}" || true
 		fi
