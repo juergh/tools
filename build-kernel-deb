@@ -538,8 +538,8 @@ Usage: $(basename "${0}") [-h] CMD [ARGS...]
 Build kernel Debian packages.
 
 To build an Ubuntu raspi kernel:
-  $ build-kernel-deb config raspi
-  $ build-kernel-deb make
+  $ build-kernel-deb --arch arm64 config raspi
+  $ build-kernel-deb --arch arm64 make
 
 To build a generic Ubuntu kernel:
   $ build-kernel-deb config generic
