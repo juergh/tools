@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+#
+# LP bug management
+#
+
+import sys
+
+import click
+from launchpadlib.launchpad import Launchpad
+
+
+def show(item):
+    print(item)
+    print("attributes:  {}".format(sorted(item.lp_attributes)))
+    print("collections: {}".format(sorted(item.lp_collections)))
+    print("entries:     {}".format(sorted(item.lp_entries)))
+    print("operations:  {}".format(sorted(item.lp_operations)))
+
+    for a in item.lp_attributes:
+        print(f"  {a} = {getattr(item, a)}")
+
+
+def lp_login():
+    return Launchpad.login_with("tools", "production", version="devel")
+
+
+def mark_as_duplicate(lp, master, bug, dry_run=False):
+    pre_comment = \
+        "Thank you for taking the time to report this bug and helping to make Ubuntu better. " + \
+        f"This particular bug has already been reported and is a duplicate of bug {master}, so it " + \
+        "is being marked as such. "
+    post_comment = " Please continue to report any other bugs you may find."
+
+    if master == 2068107:
+        comment = \
+            "The problem you're encountering is due to the presence of an unsupported DKMS " + \
+            "module that causes the installation or upgrade of kernel packages to fail. You " + \
+            "need to remove this unsupported DKMS module. Please look at the other bug report " + \
+            "for instructions and additional information."
+    else:
+        comment = \
+            "Please look at the other bug report to see if there is any missing information " + \
+            "that you can provide, or to see if there is a workaround for the bug. Additionally, " + \
+            "any further discussion regarding the bug should occur in the other report."
+
+    lp_master = lp.bugs[master]
+    lp_bug = lp.bugs[bug]
+
+    comment = pre_comment + comment + post_comment
+    print(comment)
+    print()
+
+    if dry_run:
+        print(f"(dry-run) Modified LP: #{bug}")
+        return
+
+    # Copy release tags from duplicates to the master bug
+    ubuntu = lp.distributions["ubuntu"]
+    release_tags = []
+    for series in ubuntu.series:
+        if series.status not in ("Active Development", "Current Stable Release", "Supported"):
+            continue
+        release_tags.append(series.name)
+    dupe_tags = set(lp_bug.tags)
+    master_tags = lp_master.tags
+    missing_tags = dupe_tags.difference(master_tags)
+    for tag in missing_tags:
+        if tag in release_tags:
+            master_tags.append(tag)
+    lp_master.lp_save()
+
+    for task in lp_bug.bug_tasks:
+        task.status = "Confirmed"
+    lp_bug.newMessage(content=comment)
+    lp_bug.duplicate_of = lp_master
+    lp_bug.lp_save()
+    print(f"Modified LP: #{bug}")
+
+
+@click.group()
+def main():
+    pass
+
+
+@main.command()
+@click.argument("bug")
+@click.option("--dry-run", is_flag=True)
+def duplicate_dkms(bug, dry_run):
+    """Mark a bug as a duplicate of LP: #2068107 (DKMS build failure)."""
+    lp = lp_login()
+    mark_as_duplicate(lp, 2068107, bug, dry_run=dry_run)
+
+@main.command()
+@click.argument("bug")
+@click.argument("series")
+@click.option("--dry-run", is_flag=True)
+def wontfix_eol(bug, series, dry_run):
+    """Close a bug as \"Won't Fix\" due to EOL."""
+    if series == "lunar":
+        desc = "Ubuntu 23.04 (Lunar Lobster) with kernel 6.2"
+    elif series == "mantic":
+        desc = "Ubuntu 23.10 (Mantic Minotaur) with kernel 6.5"
+    else:
+        print(f"Error: Unsupported series: {series}")
+        sys.exit(1)
+
+    comment = desc + \
+        " has reached end of life, so this bug will not be fixed for that specific release. " + \
+        "Please reopen this bug if you still encounter the same issue with an updated system."
+
+    lp = lp_login()
+    lp_bug = lp.bugs[bug]
+
+    print(comment)
+    print()
+
+    if dry_run:
+        print(f"(dry-run) Modified LP: #{bug}")
+        return
+
+    for task in lp_bug.bug_tasks:
+        task.status = "Won't Fix"
+    lp_bug.newMessage(content=comment)
+    lp_bug.lp_save()
+    print(f"Modified LP: #{bug}")
+
+
+if __name__ == "__main__":
+    main()
