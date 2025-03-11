@@ -26,7 +26,7 @@ lp = Launchpad.login_with("tools", "production", version="devel")
 lp_dist = lp.distributions["ubuntu"]
 lp_source = lp_dist.getSourcePackage(name=source)
 
-lp_tasks = lp_source.searchTasks(status=status)
+lp_tasks = lp_source.searchTasks(status=status, order_by="-datecreated")
 for task in lp_tasks:
     bug = task.bug
 
