@@ -47,11 +47,14 @@ def mark_as_duplicate(lp, master, bug, dry_run=False):
     lp_bug = lp.bugs[bug]
 
     comment = pre_comment + comment + post_comment
+
+    print(f"LP: #{bug} -- {lp_bug.title}")
+    print()
     print(comment)
     print()
 
     if dry_run:
-        print(f"(dry-run) Modified LP: #{bug}")
+        print("(dry-run) Exiting, not modifying bug")
         return
 
     # Copy release tags from duplicates to the master bug
@@ -71,10 +74,11 @@ def mark_as_duplicate(lp, master, bug, dry_run=False):
 
     for task in lp_bug.bug_tasks:
         task.status = "Confirmed"
+        task.lp_save()
     lp_bug.newMessage(content=comment)
     lp_bug.duplicate_of = lp_master
     lp_bug.lp_save()
-    print(f"Modified LP: #{bug}")
+    print("Modified bug")
 
 
 @click.group()
@@ -96,7 +100,11 @@ def duplicate_dkms(bug, dry_run):
 @click.option("--dry-run", is_flag=True)
 def wontfix_eol(bug, series, dry_run):
     """Close a bug as \"Won't Fix\" due to EOL."""
-    if series == "lunar":
+    if series == "eoan":
+        desc = "Ubuntu 19.10 (Eoan Ermine) with kernel 5.3"
+    elif series == "impish":
+        desc = "Ubuntu 21.10 (Impish Indri) with kernel 5.13"
+    elif series == "lunar":
         desc = "Ubuntu 23.04 (Lunar Lobster) with kernel 6.2"
     elif series == "mantic":
         desc = "Ubuntu 23.10 (Mantic Minotaur) with kernel 6.5"
@@ -111,18 +119,21 @@ def wontfix_eol(bug, series, dry_run):
     lp = lp_login()
     lp_bug = lp.bugs[bug]
 
+    print(f"LP: #{bug} -- {lp_bug.title}")
+    print()
     print(comment)
     print()
 
     if dry_run:
-        print(f"(dry-run) Modified LP: #{bug}")
+        print("(dry-run) Exiting, not modifying bug")
         return
 
     for task in lp_bug.bug_tasks:
         task.status = "Won't Fix"
+        task.lp_save()
     lp_bug.newMessage(content=comment)
     lp_bug.lp_save()
-    print(f"Modified LP: #{bug}")
+    print("Modified bug")
 
 
 if __name__ == "__main__":
