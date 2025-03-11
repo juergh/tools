@@ -102,6 +102,8 @@ def wontfix_eol(bug, series, dry_run):
     """Close a bug as \"Won't Fix\" due to EOL."""
     if series == "eoan":
         desc = "Ubuntu 19.10 (Eoan Ermine) with kernel 5.3"
+    elif series == "hirsute":
+        desc = "Ubuntu 21.04 (Hirsute Hippo) with kernel 5.11"
     elif series == "impish":
         desc = "Ubuntu 21.10 (Impish Indri) with kernel 5.13"
     elif series == "lunar":
