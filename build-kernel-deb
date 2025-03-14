@@ -10,7 +10,7 @@ function run_chroot()
 {
 	pr_info "Run in chroot (${CHROOT}):"
 	pr_info "+ ${*}"
-	run-chroot "${CHROOT}" -- "${@}"
+	schroot -r -c "${CHROOT}" -- "${@}"
 }
 
 function modules_laptop()
@@ -659,8 +659,8 @@ fi
 #
 
 if [ -n "${chroot}" ] ; then
-	series=$(run-chroot "${chroot}" -- lsb_release -c -s 2>/dev/null)
 	CHROOT=${chroot}
+	series=$(run_chroot cat /etc/lsb-release | sed -n 's/DISTRIB_CODENAME=//p')
 else
 	# shellcheck disable=SC1091
 	if [ -e debian/debian.env ] ; then
@@ -669,7 +669,7 @@ else
 	else
 		series=$(lsb_release -c -s 2>/dev/null)
 	fi
-	CHROOT=cranky--${series}
+	CHROOT=cranky--${series}-amd64
 fi
 
 #
