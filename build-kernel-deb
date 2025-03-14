@@ -10,7 +10,12 @@ function run_chroot()
 {
 	pr_info "Run in chroot (${CHROOT}):"
 	pr_info "+ ${*}"
-	schroot -r -c "${CHROOT}" -- "${@}"
+
+	if schroot --list --all-sessions | grep -q "sessions:${CHROOT}" ; then
+		schroot -r -c "${CHROOT}" -- "${@}"
+	else
+		schroot -c "${CHROOT}" -- "${@}"
+	fi
 }
 
 function modules_laptop()
