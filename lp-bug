@@ -100,7 +100,9 @@ def duplicate_dkms(bug, dry_run):
 @click.option("--dry-run", is_flag=True)
 def wontfix_eol(bug, series, dry_run):
     """Close a bug as \"Won't Fix\" due to EOL."""
-    if series == "eoan":
+    if series == "maverick":
+        desc = "Ubuntu 10.10 (Maverick Meerkat) with kernel 2.6.y"
+    elif series == "eoan":
         desc = "Ubuntu 19.10 (Eoan Ermine) with kernel 5.3"
     elif series == "hirsute":
         desc = "Ubuntu 21.04 (Hirsute Hippo) with kernel 5.11"
@@ -116,7 +118,7 @@ def wontfix_eol(bug, series, dry_run):
 
     comment = desc + \
         " has reached end of life, so this bug will not be fixed for that specific release. " + \
-        "Please reopen this bug if you still encounter the same issue with an updated system."
+        "Please file a new bug if this issue still exists in a supported release."
 
     lp = lp_login()
     lp_bug = lp.bugs[bug]
