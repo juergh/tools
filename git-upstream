@@ -104,7 +104,7 @@ function do_send()
 					fi
 					;;
 				"(commit_signer"*|"(authored"*|"(added_lines"*|"(removed_lines"*|\
-				"(odd fixer"*)
+				"(odd fixer"*|"(blamed_fixes"*|*"blamed_fixes)")
 					cc="${cc},${email}"
 					;;
 				*)
