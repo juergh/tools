@@ -63,7 +63,7 @@ function adb_get_storage_dirs()
 function adb_pull_storage()
 {
 	local rmt_dir=${1} dst_dir=${2}
-	local rmt_dirs storage_dir rmt_file
+	local rmt_dirs storage_dir rmt_file rel_dir lcl_dir lcl_file
 
 	echo "-- Pull files from ${SERIAL} to ${dst_dir}"
 
@@ -78,14 +78,21 @@ function adb_pull_storage()
 		return
 	fi
 
-	mkdir -p "${dst_dir}"
 	while IFS= read -r rmt_file ; do
 		case "${rmt_file}" in
 			*/.trashed-*)    continue ;;
 			*/.thumbnails/*) continue ;;
 		esac
-		if ! [ -e "${dst_dir}/${rmt_file##*/}" ] ; then
-			adb -s "${SERIAL}" pull "${rmt_file}" "${dst_dir}"
+
+		rel_dir=${rmt_file%/*}/
+		rel_dir=${rel_dir#*/"${rmt_dir}"/}
+
+		lcl_dir=${dst_dir}/${rel_dir}
+		lcl_file=${lcl_dir}/${rmt_file##*/}
+
+		if ! [ -e "${lcl_file}" ] ; then
+			mkdir -p "${lcl_dir}"
+			adb -s "${SERIAL}" pull "${rmt_file}" "${lcl_dir}"
 		fi
 	done < <(adb -s "${SERIAL}" shell find "${rmt_dirs[@]}" -type f)
 }
@@ -188,11 +195,16 @@ function do_pull_pictures()
 
 function do_pull()
 {
-	if [ ${#} -ne 1 ] ; then
+	local d
+
+	if [ ${#} -lt 1 ] ; then
 		usage
 		exit 1
 	fi
-	adb_pull_storage "${1}" "${HOME}"/tmp/"${SERIAL}"/"${1}"
+
+	for d in "${@}" ; do
+		adb_pull_storage "${d}" "${HOME}"/tmp/"${SERIAL}"/"${d}"
+	done
 }
 
 function do_push()
@@ -275,7 +287,7 @@ Porcelain commands:
   pull-camera          Pull files from folder DCIM.
   pull-download        Pull files from folder Download.
   pull-pictures        Pull files from folder Pictures.
-  pull DIR             Pull files from folder <DIR> to ~/tmp/<SERIAL>/<DIR>.
+  pull DIR [DIR..]     Pull files from folder <DIR> to ~/tmp/<SERIAL>/<DIR>.
   push DIR ...         Push files to folder <DIR>.
   scrcpy               Run scrcpy.
   unlock               Unlock device.
