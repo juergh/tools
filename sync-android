@@ -13,7 +13,7 @@ Optional arguments:
 EOF
 }
 
-host=moto-miami
+host=motorola-edge-30-neo
 opts=()
 
 while [ $# -gt 0 ] ; do
@@ -54,6 +54,10 @@ case "$(basename "${0}")" in
 		;;
 	*-to-*)
 		echo "-- Sync to ${host}"
+		opts+=(
+			"--exclude" "Android"
+		)
+		set -x
 		rsync "${opts[@]}" \
 			  -e ssh "${HOME}"/Sync/"${host}"/ "${host}":/storage/emulated/0/ 
 		;;
