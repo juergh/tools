@@ -3,10 +3,53 @@
 # LP bug management
 #
 
+import os
 import sys
 
 import click
 from launchpadlib.launchpad import Launchpad
+
+KERNEL_VERSION = {
+    "artful": "4.13",
+    "bionic": "4.15",
+    "cosmic": "4.18",
+    "dapper": "2.6.y",
+    "disco": "5.0",
+    "edgy": "2.6.y",
+    "eoan": "5.3",
+    "feisty": "2.6.y",
+    "focal": "5.4",
+    "groovy": "5.8",
+    "gutsy": "2.6.y",
+    "hardy": "2.6.y",
+    "hirsute": "5.11",
+    "impish": "5.13",
+    "intrepid": "2.6.y",
+    "jammy": "5.15",
+    "jaunty": "2.6.y",
+    "karmic": "2.6.y",
+    "kinetic": "5.19",
+    "lucid": "2.6.y",
+    "lunar": "6.2",
+    "mantic": "6.5",
+    "maverick": "2.6.y",
+    "natty": "2.6.y",
+    "noble": "6.8",
+    "oneiric": "3.0",
+    "oracular": "6.11",
+    "plucky": "6.11",
+    "precise": "3.2",
+    "quantal": "3.5",
+    "raring": "3.8",
+    "saucy": "3.11",
+    "trusty": "3.13",
+    "utopic": "3.16",
+    "vivid": "3.19",
+    "wily": "4.2",
+    "xenial": "4.4",
+    "yakkety": "4.8",
+    "zesty": "4.10",
+}
 
 
 def show(item):
@@ -27,21 +70,22 @@ def lp_login():
 def mark_as_duplicate(lp, master, bug, dry_run=False):
     pre_comment = \
         "Thank you for taking the time to report this bug and helping to make Ubuntu better. " + \
-        f"This particular bug has already been reported and is a duplicate of bug {master}, so it " + \
-        "is being marked as such. "
+        f"This particular bug has already been reported and is a duplicate of bug {master}, " + \
+        "so it is being marked as such. "
     post_comment = " Please continue to report any other bugs you may find."
 
     if master == 2068107:
         comment = \
             "The problem you're encountering is due to the presence of an unsupported DKMS " + \
             "module that causes the installation or upgrade of kernel packages to fail. You " + \
-            "need to remove this unsupported DKMS module. Please look at the other bug report " + \
-            "for instructions and additional information."
+            "need to remove this unsupported DKMS module. Please look at the other bug " + \
+            "report for instructions and additional information."
     else:
         comment = \
             "Please look at the other bug report to see if there is any missing information " + \
-            "that you can provide, or to see if there is a workaround for the bug. Additionally, " + \
-            "any further discussion regarding the bug should occur in the other report."
+            "that you can provide, or to see if there is a workaround for the bug. " + \
+            "Additionally, any further discussion regarding the bug should occur in the " + \
+            "other report."
 
     lp_master = lp.bugs[master]
     lp_bug = lp.bugs[bug]
@@ -100,25 +144,18 @@ def duplicate_dkms(bug, dry_run):
 @click.option("--dry-run", is_flag=True)
 def wontfix_eol(bug, series, dry_run):
     """Close a bug as \"Won't Fix\" due to EOL."""
-    if series == "maverick":
-        desc = "Ubuntu 10.10 (Maverick Meerkat) with kernel 2.6.y"
-    elif series == "eoan":
-        desc = "Ubuntu 19.10 (Eoan Ermine) with kernel 5.3"
-    elif series == "hirsute":
-        desc = "Ubuntu 21.04 (Hirsute Hippo) with kernel 5.11"
-    elif series == "impish":
-        desc = "Ubuntu 21.10 (Impish Indri) with kernel 5.13"
-    elif series == "lunar":
-        desc = "Ubuntu 23.04 (Lunar Lobster) with kernel 6.2"
-    elif series == "mantic":
-        desc = "Ubuntu 23.10 (Mantic Minotaur) with kernel 6.5"
-    else:
-        print(f"Error: Unsupported series: {series}")
+    kernel = KERNEL_VERSION.get(series)
+    if not kernel:
+        print(f"Unsupported series: {series}", file=sys.stderr)
         sys.exit(1)
 
-    comment = desc + \
-        " has reached end of life, so this bug will not be fixed for that specific release. " + \
-        "Please file a new bug if this issue still exists in a supported release."
+    distro = os.popen(f"ubuntu-distro-info -a -f | grep -i ' \"{series} '", "r").read().strip()
+    distro = distro.replace(' "', " (").replace('"', ")")
+
+    comment = \
+        f"{distro} with kernel {kernel} has reached end of life, so this bug will not be " + \
+        "fixed for that specific release. Please file a new bug if this issue still exists " + \
+        "in a supported release."
 
     lp = lp_login()
     lp_bug = lp.bugs[bug]
