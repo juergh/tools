@@ -1,0 +1,9 @@
+#!/bin/bash
+#
+# Grep configs in linux-buildinfo repo
+#
+
+for d in */linux* ; do
+	latest=$(cd "${d}"; ls | debsort | tail -1)
+	grep "$@" "${d}"/"${latest}"/*/*/config
+done
