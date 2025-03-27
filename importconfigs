@@ -5,16 +5,27 @@
 
 configs=${1}
 
+if ! [ -e debian/scripts/misc/annotations ] ; then
+	# shellcheck disable=SC1091
+	. debian/debian.env
+	: > "${DEBIAN}"/config/config.common.ports
+	: > "${DEBIAN}"/config/config.common.ubuntu
+	rm -f "${DEBIAN}"/config/*/*
+fi
+
 for config in "${configs}"/*-config.flavour.* ; do
 	echo
     echo "-- Process ${config}"
 
 	c=${config##*/}
-    arch=${c%%-*}
+	arch=${c%%-*}
 	flavor=${c##*.}
 
-	./debian/scripts/misc/annotations --import "${config}" --arch "${arch}" --flavour "${flavor}"
-
+	if [ -e debian/scripts/misc/annotations ] ; then
+		./debian/scripts/misc/annotations --import "${config}" --arch "${arch}" --flavour "${flavor}"
+	else
+		cp "${config}" "${DEBIAN}"/config/"${c/-//}"
+	fi
 done
 
 cranky fdr updateconfigs
