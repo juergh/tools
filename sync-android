@@ -3,21 +3,31 @@
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-d] [HOST]
+Usage: $(basename "${0}") [--delete] [--dir DIR] [--dry-run] [HOST]
 
 Sync various files from and Android device.
 
 Optional arguments:
+  --delete       Delete extraneous files from destination directories.
+  --dir DIR      Directory to sync.
   -d, --dry-run
   -h, --help     Show this help text.
 EOF
 }
 
+dir=
 host=motorola-edge-30-neo
 opts=()
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
+		--delete)
+			opts+=("--delete")
+			;;
+		--dir)
+			shift
+			dir=${1}
+			;;
 		-d|--dry-run)
 			echo "-- Dry-run"
 			opts+=("--dry-run")
@@ -46,20 +56,20 @@ opts+=(
 	"--exclude" "**/.thumbnails"
 )
 
+remote_dir=${host}:/storage/emulated/0/${dir}/
+local_dir=${HOME}/Sync/${host}/${dir}/
+
 case "$(basename "${0}")" in
 	*-from-*)
 		echo "-- Sync from ${host}"
-		rsync "${opts[@]}" \
-			  -e ssh "${host}":/storage/emulated/0/ "${HOME}"/Sync/"${host}"/
+		set -x
+		rsync "${opts[@]}" -e ssh "${remote_dir}" "${local_dir}"
 		;;
 	*-to-*)
 		echo "-- Sync to ${host}"
-		opts+=(
-			"--exclude" "Android"
-		)
+		opts+=("--exclude" "Android")
 		set -x
-		rsync "${opts[@]}" \
-			  -e ssh "${HOME}"/Sync/"${host}"/ "${host}":/storage/emulated/0/ 
+		rsync "${opts[@]}" -e ssh "${local_dir}" "${remote_dir}"
 		;;
 	*)
 		echo "Invalid sync mode" >&2
