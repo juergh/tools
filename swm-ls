@@ -1,10 +1,49 @@
 #!/bin/bash -eu
 
+RED="\033[91m"
 GREEN="\033[92m"
 YELLOW="\033[93m"
+CYAN="\033[96m"
 NC="\033[00m"
 
-owner=${USER}
+COLS=$(tput cols)
+
+function usage()
+{
+	cat <<EOF
+Usage: swm-ls [--cycle CYCLE] [-h] [--me|--owner OWNER]
+
+Optional arguments:
+  --cyle CYCLE  Show only bugs for cycle CYCLE.
+  -h, --help    Show this help text and exit.
+  --me          Show only bugs owned by be.
+  --ower OWNER  Show only bugs owned by OWNER.
+EOF
+}
+
+opt_cycle=
+opts=()
+
+while [ $# -ne 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		--cycle)
+			shift
+			opt_cycle=${1}
+			;;
+		--me)
+			opts+=("--limit-owner" "${USER}")
+			;;
+		--owner)
+			shift
+			opts+=("--limit-owner" "${1}")
+			;;
+	esac
+	shift
+done
 
 prev_cycle=
 
@@ -17,6 +56,12 @@ while IFS= read -r line ; do
 	esac
 
 	cycle=$(echo "${line}" | awk '{print $5}')
+	cycle=${cycle%-*}
+	if [ -n "${opt_cycle}" ] && [ "${cycle/${opt_cycle}}" = "${cycle}" ] ; then
+		continue
+	fi
+
+	# Print the cycle header
 	if [ "${cycle}" != "${prev_cycle}" ] ; then
 		if [ -n "${prev_cycle}" ] ; then
 			echo
@@ -27,10 +72,12 @@ while IFS= read -r line ; do
 	# Print the data
 	case "${line}" in
 		*"Debs ready to be cranked"*) color=${GREEN} ;;
-		*"Not ready to be cranked"*)  color=${YELLOW} ;;
+		*"Not ready to be cranked"*)  color=${CYAN} ;;
+		*"testing FAILED"*)           color=${RED} ;;
+		*"testing in progress"*)      color=${YELLOW} ;;
 		*)                            color=${NC} ;;
 	esac
-	echo -e "  ${color}${line}${NC}"
+	echo -e "  ${color}${line::$((COLS - 3))}${NC}"
 
 	prev_cycle=${cycle}
-done < <("${KTEAM_TOOLS}"/stable/swm-ls --limit-owner "${owner}")
+done < <("${KTEAM_TOOLS}"/stable/swm-ls "${opts[@]}" --show-owner "${@}")
