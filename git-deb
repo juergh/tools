@@ -49,11 +49,6 @@ function set_globals()
 {
 	local remote repo_name series
 
-	if ! [ -d .git ] ; then
-		pr_error "Not a git repo"
-		exit 1
-	fi
-
 	remote=$(git remote get-url origin 2>/dev/null || true)
 	repo_name=${remote##*/}
 	repo_name=${repo_name%.git}
@@ -91,6 +86,11 @@ function set_globals()
 				SRU=1
 				;;
 		esac
+	elif [ -e kernel.yaml ] ; then
+		REPO="kernel-snap"
+		SRU=1
+		# FIMXE
+		# TARGET=
 	fi
 
 	if [ -z "${REPO}" ] ; then
@@ -113,8 +113,8 @@ function set_globals()
 	esac
 
 	# Determine the series
-	SERIES=
-	if [ -n "${CHANGELOG}" ] ; then
+	SERIES=${OPT_SERIES}
+	if [ -n "${SERIES}" ] && [ -n "${CHANGELOG}" ] ; then
 		SERIES=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Distribution)
 		if [ "${SERIES}" = "UNRELEASED" ] ; then
 			SERIES=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Distribution \
@@ -132,13 +132,15 @@ function set_globals()
 	esac
 
 	# Private?
-	case "${remote}" in
-		*~canonical-kernel-*)
-			# shellcheck disable=SC2034
-			PRIVATE=1
-			TO=${KERNEL_ESM_EMAIL}
-			;;
-	esac
+	if [ "${REPO}" != "kernel-snap" ] ; then
+		case "${remote}" in
+			*~canonical-kernel-*)
+				# shellcheck disable=SC2034
+				PRIVATE=1
+				TO=${KERNEL_ESM_EMAIL}
+				;;
+		esac
+	fi
 
 	# Set the target
 	if [ ${#TARGET[@]} -eq 0 ] && [ -n "${SERIES}" ] ; then
@@ -149,6 +151,11 @@ function set_globals()
 		else
 			TARGET=("${series}")
 		fi
+	fi
+
+	# Options that override globals
+	if [ ${#OPT_TARGET[@]} -gt 0 ] ; then
+		TARGET=("${OPT_TARGET[@]}")
 	fi
 }
 
@@ -483,6 +490,7 @@ Optional arguments:
   -r, --target TARGET         The target (series[:source]) to include in the
                               subject prefix. Can be provided multiple times.
   -s, --resend                Add RESEND to the subject prefix.
+  --series SERIES             Use series SERIES.
   -t, --token TEXT            Add an additional token [TEXT] to the subject
                               prefix. Can be provided multiple times.
   -ns, --no-sru               Don't include [SRU] in the subject prefix.
@@ -493,6 +501,11 @@ EOF
 
 # -----------------------------------------------------------------------------
 # Main entry point
+
+if ! [ -d .git ] ; then
+	pr_error "Not a git repo"
+	exit 1
+fi
 
 declare -A cmd_map=(
 	["i"]="info"
@@ -507,16 +520,15 @@ declare -A cmd_map=(
 	["request-pull"]="request_pull"
 )
 
-# Set the default globals
-set_globals
-
 COVER_LETTER=0
 DRY_RUN=0
 IN_REPLY_TO=
-OPT_TARGET=()
 resend=0
 version=0
 cmd=
+
+OPT_SERIES=
+OPT_TARGET=()
 
 while [ ${#} -gt 0 ] ; do
 	case ${1} in
@@ -540,6 +552,10 @@ while [ ${#} -gt 0 ] ; do
 			;;
 		-s|--resend)
 			resend=1
+			;;
+		--series)
+			shift
+			OPT_SERIES=${1}
 			;;
 		--to)
 			shift
@@ -574,16 +590,14 @@ if [ -z "${cmd}" ] ; then
 	exit 2
 fi
 
+# Set the default globals
+set_globals
+
 trap out EXIT INT TERM HUP
 
 patch_pull=PATCH
 if [ "${cmd}" = "request_pull" ] ; then
 	patch_pull=PULL
-fi
-
-# Options that override globals
-if [ ${#OPT_TARGET[@]} -gt 0 ] ; then
-	TARGET=("${OPT_TARGET[@]}")
 fi
 
 # Set the default email subject prefix
