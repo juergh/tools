@@ -3,6 +3,15 @@
 # Generate the master kernel configs
 #
 
+function run_chroot()
+{
+	if schroot --list --all-sessions | grep -q "session:${CHROOT}" ; then
+		schroot -r -c "${CHROOT}" -- "${@}"
+	else
+		schroot -c "${CHROOT}" -- "${@}"
+	fi
+}
+
 function out()
 {
 	local rc=${?}
@@ -73,7 +82,9 @@ series=$(dpkg-parsechangelog -SDistribution)
 if [ "${series}" = "UNRELEASED" ] ; then
 	series=$(dpkg-parsechangelog -SDistribution -o1 -c1)
 fi
-run-chroot "${series}" -- debian/rules genconfigs || true
+
+CHROOT=cranky--${series}-amd64
+run_chroot debian/rules genconfigs || true
 
 rm -rf MASTERCONFIGS
 mv CONFIGS MASTERCONFIGS
