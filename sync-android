@@ -60,17 +60,28 @@ remote_dir=${host}:/storage/emulated/0/${dir}/
 local_dir=${HOME}/Sync/${host}/${dir}/
 
 case "$(basename "${0}")" in
+
 	*-from-*)
 		echo "-- Sync from ${host}"
 		set -x
+
+		# Main files
 		rsync "${opts[@]}" -e ssh "${remote_dir}" "${local_dir}"
+
+		# Termux data
+		d=/data/data/com.termux/files/home/
+		rsync "${opts[@]}" -e ssh "${host}:${d}" "${HOME}/Sync/${host}/${d}"
 		;;
+
 	*-to-*)
 		echo "-- Sync to ${host}"
-		opts+=("--exclude" "Android")
+		opts+=(
+			"--exclude" "Android"
+		)
 		set -x
 		rsync "${opts[@]}" -e ssh "${local_dir}" "${remote_dir}"
 		;;
+
 	*)
 		echo "Invalid sync mode" >&2
 		exit 1
