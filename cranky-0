@@ -49,6 +49,11 @@ def run(cmd, shell=False):
         sys.exit(1)
 
 
+def debian_version(git_obj):
+    line = os.popen(f"git show {git_obj} | head -1", "r").read()
+    return line.split("(")[1].split(")")[0]
+
+
 @click.group()
 def main():
     pass
@@ -147,10 +152,14 @@ def close_(force):
 
         cl = "debian.raspi-realtime/changelog"
 
+        # Previous release version and tag
+        raspi_realtime_version = str(parse_changelog("debian.raspi-realtime/changelog", offset=1).version)
+        raspi_realtime_tag = f"Ubuntu-raspi-realtime-{raspi_realtime_version}"
+
         #
         # raspi
         #
-        version = str(parse_changelog("debian.raspi/changelog", offset=1).version)
+        version = debian_version(f"{raspi_realtime_tag}:debian.raspi/changelog")
         run([CRANKY, "update-changelog", "--changelog", cl,
              "--from-version", version,
              "--from-changelog", "debian.raspi/changelog"])
@@ -158,7 +167,7 @@ def close_(force):
         #
         # realtime
         #
-        version = str(parse_changelog("debian.realtime/changelog", offset=1).version)
+        version = debian_version(f"{raspi_realtime_tag}:debian.realtime/changelog")
         from_commit = os.popen("git log --format='%h __%s__' |" +
                                f"grep -m1 -F '__UBUNTU: Ubuntu-realtime-{version}__' | sed 's/ .*//'",
                                "r").read().strip()
@@ -172,9 +181,8 @@ def close_(force):
         #
         # raspi-realtime
         #
-        version = str(parse_changelog("debian.raspi-realtime/changelog", offset=1).version)
         from_commit = os.popen("git log --format='%h __%s__' |" +
-                               f"grep -m1 -F '__UBUNTU: Ubuntu-raspi-realtime-{version}__' | sed 's/ .*//'",
+                               f"grep -m1 -F '__UBUNTU: {raspi_realtime_tag}__' | sed 's/ .*//'",
                                "r").read().strip()
         run([CRANKY, "update-changelog", "--changelog", cl,
              "--from-commit", from_commit])
