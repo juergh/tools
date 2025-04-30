@@ -6,25 +6,39 @@
 function usage()
 {
         cat <<EOF
-Usage: ${0##*/} [-b] [-f] [-h] [OPTS] SERIES PACKAGE FROM TO
+Usage: ${0##*/} [-b] [-f] [-h] [OPTS] SUITE PACKAGE FROM TO
 
 Copy packages from one PPA to another.
+
+Postional arguments:
+  SUITE         Suite (noble, noble-proposed, ...)
+  PACKAGE       Source package name
+  FROM          Source PPA (ubuntu, user/ppa, juergh/ppa1, ...)
+  TO            Destination PPA (user/ppa, juergh/ppa2, ...)
 
 Optional arguments:
   -b, --binary  Copy binary packages.
   -f, --force   Do it.
   -h, --help    Show this help message and exit.
+  --to-suite    Destination suite (noble, plucky, ...).
 
 OPTS  Additional options passed to copy-package.
 
-Example:
+
+Examples:
+
+  # Copy from PPA to PPA
   $ lp-copy-packages noble linux-raspi juergh/raspi dest/name
+
+  # Copy from archive to PPA
+  $ lp-copy-packages noble linux-raspi ubuntu dest/name
+  $ lp-copy-packages noble-updates linux-raspi ubuntu dest/name
 EOF
 }
 
 opts=()
 force=0
-series=
+suite=
 package=
 from=
 to=
@@ -41,16 +55,20 @@ while [ ${#} -gt 0 ] ; do
 			usage
 			exit
 			;;
-		-s|--series)
+		-s|--suite)
 			shift
-			series=${1}
+			suite=${1}
+			;;
+		--to-suite)
+			shift
+			opts+=("--to-suite" "${1}")
 			;;
 		-*)
 			opts+=("${1}")
 			;;
 		*)
-			if [ -z "${series}" ] ; then
-				series=${1}
+			if [ -z "${suite}" ] ; then
+				suite=${1}
 			elif [ -z "${package}" ] ; then
 				package=${1}
 			elif [ -z "${from}" ] ; then
@@ -70,17 +88,23 @@ if [ -z "${to}" ] ; then
 	exit 2
 fi
 
-
 if [ ${force} -eq 1 ] ; then
 	opts+=("--confirm-all")
 else
 	opts+=("--dry-run")
 fi
 
+case "${from}" in
+	*/*)
+		# PPA
+		from=~${from%/*}/ubuntu/${from#*/}
+		;;
+esac
+
 set -x
 "${HOME}"/git/ubuntu/ubuntu-archive-tools/copy-package \
-	--from="~${from%/*}/ubuntu/${from#*/}" \
+	--from="${from}" \
 	--to="~${to%/*}/ubuntu/${to#*/}" \
-	-s "${series}" \
+	-s "${suite}" \
 	"${opts[@]}" \
 	"${package}"
