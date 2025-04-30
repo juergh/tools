@@ -1,0 +1,30 @@
+#!/bin/bash -eu
+
+
+function out()
+{
+	rm -rf "${TMP_D}"
+}
+
+TMP_D=$(mktemp -d)
+trap out EXIT
+
+echo "Use temp dir ${TMP_D}"
+
+cd "${TMP_D}"
+
+wget https://raw.githubusercontent.com/qca/qca-swiss-army-knife/refs/heads/master/tools/scripts/ath11k/ath11k-bdencoder
+
+cp /lib/firmware/ath11k/WCN6855/hw2.0/board-2.bin.zst .
+unzstd board-2.bin.zst
+
+board_name='bus=pci,vendor=17cb,device=1103,subsystem-vendor=105b,subsystem-device=e108,qmi-chip-id=18,qmi-board-id=255'
+
+python3 ath11k-bdencoder -e board-2.bin
+cp 'bus=pci,vendor=17cb,device=1103,subsystem-vendor=105b,subsystem-device=e0c4,qmi-chip-id=18,qmi-board-id=255,variant=HP_G8_Lancia14.bin' \
+   "${board_name}".bin
+
+python3 ath11k-bdencoder -a board-2.bin "${board_name}".bin "${board_name}"
+
+zstd -f -19 board-2.bin
+sudo cp board-2.bin.zst /lib/firmware/ath11k/WCN6855/hw2.0/
