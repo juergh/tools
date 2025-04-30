@@ -7,6 +7,10 @@ import argparse
 
 from launchpadlib.launchpad import Launchpad
 
+NC = "\033[00m"
+GREEN = "\033[92m"
+ORANGE = "\033[33m"
+
 parser = argparse.ArgumentParser()
 parser.add_argument("series", nargs="*", default=[])
 args = parser.parse_args()
@@ -29,16 +33,22 @@ lp_source = lp_dist.getSourcePackage(name=source)
 lp_tasks = lp_source.searchTasks(status=status, order_by="-datecreated")
 for task in lp_tasks:
     bug = task.bug
-
-    first = True
+    bug_status = None
     for bug_task in bug.bug_tasks:
         if bug_task.target.name != source:
             continue
 
-        if first:
-          first = False
-          print()
-          print(f"LP: #{bug.id:<7} - {bug_task.status:<13} - {bug.title}")
+        if not bug_status:
+            bug_status = bug_task.status
+
+            color = NC
+            if bug_status == "Incomplete":
+                last_activity = [a for a in bug.activity][-1]
+                if last_activity.newvalue != "Incomplete":
+                    color = ORANGE
+
+            print()
+            print(f"LP: #{bug.id:<7} - {color}{bug_status:<13}{NC} - {bug.title}")
 
         try:
             task_series_name = bug_task.target.distroseries.name
