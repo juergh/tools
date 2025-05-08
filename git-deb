@@ -114,7 +114,7 @@ function set_globals()
 
 	# Determine the series
 	SERIES=${OPT_SERIES}
-	if [ -n "${SERIES}" ] && [ -n "${CHANGELOG}" ] ; then
+	if [ -z "${SERIES}" ] && [ -n "${CHANGELOG}" ] ; then
 		SERIES=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Distribution)
 		if [ "${SERIES}" = "UNRELEASED" ] ; then
 			SERIES=$(dpkg-parsechangelog -l "${CHANGELOG}" -S Distribution \
