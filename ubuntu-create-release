@@ -1,0 +1,41 @@
+#!/bin/bash -eu
+#
+# Create a closing commit for a test release/build
+#
+
+# shellcheck disable=SC1091
+. debian/debian.env
+
+series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -SDistribution)
+if [ "${series}" = "UNRELEASED" ] ; then
+	echo "Error: Series is UNRELEASED" >&2
+	exit1
+fi
+
+package=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -SSource)
+version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -SVersion)
+
+tag_prefix=Ubuntu${package#linux}
+
+subject="UBUNTU: ${tag_prefix}-${version%%-*}-"
+release=$(git log --format="%H __%s" | grep -m1 -P "__${subject}")
+if [ -z "${release}" ] ; then
+	echo "Error: Previous release commit not found (${subject})" >&2
+	exit 1
+fi
+
+new_version=${version}+cbd1
+
+{
+	echo "${package} (${new_version}) ${series}; urgency=medium"
+	echo
+	git log --reverse --format="  * %s" "${release%% *}"..
+	echo
+	echo " -- ${DEBFULLNAME} <${DEBEMAIL}>  $(date -R)"
+	echo
+	cat "${DEBIAN}"/changelog
+} > "${DEBIAN}"/changelog.new
+mv "${DEBIAN}"/changelog.new "${DEBIAN}"/changelog
+
+git add "${DEBIAN}"/changelog
+git commit -m "UBUNTU: ${tag_prefix}-${new_version}"
