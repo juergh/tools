@@ -8,6 +8,7 @@ import gzip
 import io
 import json
 import sys
+import yaml
 
 import requests
 
@@ -201,6 +202,9 @@ Kernel selections:
         "-v", "--verbose", action="store_true", help="Enable verbose output."
     )
     parser.add_argument(
+        "-k", "--kernel-series", help="Local kernel-series.yaml to use."
+    )
+    parser.add_argument(
         "selection",
         help="Select which kernels to list. "
         "Comma-separated list. "
@@ -219,10 +223,15 @@ Kernel selections:
         selections.add("supported")
         selections.add("supported-esm")
 
-    # Download and gunzip kernel-series.json
-    r = requests.get("https://kernel.ubuntu.com/info/kernel-series.json.gz", timeout=5)
-    with gzip.open(io.BytesIO(r.content)) as fh:
-        ks = json.load(fh)
+    if args.kernel_series:
+        # Load local kernel-series.yaml
+        with open(args.kernel_series, encoding="utf-8") as fh:
+            ks = yaml.safe_load(fh)
+    else:
+        # Download and gunzip kernel-series.json
+        r = requests.get("https://kernel.ubuntu.com/info/kernel-series.json.gz", timeout=5)
+        with gzip.open(io.BytesIO(r.content)) as fh:
+            ks = json.load(fh)
 
     if "dump" in selections:
         print(json.dumps(ks, indent=4))
