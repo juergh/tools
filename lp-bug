@@ -67,7 +67,7 @@ def lp_login():
     return Launchpad.login_with("tools", "production", version="devel")
 
 
-def mark_as_duplicate(lp, master, bug, dry_run=False):
+def mark_as_duplicate(master, bug, dry_run=False):
     pre_comment = \
         "Thank you for taking the time to report this bug and helping to make Ubuntu better. " + \
         f"This particular bug has already been reported and is a duplicate of bug {master}, " + \
@@ -87,6 +87,7 @@ def mark_as_duplicate(lp, master, bug, dry_run=False):
             "Additionally, any further discussion regarding the bug should occur in the " + \
             "other report."
 
+    lp = lp_login()
     lp_master = lp.bugs[master]
     lp_bug = lp.bugs[bug]
 
@@ -125,6 +126,61 @@ def mark_as_duplicate(lp, master, bug, dry_run=False):
     print("Modified bug")
 
 
+def wontfix(reason, bug, series=None, dry_run=False):
+    """Close a bug as \"Won't Fix\"."""
+    if reason == "eol":
+        kernel = KERNEL_VERSION.get(series)
+        if not kernel:
+            print(f"Unsupported series: {series}", file=sys.stderr)
+            sys.exit(1)
+
+        distro = os.popen(f"ubuntu-distro-info -a -f | grep -i ' \"{series} '", "r").read().strip()
+        distro = distro.replace(' "', " (").replace('"', ")")
+
+        comment = \
+            f"{distro} with kernel {kernel} has reached end of life, so this bug will not be " + \
+            "fixed for that specific release. Please file a new bug if this issue still exists " + \
+            "in a supported release."
+
+    elif reason == "no-response":
+        comment = \
+            "We have not received any response from the reporter, so this bug will be closed. " + \
+            "Please file a new bug if this issue still exists in a supported release."
+
+    else:
+        print(f"Unsupported reason: {reason}", file=sys.stderr)
+        sys.exit(1)
+
+    lp = lp_login()
+    lp_bug = lp.bugs[bug]
+
+    source = None
+    for task in lp_bug.bug_tasks:
+        target = task.target
+        target_name = target.name
+        if target_name != source:
+            source = target_name
+            print(f"LP: #{bug:<7} - {target_name:<14} - {task.status:<13} - {lp_bug.title}")
+        else:
+            print(f"               {target.distroseries.name.title():<14} - {task.status}")
+    print()
+    print("Comment to be added:")
+    print(comment)
+    print()
+
+    if dry_run:
+        print("(dry-run) Exiting, not modifying bug")
+        return
+
+    for task in lp_bug.bug_tasks:
+        if task.status in ("New", "Incomplete", "Confirmed", "Triaged"):
+            task.status = "Won't Fix"
+            task.lp_save()
+    lp_bug.newMessage(content=comment)
+    lp_bug.lp_save()
+    print("Modified bug")
+
+
 @click.group()
 def main():
     pass
@@ -135,46 +191,22 @@ def main():
 @click.option("--dry-run", is_flag=True)
 def duplicate_dkms(bug, dry_run):
     """Mark a bug as a duplicate of LP: #2068107 (DKMS build failure)."""
-    lp = lp_login()
-    mark_as_duplicate(lp, 2068107, bug, dry_run=dry_run)
+    mark_as_duplicate(2068107, bug, dry_run=dry_run)
+
 
 @main.command()
 @click.argument("bug")
 @click.argument("series")
 @click.option("--dry-run", is_flag=True)
 def wontfix_eol(bug, series, dry_run):
-    """Close a bug as \"Won't Fix\" due to EOL."""
-    kernel = KERNEL_VERSION.get(series)
-    if not kernel:
-        print(f"Unsupported series: {series}", file=sys.stderr)
-        sys.exit(1)
+    wontfix("eol", bug, series=series, dry_run=dry_run)
 
-    distro = os.popen(f"ubuntu-distro-info -a -f | grep -i ' \"{series} '", "r").read().strip()
-    distro = distro.replace(' "', " (").replace('"', ")")
 
-    comment = \
-        f"{distro} with kernel {kernel} has reached end of life, so this bug will not be " + \
-        "fixed for that specific release. Please file a new bug if this issue still exists " + \
-        "in a supported release."
-
-    lp = lp_login()
-    lp_bug = lp.bugs[bug]
-
-    print(f"LP: #{bug} -- {lp_bug.title}")
-    print()
-    print(comment)
-    print()
-
-    if dry_run:
-        print("(dry-run) Exiting, not modifying bug")
-        return
-
-    for task in lp_bug.bug_tasks:
-        task.status = "Won't Fix"
-        task.lp_save()
-    lp_bug.newMessage(content=comment)
-    lp_bug.lp_save()
-    print("Modified bug")
+@main.command()
+@click.argument("bug")
+@click.option("--dry-run", is_flag=True)
+def wontfix_no_response(bug, dry_run):
+    wontfix("no-response", bug, dry_run=dry_run)
 
 
 if __name__ == "__main__":
