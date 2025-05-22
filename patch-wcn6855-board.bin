@@ -1,5 +1,7 @@
 #!/bin/bash -eu
-
+#
+# Patch board-2.bin for HP EliteBook Ultra G1q
+#
 
 function out()
 {
