@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--archive", help="E.g., ppa:juergh/ubuntu-cdimage, ...")
 parser.add_argument("--arch", metavar="ARCH[:SUBARCH]", default="amd64", help="E.g., arm64, arm64:x13s, ...")
 parser.add_argument("--pocket", default="Release")
-parser.add_argument("--project", metavar="PROJECT[:SUBPROJECT]", help="E.g., ubuntu, ubuntu:live, ...")
+parser.add_argument("--project", metavar="PROJECT[:SUBPROJECT]", default="ubuntu", help="E.g., ubuntu, ubuntu:live, ...")
 parser.add_argument("--metadata", action="append", default=[])
 parser.add_argument("livefs", help="E.g., juergh/+livefs/ubuntu/noble/x13s, ...")
 
