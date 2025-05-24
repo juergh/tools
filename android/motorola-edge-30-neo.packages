@@ -1,14 +1,6 @@
-com.RedLineGames.Game49
-com.amazon.appmanager
 com.android.chrome
 com.android.systemui.plugin.globalactions.wallet
-com.azurgames.stackball
 com.dti.motorola
-com.einnovation.temu
-com.facebook.appmanager
-com.facebook.katana
-com.facebook.services
-com.facebook.system
 com.google.android.apps.chromecast.app
 com.google.android.apps.docs
 com.google.android.apps.docs.editors.docs
@@ -46,8 +38,6 @@ com.google.android.overlay.gmsconfig.searchselector
 com.google.android.projection.gearhead
 com.google.android.videos
 com.google.ar.core
-com.king.candycrushsaga
-com.linkedin.android
 com.motorola.actions
 com.motorola.actions.overlay
 com.motorola.android.providers.chromehomepage
@@ -63,11 +53,6 @@ com.motorola.motcameradesktop
 com.motorola.mototour
 com.motorola.spaces
 com.motorola.timeweatherwidget
-com.opera.browser
-com.playspare.watersort3d
-com.scopely.monopolygo
-com.unicostudio.whois
-power.pop.blast
 
 com.motorola.mobiledesktop
 com.motorola.mobiledesktop.core
@@ -77,3 +62,26 @@ com.motorola.securityhubext
 com.motorola.securevault
 
 com.motorola.moto
+
+
+# Games
+com.RedLineGames.Game49
+com.azurgames.stackball
+com.king.candycrushsaga
+com.playspare.watersort3d
+com.scopely.monopolygo
+com.unicostudio.whois
+power.pop.blast
+
+# Bloatware apps
+com.amazon.appmanager
+com.einnovation.temu
+com.facebook.appmanager
+com.facebook.katana
+com.facebook.services
+com.facebook.system
+com.linkedin.android
+com.opera.browser
+
+# Live lock screen
+com.taboola.mip
