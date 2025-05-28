@@ -198,7 +198,7 @@ while [ ${#} -gt 0 ] ; do
 			usage
 			exit
 			;;
-		release|security|updates|proposed|proposed#2|build#2)
+		release|security|updates|proposed|updates#[0-9]|proposed#[0-9]|build#[0-9])
 			if [ -n "${PREV_TYPE}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
@@ -254,7 +254,7 @@ declare -A PREV_VERSION=()
 if [ "${PREV_TYPE}" = "pocket" ] ; then
 	while read -r src version rest ; do
 		PREV_VERSION[${src}]=${version}
-	done < <("${CRANKY}" rmadison -s -p "${PREV_VAL}")
+	done < <("${CRANKY}" rmadison -s -p "${PREV_VAL}" .)
 fi
 
 for src_dir in "${src_dirs[@]}" ; do

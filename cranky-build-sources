@@ -45,7 +45,7 @@ Build a set of kernel packages.
 
 Positional arguments:
   POCKET       Get the previous package versions from pocket POCKET. Valid
-               pockets: updates,release,security,proposed,proposed#1,proposed#2,build#1,build#2.
+               pockets: release,security,updates,proposed,updates#[0-9],proposed#[0-9],build#[0-9].
   OFFSET       Get the previous package versions from the changelogs using
                changelog entry offset OFFSET (-1 == previous changelog entry).
   ABI          Get the previous package versions from the changelogs using
@@ -92,7 +92,7 @@ while [ "${#}" -gt 0 ] ; do
 		-o|--orig)
 			BO_MAIN+=("-sa")
 			;;
-		updates|release|security|proposed|proposed#1|proposed#2|build#1|build#2)
+		release|security|updates|proposed|updates#[0-9]|proposed#[0-9]|build#[0-9])
 			if [ -n "${prev_type}" ] ; then
 				echo "Invalid argument: ${1}" >&2
 				exit 2
