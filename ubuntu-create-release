@@ -3,6 +3,41 @@
 # Create a closing commit for a test release/build
 #
 
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [-s SUFFIX]
+
+Create a closing debian/changlog commit.
+
+Optional arguments:
+  -h, --help           Show this help text and exit.
+  -s, --suffix SUFFIX  Append SUFFIX to the package version. If not provided,
+                       defaults to '+test1'.
+EOF
+}
+
+suffix="+test1"
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-s|--suffix)
+			shift
+			suffix=${1}
+			;;
+		*)
+			usage >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+
 # shellcheck disable=SC1091
 . debian/debian.env
 
@@ -24,7 +59,7 @@ if [ -z "${release}" ] ; then
 	exit 1
 fi
 
-new_version=${version}+cbd1
+new_version=${version}${suffix}
 
 {
 	echo "${package} (${new_version}) ${series}; urgency=medium"
