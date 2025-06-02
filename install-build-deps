@@ -15,13 +15,13 @@ if [ "${error}" -eq 0 ] ; then
     exit 0
 fi
 
-if ! grep -q 'Unmet build dependencies' "${tmp}" ; then
+if ! grep -qi 'Unmet build dependencies' "${tmp}" ; then
     cat "${tmp}"
     exit "${error}"
 fi
 
 debs=$(dpkg-checkbuilddeps 2>&1 | \
-           sed -e 's/^.*Unmet build dependencies: //' \
+           sed -e 's/^.*Unmet build dependencies: //i' \
                -e 's/([^)]*)//g' -e 's/\s|\s/ /g')
 
 if [ -z "${debs}" ] ; then
