@@ -181,6 +181,36 @@ def wontfix(reason, bug, series=None, dry_run=False):
     print("Modified bug")
 
 
+def no_logs(bug, dry_run=False):
+    lp = lp_login()
+    lp_bug = lp.bugs[bug]
+
+    print(f"LP: #{bug} -- {lp_bug.title}")
+
+    if "apport-package" in lp_bug.tags:
+        print("Bug contains 'apport-package tag")
+        return
+
+    comment = \
+        "Thank you for reporting this and helping make Ubuntu better. This bug report is " + \
+        "missing kernel log files. Please boot into the Ubuntu kernel and run the following " + \
+        "command in a terminal, which will collect debugging information and attach it to " + \
+        "this bug report:\n\n" + \
+        f"$ sudo apport-collect {bug}"
+
+    print()
+    print(comment)
+    print()
+
+    if dry_run:
+        print("(dry-run) Exiting, not modifying bug")
+        return
+
+    lp_bug.newMessage(content=comment)
+    lp_bug.lp_save()
+    print("Modified bug")
+
+
 @click.group()
 def main():
     pass
@@ -207,6 +237,12 @@ def wontfix_eol(bug, series, dry_run):
 @click.option("--dry-run", is_flag=True)
 def wontfix_no_response(bug, dry_run):
     wontfix("no-response", bug, dry_run=dry_run)
+
+@main.command()
+@click.argument("bug")
+@click.option("--dry-run", is_flag=True)
+def ask_for_logs(bug, dry_run):
+    no_logs(bug, dry_run=dry_run)
 
 
 if __name__ == "__main__":
