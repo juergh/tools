@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+#
+# Parse active CVEs and list the ones that are fixed in older but not in newer series
+#
+
+import json
+import os
+
+from prettytable import PrettyTable
+
+KEYS = ("upstream",
+        "trusty", "trusty/esm",
+        "xenial", "esm-infra/xenial",
+        "bionic", "esm-infra/bionic",
+        "focal", "esm-infra/focal",
+        "jammy",
+        "noble",
+        "oracular",
+        "plucky",
+        "devel")
+
+def load_cve(filename):
+    cve = {}
+
+    found = False
+    with open(filename, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line.startswith("Patches_"):
+                if line == "Patches_linux:":
+                    found = True
+                else:
+                    return cve
+
+            if found:
+                cve["cve"] = filename.split("/")[-1]
+
+                for key in KEYS:
+                    if line.startswith(f"{key}_linux:"):
+                        cve[key] = line.split(" ")[1]
+
+    return cve
+
+
+def load_cves():
+    cves = {}
+    for f in os.listdir("active"):
+        if f.startswith("CVE-"):
+            cve = load_cve("active/" + f)
+            if cve:
+                cves[cve["cve"]] = cve
+    return cves
+
+
+def save_cves_to_file(cves):
+    with open("cves.json", mode="w", encoding="utf-8") as fh:
+        json.dump(cves, fh)
+
+
+def load_cves_from_file():
+    with open("cves.json", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def row(cve):
+    n = cve["noble"]
+    j = cve["jammy"]
+    f = cve["focal"]
+    fe = cve["esm-infra/focal"]
+    b = cve["bionic"]
+    be = cve["esm-infra/bionic"]
+    x = cve["xenial"]
+    xe = cve["esm-infra/xenial"]
+    return (cve['cve'], n, j, f"{f:>12} / {fe}", f"{b:>12} / {be}", f"{x:>12} / {xe}")
+
+
+def needed(cve, series):
+    return cve.get(f"esm-infra/{series}") not in ("released", "not-affected", "pending") and cve[series] not in ("released", "not-affected", "pending")
+
+
+def released(cve, series):
+    return cve.get(f"esm-infra/{series}") == "released" or cve[series] == "released"
+
+
+def released_esm(cve, series):
+    return cve.get(f"esm-infra/{series}") == "released" and cve[series] != "released"
+
+
+cves = load_cves()
+# save_cves_to_file(cves)
+# cves = load_cves_from_file()
+
+
+table = PrettyTable()
+table.field_names = ("CVE", "Noble", "Jammy", "       Focal / ESM", "      Bionic / ESM", "      Xenial / ESM")
+table.align = "l"
+
+
+for cve_id in sorted(cves):
+    cve = cves[cve_id]
+
+    # Xenial fix
+    if released(cve, "xenial") and (needed(cve, "bionic") or needed(cve, "focal") or needed(cve, "jammy") or needed(cve, "noble")):
+        table.add_row(row(cve))
+        continue
+
+    continue
+
+    # Bionic fix
+    if released(cve, "bionic") and (needed(cve, "focal") or needed(cve, "jammy") or needed(cve, "noble")):
+        table.add_row(row(cve))
+        continue
+
+    # Focal fix
+    if released(cve, "focal") and (needed(cve, "jammy") or needed(cve, "noble")):
+        table.add_row(row(cve))
+        continue
+
+    # Jammy fix
+    if released(cve, "jammy") and (needed(cve, "noble")):
+        table.add_row(row(cve))
+        continue
+
+print(table)
