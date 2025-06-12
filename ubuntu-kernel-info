@@ -77,7 +77,7 @@ def parse_kernel_series(ks):
             default = "devel" if series_devel else "esm" if series_esm else "default"
             routing = source_data.get("routing", default)
             routing = series_routing_map.get(routing, routing)
-            routing_table = ks["defaults"]["routing-table"][routing]
+            routing_table = ks["defaults"]["routing-table"].get(routing, {})
 
             routing_list = []
             for key, val in routing_table.items():
