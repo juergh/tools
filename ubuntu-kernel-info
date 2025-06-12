@@ -58,6 +58,11 @@ def parse_kernel_series(ks):
         series_active = (series_devel or series_supported)
         series_routing_map = series_data.get("routing-map", {})
 
+        # Sanity check
+        for key, val in series_routing_map.items():
+            if not ks["defaults"]["routing-table"].get(val):
+                print(f"Warning: Invalid routing: {val}", file=sys.stderr)
+
         series_entry = {
             "series.yymm": series,
             "series.name": codename,
