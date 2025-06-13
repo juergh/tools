@@ -10,86 +10,94 @@ import sys
 
 import git
 
+RE_CVE = re.compile(r"^CVE-[0-9]{4}-[0-9]+$")
 RE_SHA = re.compile(r"^[0-9a-f]{12,}$")
 
 uct_dir, linux_dir, outfile = sys.argv[1:]
 
+
+class CVE:
+    def __init__(self, fname):
+        self.id = None
+        self.patches = None
+        self.break_fix = []
+
+        with open(fname, encoding="UTF-8") as fh:
+            for line in fh:
+                comps = line.strip().split()
+                if not comps:
+                    continue
+
+                if comps[0] == "Candidate:":
+                    self.id = comps[1]
+                    continue
+
+                if comps[0].startswith("Patches_"):
+                    if self.patches:
+                        return
+                    self.patches = comps[0].removeprefix("Patches_").strip(":")
+                    continue
+
+                if self.patches and comps[0] == "break-fix:":
+                    if len(comps) != 3:
+                        print(f"Suspect line in {fname}:", file=sys.stderr)
+                        print(line, end="", file=sys.stderr)
+                        continue
+                    self.break_fix.append([comps[1]] + comps[2].split("|"))
+
+    def to_json(self):
+        return {
+            "id": self.id,
+            "patches": self.patches,
+            "break-fix": self.break_fix,
+        }
+
+
+# ----------------------------------------------------------------------------------
+# Main entry point
+
 repo = git.Repo(linux_dir)
 
-def lookup_commit(commit):
-    if commit == "-":
-        return None
-    if not RE_SHA.match(commit):
-        print(f"Suspect commit: {commit}", file=sys.stderr)
-        return None
-
-    c = None
-    try:
-        c = repo.commit(commit)
-    except ValueError as e:
-        print(e, file=sys.stderr)
-    return c
-
-def parse_cve_file(fname):
-    break_fix = set()
-    with open(fname, encoding="UTF-8") as fh:
-        cve = None
-        patches_linux = False
-        for line in fh:
-            comps = line.split()
-            if not comps:
-                continue
-            if comps[0] == "Candidate:":
-                cve = comps[1]
-                continue
-            if comps[0].startswith("Patches_linux"):
-                patches_linux = True
-                continue
-            if comps[0].startswith("Patches_"):
-                patches_linux = False
-                continue
-            if patches_linux and comps[0] == "break-fix:":
-                if len(comps) != 3:
-                    print(f"Suspect line in {fname}:", file=sys.stderr)
-                    print(line, end="", file=sys.stderr)
-                    continue
-                break_fix.add((cve, comps[1], comps[2]))
-    return list(break_fix)
-
-def add_commit(commits, commit, cve, break_fix):
-    if not commit:
-        return
-    sha = commit.hexsha
-    subject = commit.summary
-    c = {
-        "sha": sha,
-        "subject": subject,
-        "message": commit.message,
-        "cve": cve,
-        "break_fix": break_fix,
-    }
-    if subject in commits["subject"]:
-        print(f"Duplicate subject: {subject}", file=sys.stderr)
-    commits["sha"][sha] = c
-    commits["subject"][subject] = c
-
-commits = {
-    "sha": {},
-    "subject": {},
+uct = {
+    "commits": {},
+    "cves": {},
 }
 
-for d in ["active"]:
-    p = os.path.join(uct_dir, d)
-    for f in os.listdir(p):
-        if not f.startswith("CVE-"):
-            continue
-        for cve, brk, fix in parse_cve_file(os.path.join(p, f)):
-            # Process the break commits
-            b = lookup_commit(brk)
-            add_commit(commits, b, cve, "break")
-            # Process the fix commits
-            f = lookup_commit(fix)
-            add_commit(commits, f, cve, "fix")
+p = os.path.join(uct_dir, "active")
+for f in os.listdir(p):
+    if not RE_CVE.match(f):
+        continue
 
-with open("uct.json", "w", encoding="UTF-8") as fh:
-    json.dump(commits, fh)
+    # Load CVE from UCT
+    cve = CVE(os.path.join(p, f))
+    if cve.patches != "linux":
+        continue
+
+    # Add the CVE
+    uct["cves"][cve.id] = cve.to_json()
+
+    # Add all referenced commits
+    for bf in cve.break_fix:
+        for c in bf:
+            cobj = None
+            if RE_SHA.match(c):
+                c = c[:12]
+                try:
+                    cobj = repo.commit(c)
+                except Exception as e:
+                    print(e, file=sys.stderr)
+
+            entry = uct["commits"].get(c)
+            if not entry:
+                entry = {
+                    "sha": cobj.hexsha if cobj else c,
+                    "subject": cobj.summary if cobj else "",
+                    "message": cobj.message if cobj else "",
+                    "cves": [],
+                }
+            entry["cves"].append(cve.id)
+            uct["commits"][c] = entry
+
+
+with open(outfile, "w", encoding="UTF-8") as fh:
+    json.dump(uct, fh)
