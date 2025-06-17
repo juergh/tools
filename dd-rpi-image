@@ -74,6 +74,6 @@ else
 		img=${host}/${img}
 	fi
 	echo "Download ${img} to ${dev}"
-	wget -nv -O - "${img}" | zcat | \
+	wget -nv -O - "${img}" | xzcat | \
 		sudo dd of="${dev}" bs=4K conv=fsync status=progress
 fi
