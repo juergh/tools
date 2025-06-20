@@ -143,13 +143,13 @@ def wontfix(reason, bug, series=None, dry_run=False):
         distro = distro.replace(' "', " (").replace('"', ")")
 
         comment = \
-            f"{distro} with kernel {kernel} has reached end of life and this kernel bug " + \
+            f"{distro} with kernel {kernel} has reached end of life and this bug " + \
             "will not be fixed for that specific release. Please file a new bug if this " + \
             "issue still exists in a supported release."
 
     elif reason == "esm":
         comment = \
-            "The release that is affected by this bug is now under ESM. The kernel bug will " + \
+            "The release that is affected by this bug is now under ESM. The bug will " + \
             "not be fixed as it doesn't meet ESM fix criterias. Please file a new bug if you " + \
             "think this is incorrect."
 
@@ -166,6 +166,7 @@ def wontfix(reason, bug, series=None, dry_run=False):
     lp = lp_login()
     lp_bug = lp.bugs[bug]
 
+    wontfix_bug = False
     source = None
     for task in lp_bug.bug_tasks:
         status = task.status
@@ -174,10 +175,11 @@ def wontfix(reason, bug, series=None, dry_run=False):
 
         if target_name.startswith("linux") and status in ("New", "Incomplete", "Confirmed",
                                                           "Triaged"):
-            wontfix = True
+            wontfix_bug = True
+            wontfix_task = True
             color = YELLOW
         else:
-            wontfix = False
+            wontfix_task = False
             color = NC
 
         if target_name != source:
@@ -186,11 +188,11 @@ def wontfix(reason, bug, series=None, dry_run=False):
         else:
             print(f"{color}               {target.distroseries.name.title():<14} - {status}{NC}")
 
-        if wontfix and not dry_run:
+        if wontfix_task and not dry_run:
             task.status = "Won't Fix"
             task.lp_save()
 
-    if wontfix:
+    if wontfix_bug:
         print()
         print("Comment to be added:")
         print(comment)
