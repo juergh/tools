@@ -9,6 +9,11 @@ import sys
 import click
 from launchpadlib.launchpad import Launchpad
 
+RED = "\033[91m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+NC = "\033[00m"
+
 KERNEL_VERSION = {
     "artful": "4.13",
     "bionic": "4.15",
@@ -138,14 +143,21 @@ def wontfix(reason, bug, series=None, dry_run=False):
         distro = distro.replace(' "', " (").replace('"', ")")
 
         comment = \
-            f"{distro} with kernel {kernel} has reached end of life, so this bug will not be " + \
-            "fixed for that specific release. Please file a new bug if this issue still exists " + \
-            "in a supported release."
+            f"{distro} with kernel {kernel} has reached end of life and this kernel bug " + \
+            "will not be fixed for that specific release. Please file a new bug if this " + \
+            "issue still exists in a supported release."
+
+    elif reason == "esm":
+        comment = \
+            "The release that is affected by this bug is now under ESM. The kernel bug will " + \
+            "not be fixed as it doesn't meet ESM fix criterias. Please file a new bug if you " + \
+            "think this is incorrect."
 
     elif reason == "no-response":
         comment = \
-            "We have not received any response from the reporter, so this bug will be closed. " + \
-            "Please file a new bug if this issue still exists in a supported release."
+            "We have not received any response from the bug reporter or there hasn't been " + \
+            "any activity recently. This bug report will therefore be closed. Please file a " + \
+            "new bug if this issue still exists in a supported release."
 
     else:
         print(f"Unsupported reason: {reason}", file=sys.stderr)
@@ -156,29 +168,41 @@ def wontfix(reason, bug, series=None, dry_run=False):
 
     source = None
     for task in lp_bug.bug_tasks:
+        status = task.status
         target = task.target
         target_name = target.name
+
+        if target_name.startswith("linux") and status in ("New", "Incomplete", "Confirmed",
+                                                          "Triaged"):
+            wontfix = True
+            color = YELLOW
+        else:
+            wontfix = False
+            color = NC
+
         if target_name != source:
             source = target_name
-            print(f"LP: #{bug:<7} - {target_name:<14} - {task.status:<13} - {lp_bug.title}")
+            print(f"{color}LP: #{bug:<7} - {target_name:<14} - {status:<13} - {lp_bug.title}{NC}")
         else:
-            print(f"               {target.distroseries.name.title():<14} - {task.status}")
-    print()
-    print("Comment to be added:")
-    print(comment)
-    print()
+            print(f"{color}               {target.distroseries.name.title():<14} - {status}{NC}")
 
-    if dry_run:
-        print("(dry-run) Exiting, not modifying bug")
-        return
-
-    for task in lp_bug.bug_tasks:
-        if task.status in ("New", "Incomplete", "Confirmed", "Triaged"):
+        if wontfix and not dry_run:
             task.status = "Won't Fix"
             task.lp_save()
-    lp_bug.newMessage(content=comment)
-    lp_bug.lp_save()
-    print("Modified bug")
+
+    if wontfix:
+        print()
+        print("Comment to be added:")
+        print(comment)
+        print()
+        if dry_run:
+            print("Bug was *NOT* modified (dry run)")
+        else:
+            lp_bug.newMessage(content=comment)
+            lp_bug.lp_save()
+            print("Bug was modified")
+    else:
+        print("Bug was *NOT* modified (nothing to do)")
 
 
 def no_logs(bug, dry_run=False):
@@ -230,6 +254,12 @@ def duplicate_dkms(bug, dry_run):
 @click.option("--dry-run", is_flag=True)
 def wontfix_eol(bug, series, dry_run):
     wontfix("eol", bug, series=series, dry_run=dry_run)
+
+@main.command()
+@click.argument("bug")
+@click.option("--dry-run", is_flag=True)
+def wontfix_esm(bug, dry_run):
+    wontfix("esm", bug, dry_run=dry_run)
 
 
 @main.command()
