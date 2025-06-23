@@ -38,8 +38,12 @@ while [ $# -gt 0 ] ; do
 done
 
 
-# shellcheck disable=SC1091
-. debian/debian.env
+if [ -e debian/debian.env ] ; then
+	# shellcheck disable=SC1091
+	. debian/debian.env
+else
+	DEBIAN=debian
+fi
 
 series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -SDistribution)
 if [ "${series}" = "UNRELEASED" ] ; then
@@ -50,10 +54,14 @@ fi
 package=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -SSource)
 version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -SVersion)
 
-tag_prefix=Ubuntu${package#linux}
+if [ "${package}" = "linux-firmware" ] ; then
+	tag_prefix=Ubuntu
+else
+	tag_prefix=Ubuntu${package#linux}
+fi
 
 subject="UBUNTU: ${tag_prefix}-${version%%-*}-"
-release=$(git log --format="%H __%s" | grep -m1 -P "__${subject}")
+release=$(git log --format="%H __%s" | grep -m1 -P "__${subject}" || true)
 if [ -z "${release}" ] ; then
 	echo "Error: Previous release commit not found (${subject})" >&2
 	exit 1
