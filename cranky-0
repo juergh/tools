@@ -140,7 +140,7 @@ def close_(force):
     if force:
         opts += ["--force"]
 
-    run([CRANKY, "close", "--use-cuc"])
+    run([CRANKY, "close"])
 
     if parse_changelog().package == "linux-raspi-realtime":
         print()
