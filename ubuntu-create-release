@@ -12,18 +12,24 @@ Create a closing debian/changlog commit.
 
 Optional arguments:
   -h, --help           Show this help text and exit.
-  -s, --suffix SUFFIX  Append SUFFIX to the package version. If not provided,
-                       defaults to '+test1'.
+  --series SERIES      Use SERIES.
+  -s, --suffix SUFFIX  Append SUFFIX to the current package version. If not provided,
+                       bumps the package version.
 EOF
 }
 
-suffix="+test1"
+series=
+suffix=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
 		-h|--help)
 			usage
 			exit
+			;;
+		--series)
+			shift
+			series=${1}
 			;;
 		-s|--suffix)
 			shift
@@ -46,32 +52,46 @@ else
 fi
 changelog=${DEBIAN}/changelog
 
-series=$(dpkg-parsechangelog -l "${changelog}" -SDistribution)
-if [ "${series}" = "UNRELEASED" ] ; then
-	echo "Error: Series is UNRELEASED" >&2
-	exit1
+if [ -z "${series}" ] ; then
+	series=$(dpkg-parsechangelog -l "${changelog}" -SDistribution)
+	if [ "${series}" = "UNRELEASED" ] ; then
+		echo "Error: Series is UNRELEASED" >&2
+		exit 1
+	fi
 fi
 
 package=$(dpkg-parsechangelog -l "${changelog}" -SSource)
 version=$(dpkg-parsechangelog -l "${changelog}" -SVersion)
+urgency=$(dpkg-parsechangelog -l "${changelog}" -SUrgency)
 
-if [ "${package}" = "linux-firmware" ] ; then
-	tag_prefix=Ubuntu
-else
-	tag_prefix=Ubuntu${package#linux}
-fi
+tag_prefix=
+case "${package}" in
+	linux-firmare)
+		tag_prefix=Ubuntu
+		;;
+	linux-*)
+		tag_prefix=Ubuntu${package#linux}
+		;;
+esac
 
-subject="UBUNTU: ${tag_prefix}-${version%%-*}-"
-release=$(git log --format="%H __%s" | grep -m1 -P "__${subject}" || true)
+#subject="UBUNTU: ${tag_prefix}-${version%%-*}-"
+#release=$(git log --format="%H __%s" | grep -m1 -P "__${subject}" || true)
+
+release=$(git log --format=%H -- "${changelog}" | head -1)
 if [ -z "${release}" ] ; then
-	echo "Error: Previous release commit not found (${subject})" >&2
+	echo "Error: Previous release commit not found" >&2
 	exit 1
 fi
 
-new_version=${version}${suffix}
+if [ -n "${suffix}" ] ; then
+	new_version=${version}${suffix}
+else
+	digit=$(echo "${version}" | grep -o '[0-9]*$')
+	new_version=${version%"${digit}"}$((digit + 1))
+fi
 
 {
-	echo "${package} (${new_version}) ${series}; urgency=medium"
+	echo "${package} (${new_version}) ${series}; urgency=${urgency}"
 	echo
 	git log --reverse --format="  * %s" "${release%% *}"..
 	echo
@@ -82,4 +102,8 @@ new_version=${version}${suffix}
 mv "${changelog}".new "${changelog}"
 
 git add "${changelog}"
-git commit -m "UBUNTU: ${tag_prefix}-${new_version}"
+if [ -n "${tag_prefix}" ] ; then
+	git commit -m "UBUNTU: ${tag_prefix}-${new_version}"
+else
+	git commit -m "Release ${new_version}"
+fi
