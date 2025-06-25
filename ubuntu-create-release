@@ -44,15 +44,16 @@ if [ -e debian/debian.env ] ; then
 else
 	DEBIAN=debian
 fi
+changelog=${DEBIAN}/changelog
 
-series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -SDistribution)
+series=$(dpkg-parsechangelog -l "${changelog}" -SDistribution)
 if [ "${series}" = "UNRELEASED" ] ; then
 	echo "Error: Series is UNRELEASED" >&2
 	exit1
 fi
 
-package=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -SSource)
-version=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -SVersion)
+package=$(dpkg-parsechangelog -l "${changelog}" -SSource)
+version=$(dpkg-parsechangelog -l "${changelog}" -SVersion)
 
 if [ "${package}" = "linux-firmware" ] ; then
 	tag_prefix=Ubuntu
@@ -76,9 +77,9 @@ new_version=${version}${suffix}
 	echo
 	echo " -- ${DEBFULLNAME} <${DEBEMAIL}>  $(date -R)"
 	echo
-	cat "${DEBIAN}"/changelog
-} > "${DEBIAN}"/changelog.new
-mv "${DEBIAN}"/changelog.new "${DEBIAN}"/changelog
+	cat "${changelog}"
+} > "${changelog}".new
+mv "${changelog}".new "${changelog}"
 
-git add "${DEBIAN}"/changelog
+git add "${changelog}"
 git commit -m "UBUNTU: ${tag_prefix}-${new_version}"
