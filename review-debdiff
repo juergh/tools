@@ -5,29 +5,23 @@
 
 function do_colordiff()
 {
-    local line
+    local line color
 
     while IFS= read -r line ; do
 		case "${line}" in
-			"-"*)
-				echo -e "\e[31m${line}\e[0m"
-				;;
-			"+"*)
-				echo -e "\e[32m${line}\e[0m"
-				;;
-			"!"*)
-				echo -e "\e[33m${line}\e[0m"
-				;;
-			"@@"*)
-				echo -e "\e[36m${line}\e[0m"
-				;;
-			"diff "*)
-				echo -e "\e[1m\e[36m${line}\e[0m"
-				;;
-			*)
-				echo "${line}"
-				;;
+			"-"*)     color="\e[31m" ;;
+			"+"*)     color="\e[32m" ;;
+			"!"*)     color="\e[33m" ;;
+			"@@"*)    color="\e[36m" ;;
+			"diff "*) color="\e[1m\e[36m" ;;
+			*)        color="" ;;
 		esac
+
+		if [ -n "${color}" ] ; then
+			printf "%b%s%b\n" "${color}" "${line}" "\e[0m"
+		else
+			printf "${line}\n"
+		fi
 	done
 }
 
