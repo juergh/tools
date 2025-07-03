@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+#
+# Split a public-inbox mbox into individual patch files
+#
+
+import email
+import mailbox
+import sys
+import re
+
+from email.policy import default
+from dateutil import parser
+
+
+def message_from_bytes(bytes_, decode=False):
+    message = mailbox.Message(email.message_from_bytes(bytes_, policy=default))
+    if decode:
+        message.set_payload(message.get_payload(decode=True) or "")
+    return message
+
+
+class Mbox:
+    def __init__(self, mbox):
+        self.mbox = mbox
+
+    def iter_messages(self):
+        """Walk through all messages"""
+        with open(self.mbox, mode="rb") as fh:
+            append = False
+            lines = []
+            while True:
+                line = fh.readline()
+
+                # Start of a new message
+                if line.startswith(b"From "):
+                    append = True
+                    if lines:
+                        # Return the previous message
+                        yield message_from_bytes(b"".join(lines[:-1]), decode=True)
+                        lines = []
+                    continue
+
+                # EOF
+                if line == b"":
+                    if lines:
+                        yield message_from_bytes(b"".join(lines), decode=True)
+                    return
+
+                if append:
+                    lines.append(line)
+
+
+mbox = sys.argv[1]
+mb = Mbox(mbox)
+for msg in mb.iter_messages():
+    has_patch = False
+    for line in msg.get_payload().split("\n"):
+        if line.startswith("diff --git a/"):
+            has_patch = True
+            break
+    if has_patch:
+        fname = msg["subject"]
+        fname = fname.replace("[", "")
+        fname = fname.replace(":", "-")
+        fname = fname.replace("] ", "-")
+        fname = fname.replace("]", "-")
+        fname = fname.replace(" ", "-")
+        fname = fname.replace("/", "-")
+        fname = fname.replace("--", "-")
+        print(fname)
+        with open(fname, "w") as fh:
+            for param in ("Received", "From", "To", "Subject", "Date", "Message-ID", "In-Reply-To", "References"):
+                fh.write(f"{param}: {msg[param]}\n")
+            fh.write("\n")
+            fh.write(msg.get_payload())
