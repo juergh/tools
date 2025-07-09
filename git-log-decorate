@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+#
+# Run git log and decorate the output with Ubuntu information
+#
+
+import os
+import re
+import sys
+
+import git
+
+COLOR = {
+    "red": "\033[31m",
+    "green": "\033[32m",
+    "yellow": "\033[33m",
+    "lred": "\033[91m",
+    "lgreen": "\033[92m",
+    "lyellow": "\033[93m",
+    "end": "\033[0m",
+}
+
+def text(txt, color=None, url=None):
+    if color:
+        txt = COLOR[color] + txt + COLOR["end"]
+    if url:
+        txt = "\033]8;;" + url + "\033\\" + txt + "\033]8;;\033\\"
+    return txt
+
+if len(sys.argv) > 1:
+    start = sys.argv[1]
+else:
+    start = "HEAD"
+
+re_buglink = re.compile(r"BugLink: https://bugs.launchpad.net/bugs/(\d+)")
+re_cve = re.compile(r"(CVE-\d+-\d+)")
+
+repo = git.Repo(os.getcwd())
+
+for commit in repo.iter_commits(start):
+    sha = commit.hexsha
+    subject = commit.summary
+
+    bugs = set()
+    cves = set()
+
+    for line in commit.message.split("\n")[2:]:
+        line = line.rstrip()
+
+        m = re_buglink.match(line)
+        if m:
+            v = m.group(1)
+            bugs.add(text(v, "lgreen", url=f"https://bugs.launchpad.net/bugs/{v}"))
+            continue
+
+        m = re_cve.match(line)
+        if m:
+            v = m.group(1)
+            cves.add(text(v, "lgreen", url=f"https://ubuntu.com/security/{v}"))
+            continue
+
+    deco = ""
+    for tags in [bugs, cves]:
+        if tags:
+            deco = deco + text("(", "yellow") + text(",", "yellow").join(tags) + text(")", "yellow")
+    if deco:
+        deco = " " + deco
+
+    try:
+        print(text(sha[:12], "yellow") + deco + " " + subject)
+    except BrokenPipeError:
+        break
