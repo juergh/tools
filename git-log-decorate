@@ -13,11 +13,18 @@ COLOR = {
     "red": "\033[31m",
     "green": "\033[32m",
     "yellow": "\033[33m",
+    "blue": "\033[34m",
+    "purple": "\033[35m",
+    "cyan": "\033[36m",
     "lred": "\033[91m",
     "lgreen": "\033[92m",
     "lyellow": "\033[93m",
+    "lblue": "\033[94m",
+    "lpurple": "\033[95m",
+    "lcyan": "\033[96m",
     "end": "\033[0m",
 }
+
 
 def text(txt, color=None, url=None):
     if color:
@@ -26,13 +33,41 @@ def text(txt, color=None, url=None):
         txt = "\033]8;;" + url + "\033\\" + txt + "\033]8;;\033\\"
     return txt
 
+
+RE_UPSTREAM = re.compile(r"[Cc]ommit\s+([0-9a-f]{40})\s+upstream" "|"
+                         r"\[\s+[Uu]pstream\s+commit\s+([0-9a-f]{40})\s+\]" "|"
+                         r"cherry[\s-]*picked\s+from\s+commit\s+([0-9a-f]{40})" "|"
+                         r"back[\s-]*ported\s+from\s+commit\s+([0-9a-f]{40})")
+RE_BUGLINK = re.compile(r"BugLink: https://bugs.launchpad.net/bugs/(\d+)")
+RE_CVE = re.compile(r"(CVE-\d+-\d+)")
+
+
+def get_upstream(line):
+    m = RE_UPSTREAM.search(line)
+    if m:
+        for val in m.groups():
+            if val:
+                return text(val[:12], "lpurple", url=f"https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id={val}")
+
+
+def get_buglink(line):
+    m = RE_BUGLINK.match(line)
+    if m:
+        val = m.group(1)
+        return text(val, "lcyan", url=f"https://bugs.launchpad.net/bugs/{val}")
+
+
+def get_cve(line):
+    m = RE_CVE.match(line)
+    if m:
+        val = m.group(1)
+        return text(val, "lgreen", url=f"https://ubuntu.com/security/{val}")
+
+
 if len(sys.argv) > 1:
     start = sys.argv[1]
 else:
     start = "HEAD"
-
-re_buglink = re.compile(r"BugLink: https://bugs.launchpad.net/bugs/(\d+)")
-re_cve = re.compile(r"(CVE-\d+-\d+)")
 
 repo = git.Repo(os.getcwd())
 
@@ -40,30 +75,34 @@ for commit in repo.iter_commits(start):
     sha = commit.hexsha
     subject = commit.summary
 
+    upstream = None
     bugs = set()
     cves = set()
 
     for line in commit.message.split("\n")[2:]:
         line = line.rstrip()
 
-        m = re_buglink.match(line)
-        if m:
-            v = m.group(1)
-            bugs.add(text(v, "lgreen", url=f"https://bugs.launchpad.net/bugs/{v}"))
+        if not upstream:
+            upstream = get_upstream(line)
+
+        tag = get_buglink(line)
+        if tag:
+            bugs.add(tag)
             continue
 
-        m = re_cve.match(line)
-        if m:
-            v = m.group(1)
-            cves.add(text(v, "lgreen", url=f"https://ubuntu.com/security/{v}"))
+        tag = get_cve(line)
+        if tag:
+            cves.add(tag)
             continue
 
     deco = ""
+    if upstream:
+        deco = text("->", "yellow") + " " + upstream + " "
     for tags in [bugs, cves]:
         if tags:
             deco = deco + text("(", "yellow") + text(",", "yellow").join(tags) + text(")", "yellow")
     if deco:
-        deco = " " + deco
+        deco = " " + deco.strip()
 
     try:
         print(text(sha[:12], "yellow") + deco + " " + subject)
