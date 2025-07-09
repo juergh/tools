@@ -5,12 +5,15 @@
 
 import argparse
 import gzip
-import io
 import json
+import os
 import sys
-import yaml
+from datetime import datetime, timedelta, UTC
 
 import requests
+import yaml
+
+KERNEL_SERIES_CACHE = os.path.expanduser("~/.cache/uki/kernel-series.json.gz")
 
 # Package fields
 PKG_FIELDS = (
@@ -42,6 +45,25 @@ PKG_FIELDS = (
 )
 
 
+def download_kernel_series(ks):
+    """
+    Download kernel-series (if necessary)
+    """
+    if os.path.exists(ks):
+        mtime = datetime.fromtimestamp(os.path.getmtime(ks), UTC)
+        if mtime > (datetime.now(UTC) - timedelta(hours=1)):
+            # Exists and not older than 1 hour
+            return
+
+    d = os.path.dirname(ks)
+    if not os.path.exists(d):
+        os.makedirs(d)
+
+    r = requests.get("https://kernel.ubuntu.com/info/kernel-series.json.gz", timeout=10)
+    with open(ks, mode="wb") as fh:
+        fh.write(r.content)
+
+
 def parse_kernel_series(ks):
     """
     Parse kernel-series JSON and return a list of package dicts
@@ -55,7 +77,7 @@ def parse_kernel_series(ks):
         series_supported = series_data.get("supported", False)
         series_lts = series_data.get("lts", False)
         series_esm = series_data.get("esm", False)
-        series_active = (series_devel or series_supported)
+        series_active = series_devel or series_supported
         series_routing_map = series_data.get("routing-map", {})
 
         # Sanity check
@@ -76,7 +98,7 @@ def parse_kernel_series(ks):
         for source, source_data in series_data.get("sources", {}).items():
             devel = source_data.get("development", series_devel)
             supported = source_data.get("supported", True) if series_supported else False
-            active = (series_active and (devel or supported))
+            active = series_active and (devel or supported)
 
             # Source package routing
             default = "devel" if series_devel else "esm" if series_esm else "default"
@@ -229,14 +251,18 @@ Kernel selections:
         selections.add("supported-esm")
 
     if args.kernel_series:
-        # Load local kernel-series.yaml
-        with open(args.kernel_series, encoding="utf-8") as fh:
-            ks = yaml.safe_load(fh)
+        kernel_series = args.kernel_series
     else:
-        # Download and gunzip kernel-series.json
-        r = requests.get("https://kernel.ubuntu.com/info/kernel-series.json.gz", timeout=5)
-        with gzip.open(io.BytesIO(r.content)) as fh:
+        kernel_series = KERNEL_SERIES_CACHE
+        download_kernel_series(kernel_series)
+
+    # Load kernel-series
+    if kernel_series.endswith(".gz"):
+        with gzip.open(kernel_series) as fh:
             ks = json.load(fh)
+    else:
+        with open(kernel_series, encoding="utf-8") as fh:
+            ks = yaml.safe_load(fh)
 
     if "dump" in selections:
         print(json.dumps(ks, indent=4))
