@@ -237,6 +237,32 @@ def no_logs(bug, dry_run=False):
     print("Modified bug")
 
 
+def test_proposed(bug, dry_run=False):
+    lp = lp_login()
+    lp_bug = lp.bugs[bug]
+
+    print(f"LP: #{bug} -- {lp_bug.title}")
+
+    comment = \
+        f"Can you please test the latest kernel [1] in combination with the latest linux-firmware [2] from -proposed [3]?\n" + \
+        "Please let us know if you still encounter the problem using these updated packages and attach kernel logs.\n\n" + \
+        "[1] https://launchpad.net/ubuntu/+source/linux\n" + \
+        "[2] https://launchpad.net/ubuntu/+source/linux-firmware\n" + \
+        "[3] https://wiki.ubuntu.com/Testing/EnableProposed"
+
+    print()
+    print(comment)
+    print()
+
+    if dry_run:
+        print("(dry-run) Exiting, not modifying bug")
+        return
+
+    lp_bug.newMessage(content=comment)
+    lp_bug.lp_save()
+    print("Modified bug")
+
+
 @click.group()
 def main():
     pass
@@ -275,6 +301,12 @@ def wontfix_no_response(bug, dry_run):
 @click.option("--dry-run", is_flag=True)
 def ask_for_logs(bug, dry_run):
     no_logs(bug, dry_run=dry_run)
+
+@main.command()
+@click.argument("bug")
+@click.option("--dry-run", is_flag=True)
+def ask_for_testing_proposed(bug, dry_run):
+    test_proposed(bug, dry_run=dry_run)
 
 
 if __name__ == "__main__":
