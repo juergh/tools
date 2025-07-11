@@ -3,6 +3,7 @@
 # Run git log and decorate the output with Ubuntu information
 #
 
+import argparse
 import os
 import re
 import sys
@@ -64,14 +65,22 @@ def get_cve(line):
         return text(val, "lgreen", url=f"https://ubuntu.com/security/{val}")
 
 
-if len(sys.argv) > 1:
-    start = sys.argv[1]
-else:
-    start = "HEAD"
+# -------------------------------------------------------------------------
+# Main entry point
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--no-merges", action="store_true")
+parser.add_argument("rev_range", nargs=argparse.REMAINDER)
+args = parser.parse_args()
+
+rev_range = args.rev_range or "HEAD"
 
 repo = git.Repo(os.getcwd())
 
-for commit in repo.iter_commits(start):
+for commit in repo.iter_commits(rev_range):
+    if args.no_merges and len(commit.parents) > 1:
+        # Ignore merge commits
+        continue
     sha = commit.hexsha
     subject = commit.summary
 
