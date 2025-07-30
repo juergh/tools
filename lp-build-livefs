@@ -2,6 +2,9 @@
 #
 # Shamelessly copied from https://gist.github.com/mwhudson/c6434df01f7b8006534f563574d12f7a
 #
+# Examples:
+#   $ lp-build-livefs --archive ppa:juergh/ubuntustudio --project ubuntustudio-dvd --metadata extra_ppas='["juergh/ubuntustudio"]' juergh/+livefs/ubuntu/noble/ubuntustudio
+#
 
 import json
 import argparse
