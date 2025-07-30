@@ -93,7 +93,11 @@ fi
 {
 	echo "${package} (${new_version}) ${series}; urgency=${urgency}"
 	echo
-	git log --reverse --format="  * %s" "${release%% *}"..
+	if [ -z "$(git log --format=%h "${release%% *}"..)" ] ; then
+		echo "  * No-change rebuild"
+	else
+		git log --reverse --format="  * %s" "${release%% *}"..
+	fi
 	echo
 	echo " -- ${DEBFULLNAME} <${DEBEMAIL}>  $(date -R)"
 	echo
