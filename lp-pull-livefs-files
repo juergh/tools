@@ -1,13 +1,68 @@
-#!/bin/bash -eu
+#!/usr/bin/env python3
 #
-# Download all artifacts of a livefs build
+# Download artifacts of a livefs build
+# Shamelessly copied from https://gist.github.com/mwhudson/69c77f9ecad2ca793a0fa089ab2b10d7
 #
-
-url=${1}
+# Examples:
+#   $ lp-pull-livefs-files ~juergh/+livefs/ubuntu/noble/x13s/+build/596018
+#
 
 #url=https://launchpad.net/~juergh/+livefs/ubuntu/noble/x13s/+build/596018
 
-curl --silent "${url}" | grep -o "href=\"${url}/+files/[^\"]*" | sed 's/^href="//' | \
-	while IFS= read -r url ; do
-        wget -O "${url##*/}" "${url}"
-    done
+import os
+import sys
+
+import httplib2
+import requests
+from launchpadlib.launchpad import Launchpad
+
+
+def _get_tokenised_librarian_url(lp, file_url):
+    # type: (Launchpad, str) -> str
+    """Use OAuth to get a tokenised URL for private downloads
+
+    Take advantage of the fact that the API endpoint
+    (https://api.launchpad.net/devel) will happily serve up anything that
+    https://launchpad.net will serve up, but will allow us to auth using
+    OAuth instead of OpenID.
+
+    We continue using our existing requests code to perform the actual
+    download because the Launchpad HTTP client would read entire image
+    files in to memory when downloading them.
+    """
+
+    rewritten_url = file_url.replace( "launchpad.net/", "api.launchpad.net/devel/")
+    print(f"Rewrote {file_url} to {rewritten_url} for OAuth access...")
+    print("Using OAuth'd client to get launchpadlibrarian.net URL with token...")
+    try:
+        ret = lp._browser._connection.request(rewritten_url, redirections=0)
+        # Print the response to assist debugging failures
+        print(ret)
+        assert False, "No redirect to download from, we can't proceed"
+    except httplib2.RedirectLimit as e:
+        location = e.response["location"]  # type: str
+        return location
+
+
+url = sys.argv[1]
+if "api.launchpad.net" in url:
+    pass
+elif "launchpad.net" in url:
+    url = url.replace("launchpad.net", "api.launchpad.net/devel")
+else:
+    url = "https://api.launchpad.net/devel/" + url
+
+lp = Launchpad.login_with("tools", "production", version="devel")
+build = lp.load(url)
+
+for u in build.getFileUrls():
+    f = os.path.basename(u)
+    if os.path.exists(f):
+        continue
+    u = _get_tokenised_librarian_url(lp, u)
+    print("downloading", u)
+    with requests.get(u, stream=True) as r:
+        r.raise_for_status()
+        with open(f, "wb") as fp:
+            for chunk in r.iter_content(chunk_size=1 << 20):
+                fp.write(chunk)
