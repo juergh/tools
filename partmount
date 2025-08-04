@@ -91,7 +91,7 @@ fi
 trap out INT TERM EXIT HUP
 
 # Connect a qcow2 image to an nbd device
-if file "${image}" | grep -q QCOW2 ; then
+if file "${image}" | grep -q QCOW ; then
 	# Load the nbd module
 	lsmod | grep -q '\bnbd\b' || sudo modprobe nbd
 
