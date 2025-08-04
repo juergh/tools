@@ -27,12 +27,13 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: partmount [-h] [-rw] [-s] [-v] DEVICE PARTITION [MOUNTPOINT]
+Usage: partmount [-h] [-rw] [-s] [-v] DEVICE [PARTITION] [MOUNTPOINT]
 
 Mount a partition of a disk image.
 
 Optional arguments:
   -h, --help         Show this help text and exit.
+  -l, --list         List the partition table.
   -rw, --read-write  Mount the partition read-write (default is read-only).
   -s, --silent       Only print the mountpoint.
   -v, --verbose      Enable verbose output. Can be provided multiple times to
@@ -40,6 +41,7 @@ Optional arguments:
 EOF
 }
 
+list=0
 silent=0
 verbose=0
 read_write=0
@@ -49,6 +51,9 @@ while [ $# -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		-l|--list)
+			list=1
 			;;
 		-rw|--read-write)
 			read_write=1
@@ -66,7 +71,7 @@ while [ $# -gt 0 ] ; do
 	shift
 done
 
-if [ $# -lt 2 ] || [ $# -gt 3 ] ; then
+if [ $# -lt 1 ] || [ $# -gt 3 ] ; then
 	usage
 	exit 2
 fi
@@ -76,7 +81,7 @@ if [ "${verbose}" -gt 1 ] ; then
 fi
 
 image=${1}
-partnum=${2}
+partnum=${2:-1}
 
 MOUNTPOINT=${3:-}
 DEL_MOUNTPOINT=0
@@ -119,6 +124,16 @@ if file "${image}" | grep -q QCOW ; then
 		echo "No such partition: ${partnum}" >&2
 		exit 1
 	fi
+fi
+
+if [ ${list} -eq 1 ] ; then
+	if [ -n "${NBD_DEVICE}" ] ; then
+		sudo fdisk -l "${NBD_DEVICE}"
+		sudo qemu-nbd -d "${NBD_DEVICE}"
+	else
+		fdisk -l "${image}"
+	fi
+	exit 0
 fi
 
 # Create the mount point if necessary
