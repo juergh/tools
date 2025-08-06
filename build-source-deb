@@ -3,6 +3,19 @@
 # Build a Debian source package in a schroot
 #
 
+function run_chroot()
+{
+	local opts
+
+	opts=("-c" "${CHROOT}")
+	if schroot --list --all-sessions | grep -q "session:${CHROOT}" ; then
+		opts+=("-r")
+	fi
+	set -x
+	schroot "${opts[@]}" -- "${@}"
+	set +x
+}
+
 function usage()
 {
 	cat <<EOF
@@ -75,9 +88,9 @@ if [ -z "${release}" ] ; then
 	fi
 fi
 
-set -x
-run-chroot "${release}" -- fakeroot ./debian/rules clean
-set +x
+CHROOT=cranky--${release}-amd64
+
+run_chroot fakeroot ./debian/rules clean
 
 opts+=(
 	"-S"   # Build sources
@@ -92,6 +105,4 @@ if [ ${orig} -eq 1 ] ; then
 	opts+=("-sa")  # Include the original source tarball
 fi
 
-set -x
-run-chroot "${release}" -- dpkg-buildpackage "${opts[@]}" "${@}"
-set +x
+run_chroot dpkg-buildpackage "${opts[@]}" "${@}"
