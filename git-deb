@@ -124,7 +124,7 @@ function set_globals()
 
 	# ESM?
 	case "${SERIES}" in
-		trusty|xenial|bionic)
+		trusty|xenial|bionic|focal)
 			# shellcheck disable=SC2034
 			ESM=1
 			TO=${KERNEL_ESM_EMAIL}
