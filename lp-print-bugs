@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+#
+# Print bugs of the given source package
+#
+
+import argparse
+from dataclasses import dataclass, field, asdict
+
+from launchpadlib.launchpad import Launchpad
+
+
+BUG_STATUS_OPEN = [
+    "New",
+    "Incomplete",
+    "Confirmed",
+    "Triaged",
+    "In Progress",
+    "Fix Committed",
+    ]
+
+BUG_STATUS_CLOSED = [
+    "Invalid",
+    "Won't Fix",
+    "Expired",
+    "Deferred",
+    "Fix Released",
+]
+
+
+@dataclass
+class Task:
+    series: str
+    status: str
+
+
+@dataclass
+class Bug:
+    id: int
+    status: str
+    is_open: bool
+    title: str
+    reporter: str
+    tasks: list[Task]
+
+
+def process_bug(lp_bug, source_name):
+    bug = Bug(
+        id=lp_bug.id,
+        status="",
+        is_open=False,
+        title= lp_bug.title,
+        reporter=f"{lp_bug.owner.name} ({lp_bug.owner.display_name})",
+        tasks = [],
+    )
+
+    # Walk through all bug tasks
+    for lp_bug_task in lp_bug.bug_tasks:
+        if lp_bug_task.target.name != source_name:
+            continue
+
+        task = Task(
+            series="",
+            status=lp_bug_task.status
+        )
+
+        try:
+            task.series = lp_bug_task.target.distroseries.name
+        except AttributeError:
+            pass
+        bug.tasks.append(task)
+
+        # The overall bug status
+        if not bug.status:
+            bug.status = task.status
+        if task.status in BUG_STATUS_OPEN:
+            bug.is_open = True
+
+    return bug
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--status", choices=["open", "closed", "all"], default="open", help="Print only bugs with the given overall status")
+parser.add_argument("source", help="Source package name")
+args = parser.parse_args()
+
+lp = Launchpad.login_with("tools", "production", version="devel")
+
+lp_dist = lp.distributions["ubuntu"]
+lp_source = lp_dist.getSourcePackage(name=args.source)
+
+status = BUG_STATUS_OPEN + BUG_STATUS_CLOSED
+
+lp_tasks = lp_source.searchTasks(status=status, order_by="-datecreated")
+for lp_task in lp_tasks:
+    bug = process_bug(lp_task.bug, args.source)
+
+    show = args.status == "all"
+    if args.status == "open" and bug.is_open:
+        show = True
+    if args.status == "close" and not bug.is_open:
+        show = True
+
+    if show:
+        for task in bug.tasks:
+            if task.series:
+                print(f"    {task.series.title():<8} - {task.status}")
+            else:
+                print(f"LP: #{bug.id:<7} - {task.status:<13} | {bug.reporter:<45} | {bug.title}")
