@@ -156,11 +156,10 @@ Supported environment variables:
 
 Available commands:
   chroot             Enter build chroot.
-  config [CONFIG]    Create kernel config. Supported <CONFIG> values:
+  config CONFIG      Create kernel config. Supported <CONFIG> values:
                        menu:   Run config menu.
                        ubuntu: Use generic Ubuntu configs.
-                       virtme: Use default virtme configs. This is the
-                               default, if <CONFIG> is not provided.
+                       virtme: Use default virtme configs.
   make               Build kernel.
   run                Run kernel.
 
@@ -217,6 +216,10 @@ while [ $# -gt 0 ] ; do
 			cmd=config
 			shift
 			config=${1:-}
+			if [ -z "${config}" ] ; then
+				pr_error "The 'config' command requires a CONFIG argument."
+				exit 2
+			fi
 			;;
 		chroot|make|run)
 			cmd=${1}
@@ -281,7 +284,7 @@ case "${cmd}" in
 
 	config)
 		case "${config}" in
-			""|virtme)
+			virtme)
 				pr_info "Generate default virtme config"
 				virtme-configkernel "${@}"
 				;;
