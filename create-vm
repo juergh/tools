@@ -152,27 +152,12 @@ function download_fedora_image()
 
 function download_debian_image()
 {
-	local num name url release
+	local url name
 
-	case "${RELEASE}" in
-		jessie)  num=8  ;;
-		stretch) num=9  ;;
-		buster)  num=10 ;;
-	esac
+	url=https://cdimage.debian.org/cdimage/cloud/${RELEASE}/daily/latest
 
-	name=debian-${num}-openstack-${ARCH}.qcow2
-	url=https://cdimage.debian.org/cdimage/openstack/current-${num}/${name}
-
-	run download_image "${url}"
-	if [ "${RC}" -eq 0 ] ; then
-		return
-	fi
-
-	url=https://cdimage.debian.org/cdimage/openstack/archive
-	release=$(wget -q -O - "${url}" | grep -oP ">${num}\.[^/]*/<" | \
-				  tr -d '>/<' | sort -V | tail -1)
-	name=debian-${release}-openstack-${ARCH}.qcow2
-	url=${url}/${release}/${name}
+	name=$(wget -q -O - "${url}"/SHA512SUMS | grep -- "-generic-${ARCH}-.*\.qcow" | sed 's/.* //')
+	url=${url}/${name}
 
 	download_image "${url}"
 }
@@ -691,7 +676,7 @@ case "${DIST}" in
 		VENDOR=${DIST%-*}
 		RELEASE=${DIST#*-}
 		;;
-	jessie|stretch|buster)
+	sid|trixie|bookworm|bullseye)
 		VENDOR=debian
 		RELEASE=${DIST}
 		;;
