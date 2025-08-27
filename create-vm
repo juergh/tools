@@ -36,15 +36,6 @@ function out()
 	exit "${rc}"
 }
 
-function run()
-{
-	local rc
-	set +e
-	( set -e; "${@}" )
-	RC=$?
-	set -e
-}
-
 function print_var()
 {
 	local var val
@@ -213,14 +204,14 @@ function download_core_image()
 	name=ubuntu-core-${num}-${ARCH}.img.xz
 	for build in current pending ; do
 		url=http://cdimage.ubuntu.com/ubuntu-core/${num}/${channel}/${build}/${name}
-		run download_image "${url}"
-		if [ "${RC}" -eq 0 ] ; then
+		if url_valid "${url}" ; then
+			download_image "${url}"
 			return
 		fi
 	done
 
-	# Download failed
-	false
+	pr_error "Faild to download image"
+	exit 1
 }
 
 function download_opensuse_image()
