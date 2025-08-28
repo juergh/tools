@@ -1,0 +1,37 @@
+#!/bin/bash -u
+#
+# Tag the given commit(s) or HEAD
+#
+
+function tag_one()
+{
+	local commit=${1}
+	local debian head package version tag
+
+	debian=$(git show "${commit}":debian/debian.env 2>/dev/null | sed -n 's/DEBIAN=//p')
+	if [ -z "${debian}" ] ; then
+		debian=debian
+	fi
+
+	head=$(git show "${commit}":"${debian}"/changelog | head -1)
+
+	package=${head%% *}
+	version=${head#* \(}
+	version=${version%%\) *}
+	tag=${version//\~/_}
+
+	echo "Commit:  ${commit}"
+	echo "Source:  ${package}"
+	echo "Version: ${version}"
+	echo "Tag:     ${tag}"
+
+	git tag -s -m "${tag}" "${tag}" "${commit}"
+}
+
+if [ $# -eq 0 ] ; then
+	tag_one HEAD
+else
+	for commit in "${@}" ; do
+		tag_one "${commit}"
+	done
+fi
