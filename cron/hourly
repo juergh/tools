@@ -1,8 +1,8 @@
-#!/bin/bash
+nn#!/bin/bash
 #
 # Hourly cron job
 #
-# 0 * * * * ( cd /data/juergh/git && ./tools/cron/hourly > cron-hourly.log 2>&1 )
+# 0 * * * * ( cd "${HOME}"/git/cron && ./tools/cron/hourly > cron-hourly.log 2>&1 )
 #
 
 if [ "$(id -u)" -eq 0 ] ; then
