@@ -17,7 +17,6 @@ while IFS= read -r repo ; do
 		(
 			cd "${repo}" || exit
 
-			echo
 			echo "-- $(date)"
 			echo "-- Update repo $(pwd)"
 
@@ -26,6 +25,7 @@ while IFS= read -r repo ; do
 			git reset --hard "${remote_branch}"
 
 			echo "-- Done"
+			echo
 		)
 	fi
 done < hourly.list
