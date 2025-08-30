@@ -1,0 +1,31 @@
+#!/bin/bash
+#
+# Hourly cron job
+#
+# 0 * * * * ( cd /data/juergh/git && ./tools/cron/hourly > cron.hourly.log 2>&1 )
+#
+
+if [ "$(id -u)" -eq 0 ] ; then
+    exec sudo -u juergh "$0"
+fi
+
+# shellcheck disable=SC2155
+export SSH_AUTH_SOCK=/run/user/$(id -u)/keyring/ssh
+
+while IFS= read -r repo ; do
+	if [ -d "${repo}" ] ; then
+		(
+			cd "${repo}" || exit
+
+			echo
+			echo "-- $(date)"
+			echo "-- Update repo $(pwd)"
+
+			git fetch
+			remote_branch=$(git rev-parse --abbrev-ref '@{u}')
+			git reset --hard "${remote_branch}"
+
+			echo "-- Done"
+		)
+	fi
+done < hourly.list
