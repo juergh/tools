@@ -1,0 +1,51 @@
+#!/bin/bash
+#
+# Daily cron job
+#
+# 15 0 * * * ( cd "${HOME}"/git/cron && ./tools/cron/daily > cron-daily.log 2>&1 )
+#
+
+if [ "$(id -u)" -eq 0 ] ; then
+	exec sudo -u juergh "$0"
+fi
+
+# shellcheck disable=SC2155
+export SSH_AUTH_SOCK=/run/user/$(id -u)/keyring/ssh
+
+while IFS= read -r repo ; do
+	if [ -d "${repo}" ] ; then
+		(
+			cd "${repo}" || exit
+
+			echo "-- $(date)"
+			echo "-- Update repo $(pwd)"
+
+			if [ -d .git ] ; then
+				git fetch
+				remote_branch=$(git rev-parse --abbrev-ref '@{u}')
+				git reset --hard "${remote_branch}"
+			else
+				git fetch --all --tags
+			fi
+
+			echo "-- Done"
+			echo
+		)
+   fi
+done < daily.list
+
+echo "-- $(date)"
+echo "-- Run linux-fixes"
+./tools/linux-fixes --verbose linux-fixes.json.gz add linux.git master
+echo "-- Done"
+echo
+
+echo "-- $(date)"
+echo "-- Run cranky-update-sessions"
+./tools/cranky-update-sessions
+echo "-- Done"
+echo
+
+echo "-- $(date)"
+echo "-- Run git-fetch-linux-ubuntu"
+( cd linux-ubuntu.git && ../tools/git-fetch-linux-ubuntu )
