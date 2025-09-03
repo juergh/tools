@@ -22,25 +22,9 @@ function now()
 	date +%s
 }
 
-# Create a testbed (if necessary), configure ssh, copy ssh key into it,
-# configure sudo, etc.; print a list of "key=value" parameters to stdout on
-# success
-# Required: login, hostname, and one of identity or password
-# Optional: port, options, capabilities
-function open()
+function wait_for_ip_addr()
 {
-	local extraopts ip_addr
-
-	extraopts=("--domain" "${DOMAIN}")
-	if [ -n "${CLONE}" ] ; then
-		extraopts+=("--clone" "${CLONE}")
-		echo "-- Cloning domain ${CLONE}" >&2
-		virt-clone --auto-clone --original "${CLONE}" --name "${DOMAIN}"
-		virt-sysprep --hostname "${DOMAIN}".localdomain --domain "${DOMAIN}"
-	fi
-
-	echo "-- Starting domain ${DOMAIN}" >&2
-	virsh start "${DOMAIN}"
+	local timeout
 
 	# Wait for the instance to get an IP address
 	echo "-- Waiting for an IP address" >&2
@@ -51,23 +35,25 @@ function open()
 			cleanup
 			exit 1
 		fi
-		while IFS= read -r ip_addr ; do
-			ip_addr=${ip_addr%/*}
-			if ping -c 1 -W 1 "${ip_addr}" >/dev/null 2>&1 ; then
-				break
+		while IFS= read -r IP_ADDR ; do
+			IP_ADDR=${IP_ADDR%/*}
+			if ping -c 1 -W 1 "${IP_ADDR}" >/dev/null 2>&1 ; then
+				return
 			fi
 		done < <(virsh net-dhcp-leases default | tac | \
 					 awk '$6 == "'"${DOMAIN}"'" { print $5 }' ; echo)
-		if [ -n "${ip_addr}" ] ; then
-			break
-		fi
 		sleep 2
 	done
+}
+
+function wait_for_ssh_access()
+{
+	local ssh_args timeout
 
 	# Wait for SSH access
 	echo "-- Waiting for SSH access" >&2
 	ssh_args=("-q" "-l" "${SSH_USER}" "-o" "UserKnownHostsFile=/dev/null"
-			  "-o" "StrictHostKeyChecking=no" "${ip_addr}")
+			  "-o" "StrictHostKeyChecking=no" "${IP_ADDR}")
 	timeout=$(($(now) + 300))
 	while ! ssh "${ssh_args[@]}" true ; do
 		if [ "$(now)" -gt ${timeout} ] ; then
@@ -77,6 +63,33 @@ function open()
 		fi
 		sleep 5
 	done
+}
+
+# Create a testbed (if necessary), configure ssh, copy ssh key into it,
+# configure sudo, etc.; print a list of "key=value" parameters to stdout on
+# success
+# Required: login, hostname, and one of identity or password
+# Optional: port, options, capabilities
+function open()
+{
+	local extraopts
+
+	extraopts=("--domain" "${DOMAIN}")
+	if [ -n "${CLONE}" ] ; then
+		extraopts+=("--clone" "${CLONE}")
+		echo "-- Cloning domain ${CLONE}" >&2
+		virt-clone --auto-clone --original "${CLONE}" --name "${DOMAIN}"
+		sudo virt-sysprep --hostname "${DOMAIN}".localdomain --domain "${DOMAIN}"
+	fi
+
+	echo "-- Starting domain ${DOMAIN}" >&2
+	virsh start "${DOMAIN}"
+
+	# Wait for an IP address
+	wait_for_ip_addr
+
+	# Wait for SSH access
+	wait_for_ssh_access
 
 	# Wait for cloud-init to finish
 	echo "-- Waiting for cloud-init to finish" >&2
@@ -90,7 +103,7 @@ function open()
 	cat <<EOF
 
 login=${SSH_USER}
-hostname=${ip_addr}
+hostname=${IP_ADDR}
 capabilities=${CAPABILITIES}
 extraopts=${extraopts[*]}
 EOF
