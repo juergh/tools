@@ -24,6 +24,22 @@ function out()
 	exit "${rc}"
 }
 
+function wait_for_partitions()
+{
+	local dev=${1}
+	local part
+
+	# Wait 2 seconds for partitions to show up
+	for _ in $(seq 20) ; do
+		for part in "${dev}"p* ; do
+			if [ -b "${part}" ] ; then
+				return
+			fi
+		done
+		sleep 0.1
+	done
+}
+
 function usage()
 {
 	cat <<EOF
@@ -107,19 +123,12 @@ if file "${image}" | grep -q QCOW ; then
 	sudo qemu-nbd -n -c "/dev/nbd${num}" -f qcow2 "${image}"
 	NBD_DEVICE=/dev/nbd${num}
 
-	# Wait 2 seconds for the partition to show up
-	if [ -n "${partnum}" ] ; then
-		# shellcheck disable=SC2034
-		for i in $(seq 20) ; do
-			if [ -b "${NBD_DEVICE}p${partnum}" ] ; then
-				break
-			fi
-			sleep 0.1
-		done
-		if ! [ -b "${NBD_DEVICE}p${partnum}" ] ; then
-			echo "No such partition: ${partnum}" >&2
-			exit 1
-		fi
+	# Wait for partitions to show up
+	wait_for_partitions "${NBD_DEVICE}"
+
+	if [ -n "${partnum}" ] && ! [ -b "${NBD_DEVICE}p${partnum}" ] ; then
+		echo "No such partition: ${partnum}" >&2
+		exit 1
 	fi
 fi
 
