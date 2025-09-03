@@ -1,0 +1,246 @@
+#!/bin/bash -eu
+#
+# This is an autopkgtest-virt-ssh setup script that sets up a libvirt instance
+# to use as an autopkg testbed.
+# See man autopkgtest-virt-ssh for details.
+#
+
+# Add testbed capabilities here (possibly dynamically), see
+# doc/README.virtualisation-server.rst
+CAPABILITIES="isolation-machine,reboot,revert,revert-full-system"
+
+# The SSH username and password
+SSH_USER=ubuntu
+SSH_PASS=ubuntu
+
+SSH_OPTS=(
+	-o UserKnownHostsFile=/dev/null
+	-o StrictHostKeyChecking=no
+	-o User="${SSH_USER}"
+)
+
+function domain_running()
+{
+	virsh dominfo "${DOMAIN}" | grep -qi '^state:\s*running'
+}
+
+function now()
+{
+	date +%s
+}
+
+function wait_for_ip_addr()
+{
+	local timeout
+
+	timeout=$(($(now) + 300))
+	while true ; do
+		if [ "$(now)" -gt ${timeout} ] ; then
+			echo "-- Error: Timed out waiting for an IP address"
+			cleanup
+			exit 1
+		fi
+		IP_ADDR=$(virsh domifaddr "${DOMAIN}" 2>/dev/null | \
+		          grep -oP '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || true)
+		if [ -n "${IP_ADDR}" ] && ping -c 1 -W 1 "${IP_ADDR}" >/dev/null 2>&1 ; then
+			return
+		fi
+		sleep 2
+	done
+}
+
+function wait_for_ssh_access()
+{
+	local timeout
+
+	timeout=$(($(now) + 300))
+	while ! SSHPASS=${SSH_PASS} sshpass -e ssh "${SSH_OPTS[@]}" "${IP_ADDR}" true ; do
+		if [ "$(now)" -gt ${timeout} ] ; then
+			echo "-- Error: Timed out waiting for SSH access"
+			cleanup
+			exit 1
+		fi
+		sleep 5
+	done
+}
+
+function wait_for_cloud_init()
+{
+	if ! timeout 10m ssh "${SSH_OPTS[@]}" "${IP_ADDR}" \
+		 "while [ ! -e /var/lib/cloud/instance/boot-finished ] ; do sleep 1 ; done" ; then
+		echo "-- Error: Timed out waiting for cloud-init to finish"
+		cleanup
+		exit 1
+	fi
+}
+
+function _open()
+{
+	echo "-- Cloning domain ${DOMAIN}"
+	virt-clone --auto-clone --original "${ORIGINAL}" --name "${DOMAIN}"
+	echo "-- OK"
+
+	echo "-- Starting domain ${DOMAIN}"
+	virsh start "${DOMAIN}"
+	echo "-- OK"
+
+	echo "-- Waiting for an IP address"
+	wait_for_ip_addr
+	echo "-- OK (${IP_ADDR})"
+
+	echo "-- Waiting for SSH access"
+	wait_for_ssh_access
+	echo "-- OK"
+
+	echo "-- Copying SSH ID"
+	SSHPASS=${SSH_PASS} sshpass -e ssh-copy-id "${SSH_OPTS[@]}" "${IP_ADDR}"
+	echo "-- OK"
+
+	# Wait for cloud-init to finish
+	echo "-- Waiting for cloud-init to finish"
+	wait_for_cloud_init >&2
+	echo "-- OK"
+}
+
+# Create a testbed (if necessary), configure ssh, copy ssh key into it,
+# configure sudo, etc.; print a list of "key=value" parameters to stdout on
+# success
+# Required: login, hostname, and one of identity or password
+# Optional: port, options, capabilities
+function open()
+{
+	_open >&2
+
+	cat <<EOF
+login=${SSH_USER}
+hostname=${IP_ADDR}
+capabilities=${CAPABILITIES}
+EOF
+}
+
+function cleanup()
+{
+	echo "-- Stopping domain ${DOMAIN}"
+	if ! domain_running ; then
+		echo "-- Domain not running"
+		return
+	fi
+	virsh shutdown "${DOMAIN}"
+
+	echo "-- Waiting for domain to shut down"
+	retry=60
+	while domain_running ; do
+		retry=$((retry - 1))
+		if [ ${retry} -le 0 ] ; then
+			echo "-- Error: Timed out waiting for domain to shut down" >&2
+			virsh destroy "${DOMAIN}"
+			break
+		fi
+		sleep 2
+	done
+}
+
+function revert()
+{
+	cleanup
+	open
+}
+
+function wait_reboot()
+{
+	echo "-- Shutting down ${DOMAIN}"
+	virsh shutdown "${DOMAIN}"
+	while domain_running ; do
+		sleep 2
+	done
+	echo "-- OK"
+
+	echo "-- Starting ${DOMAIN}"
+	virsh start "${DOMAIN}"
+	wait_for_ip_addr
+	wait_for_ssh_access
+	wait_for_cloud_init
+	echo "--OK"
+}
+
+function debug_failure()
+{
+	echo "-- debug_failure not implemented" >&2
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: autopkgtest-virt-virsh [-h] -d DOMAIN -o ORIGINAL COMMAND
+
+Set up a libvirt instance to use as an autopkg testbed.
+
+Positional arguments:
+  COMMAND                  The autopkgtest command:
+                           open, cleanup, revert, wait-reboot or debug-failure.
+
+Optional arguments:
+  -d, --domain DOMAIN      The name of the new domain to be used for the test.
+  -h, --help               Show this help text and exit.
+  -o, --original ORIGINAL  The name of the original domain to be cloned.
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+DOMAIN=
+ORIGINAL=
+cmd=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-d|--domain)
+			shift
+			DOMAIN=${1}
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-o|--original)
+			shift
+			ORIGINAL=${1}
+			;;
+		*)
+			if [ -z "${cmd}" ] ; then
+				cmd=${1,,}
+			else
+				echo "-- Error: Invalid argument: ${1}" >&2
+				exit 2
+			fi
+	esac
+	shift
+done
+
+if [ -z "${DOMAIN}" ] || [ -z "${ORIGINAL}" ] || [ -z "${cmd}" ] ; then
+	usage
+	exit 2
+fi
+
+case "${cmd}" in
+	open)
+		open
+		;;
+	cleanup)
+		cleanup
+		;;
+	revert)
+		revert
+		;;
+	wait-reboot)
+		wait_reboot
+		;;
+	debug-failure)
+		debug_failure
+		;;
+	*)
+		echo "-- Error: Invalid command: ${cmd}" >&2
+		exit 1
+		;;
+esac
