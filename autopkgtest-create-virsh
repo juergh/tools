@@ -1,0 +1,150 @@
+#!/bin/bash -eu
+#
+# Create an autopkgtest libvirt instance from an autopkgtest image
+#
+
+function domain_xml_amd64()
+{
+	cat <<EOF
+<domain type="kvm">
+  <name>${DOMAIN}</name>
+  <uuid>${UUID}</uuid>
+  <memory unit="KiB">1048576</memory>
+  <currentMemory unit="KiB">1048576</currentMemory>
+  <vcpu placement="static">1</vcpu>
+  <clock offset="utc"/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+
+  <features>
+    <acpi/>
+    <apic/>
+    <pae/>
+  </features>
+
+  <os>
+    <type arch="x86_64" machine="pc">hvm</type>
+    <boot dev="hd"/>
+  </os>
+
+  <devices>
+
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+
+    <disk type="file" device="disk">
+      <driver name="qemu" type="qcow2"/>
+      <source file="${IMAGE}"/>
+      <target dev="vda" bus="virtio"/>
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x04" function="0x0"/>
+    </disk>
+
+    <controller type="pci" index="0" model="pci-root"/>
+
+    <interface type="network">
+      <mac address="${MAC}"/>
+      <source network="default"/>
+      <model type="virtio"/>
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x03" function="0x0"/>
+    </interface>
+
+    <serial type="pty">
+      <target type="isa-serial" port="0">
+        <model name="isa-serial"/>
+      </target>
+    </serial>
+
+    <console type="pty">
+      <target type="serial" port="0"/>
+    </console>
+
+  </devices>
+</domain>
+EOF
+}
+
+function domain_xml_s390x()
+{
+	cat <<EOF
+<domain type="qemu">
+  <name>${DOMAIN}</name>
+  <uuid>${UUID}</uuid>
+  <memory unit="KiB">1048576</memory>
+  <currentMemory unit="KiB">1048576</currentMemory>
+  <vcpu placement="static">1</vcpu>
+  <clock offset="utc"/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+
+  <os>
+    <type arch="s390x" machine="s390-ccw-virtio-plucky">hvm</type>
+    <boot dev="hd"/>
+  </os>
+
+  <devices>
+
+    <emulator>/usr/bin/qemu-system-s390x</emulator>
+
+    <disk type="file" device="disk">
+      <driver name="qemu" type="qcow2"/>
+      <source file="${IMAGE}"/>
+      <target dev="vda" bus="virtio"/>
+      <address type="ccw" cssid="0xfe" ssid="0x0" devno="0x0000"/>
+    </disk>
+
+    <controller type="pci" index="0" model="pci-root"/>
+
+    <controller type="virtio-serial" index="0">
+      <address type="ccw" cssid="0xfe" ssid="0x0" devno="0x0002"/>
+    </controller>
+
+    <interface type="network">
+      <mac address="${MAC}"/>
+      <source network="default"/>
+      <model type="virtio"/>
+      <address type="ccw" cssid="0xfe" ssid="0x0" devno="0x0001"/>
+    </interface>
+
+    <console type="pty">
+      <target type="sclp" port="0"/>
+    </console>
+
+    <channel type="unix">
+      <target type="virtio" name="org.qemu.guest_agent.0"/>
+      <address type="virtio-serial" controller="0" bus="0" port="1"/>
+    </channel>
+
+    <rng model="virtio">
+      <backend model="random">/dev/urandom</backend>
+      <address type="ccw" cssid="0xfe" ssid="0x0" devno="0x0004"/>
+    </rng>
+
+    <panic model="s390"/>
+
+  </devices>
+</domain>
+EOF
+}
+
+IMAGE=$1
+
+#sudo chown libvirt-qemu:kvm "${IMAGE}"
+
+DOMAIN=${IMAGE##*/}
+DOMAIN=${DOMAIN%.*}
+
+ARCH=${DOMAIN##*-}
+
+UUID=$(uuidgen)
+MAC=52:54:00:${UUID:30:2}:${UUID:32:2}:${UUID:34:2}
+
+tmp_xml=/tmp/vm.$$.xml
+# shellcheck disable=SC2064
+trap "rm -f ${tmp_xml}" EXIT
+
+domain_xml_"${ARCH}" > "${tmp_xml}"
+
+virsh define "${tmp_xml}"
+
+cat "${tmp_xml}"

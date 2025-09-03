@@ -1,0 +1,82 @@
+#!/bin/bash -eu
+#
+# Build an autopkgtest image for use with libvirt
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-v] [-a ARCH] SERIES
+
+Build an autopkgtest image for use with libvirt.
+
+Optional arguments:
+  -a, --arch ARCH  Ubuntu architecture name.
+  -f, --force
+  -h, --help       Show this help text and exit.
+  -v, --verbose    Show VM guest and cloud-init output.
+EOF
+}
+
+arch=$(dpkg-architecture -qDEB_HOST_ARCH)
+force=0
+series=
+opts=()
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-a|--arch)
+			shift
+			arch=${1}
+			;;
+		-f|--force)
+			force=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-v|--verbose)
+			opts+=("--verbose")
+			;;
+		*)
+			if [ -n "${series}" ] ; then
+				usage
+				exit 2
+			fi
+			series=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${series}" ] ; then
+	usage
+	exit 2
+fi
+
+output_dir=${HOME}/.cache/autopkgtest
+mkdir -p "${output_dir}"
+
+image=${output_dir}/autopkgtest-${series}-${arch}.img
+
+if [ ${force} -eq 1 ] || [ -n "$(find "${image}" -mtime +1 -print 2>/dev/null)" ] ; then
+    # Remove existing image if forced or older than 1 day
+	rm -f "${image}"
+fi
+
+if [ -e "${image}" ] ; then
+	echo "II: Image exists already: ${image}"
+	exit
+fi
+
+# post-command: Add a netplan yaml that brings up all e* interfaces with dhcp
+# Need to do hackery to trick cloud-init which tries to be too smart
+
+set -x
+autopkgtest-buildvm-ubuntu-cloud \
+	"${opts[@]}" \
+	--release="${series}" \
+	--arch="${arch}" \
+	--output-dir="${output_dir}" \
+	--post-command='printf "network:\n_version:_2\n_ethernets:\n__all:\n___match:\n____name:_e*\n___dhcp4:_true\n" | tr "_" " " > /etc/netplan/99-autopkgtest.yaml; chmod 600 /etc/netplan/99-autopkgtest.yaml'
