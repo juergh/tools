@@ -19,9 +19,14 @@ SSH_OPTS=(
 	-o User="${SSH_USER}"
 )
 
+function domain_exists()
+{
+	virsh dominfo "${NAME}" &>/dev/null
+}
+
 function domain_running()
 {
-	virsh dominfo "${DOMAIN}" | grep -qi '^state:\s*running'
+	virsh dominfo "${NAME}" | grep -qi '^state:\s*running'
 }
 
 function now()
@@ -40,7 +45,7 @@ function wait_for_ip_addr()
 			cleanup
 			exit 1
 		fi
-		IP_ADDR=$(virsh domifaddr "${DOMAIN}" 2>/dev/null | \
+		IP_ADDR=$(virsh domifaddr "${NAME}" 2>/dev/null | \
 		          grep -oP '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' || true)
 		if [ -n "${IP_ADDR}" ] && ping -c 1 -W 1 "${IP_ADDR}" >/dev/null 2>&1 ; then
 			return
@@ -74,17 +79,28 @@ function wait_for_cloud_init()
 	fi
 }
 
-function _open()
+# Create a testbed (if necessary), configure ssh, copy ssh key into it,
+# configure sudo, etc.; print a list of "key=value" parameters to stdout on
+# success
+# Required: login, hostname, and one of identity or password
+# Optional: port, options, capabilities
+function open()
 {
 	echo "-- Cloning domain ${DOMAIN}"
-	virt-clone --auto-clone --original "${ORIGINAL}" --name "${DOMAIN}"
-	virsh setvcpus "${DOMAIN}" "${CPUS}" --config --maximum
-	virsh setmaxmem "${DOMAIN}" "$((RAM_SIZE * 1024))" --config
-	virsh setmem "${DOMAIN}" "$((RAM_SIZE * 1024))" --config
+	virt-clone --auto-clone --original "${DOMAIN}" --name "${NAME}"
+
+	# Set the number of CPUs and memory size
+	virsh setvcpus "${NAME}" "${CPUS}" --config --maximum
+	virsh setmaxmem "${NAME}" "$((RAM_SIZE * 1024))" --config
+	virsh setmem "${NAME}" "$((RAM_SIZE * 1024))" --config
+
+	# Fix the console log filename
+	EDITOR="sed -i 's/${DOMAIN}.console_log/${NAME}.console_log/'" virsh edit "${NAME}"
+
 	echo "-- OK"
 
-	echo "-- Starting domain ${DOMAIN}"
-	virsh start "${DOMAIN}"
+	echo "-- Starting domain ${NAME}"
+	virsh start "${NAME}"
 	echo "-- OK"
 
 	echo "-- Waiting for an IP address"
@@ -101,20 +117,13 @@ function _open()
 
 	# Wait for cloud-init to finish
 	echo "-- Waiting for cloud-init to finish"
-	wait_for_cloud_init >&2
+	wait_for_cloud_init
 	echo "-- OK"
 }
 
-# Create a testbed (if necessary), configure ssh, copy ssh key into it,
-# configure sudo, etc.; print a list of "key=value" parameters to stdout on
-# success
-# Required: login, hostname, and one of identity or password
-# Optional: port, options, capabilities
-function open()
+function open_info()
 {
-	_open >&2
-
-	cat <<EOF
+    cat <<EOF
 login=${SSH_USER}
 hostname=${IP_ADDR}
 capabilities=${CAPABILITIES}
@@ -123,43 +132,27 @@ EOF
 
 function cleanup()
 {
-	echo "-- Stopping domain ${DOMAIN}"
-	if ! domain_running ; then
-		echo "-- Domain not running"
-		return
-	fi
-	virsh shutdown "${DOMAIN}"
-
-	echo "-- Waiting for domain to shut down"
-	retry=60
-	while domain_running ; do
-		retry=$((retry - 1))
-		if [ ${retry} -le 0 ] ; then
-			echo "-- Error: Timed out waiting for domain to shut down" >&2
-			virsh destroy "${DOMAIN}"
-			break
+	if domain_exists ; then
+		if domain_running ; then
+			echo "-- Destroying domain ${NAME}"
+			virsh destroy "${NAME}"
 		fi
-		sleep 2
-	done
-}
-
-function revert()
-{
-	cleanup
-	open
+		echo "-- Undefining domain ${NAME}"
+		virsh undefine "${NAME}" --remove-all-storage
+	fi
 }
 
 function wait_reboot()
 {
-	echo "-- Shutting down ${DOMAIN}"
-	virsh shutdown "${DOMAIN}"
+	echo "-- Shutting down ${NAME}"
+	virsh shutdown "${NAME}"
 	while domain_running ; do
 		sleep 2
 	done
 	echo "-- OK"
 
-	echo "-- Starting ${DOMAIN}"
-	virsh start "${DOMAIN}"
+	echo "-- Starting ${NAME}"
+	virsh start "${NAME}"
 	wait_for_ip_addr
 	wait_for_ssh_access
 	wait_for_cloud_init
@@ -168,13 +161,13 @@ function wait_reboot()
 
 function debug_failure()
 {
-	echo "-- debug_failure not implemented" >&2
+	echo "-- debug_failure not implemented"
 }
 
 function usage()
 {
 	cat <<EOF
-Usage: autopkgtest-virt-virsh [-c CPUS] [-h] [-r RAMSIZE ] -o ORIGINAL -d DOMAIN COMMAND
+Usage: autopkgtest-virt-virsh [-c CPUS] [-h] [-r RAMSIZE ] -d DOMAIN -n NAME COMMAND
 
 Set up a libvirt instance to use as an autopkg testbed.
 
@@ -184,9 +177,9 @@ Positional arguments:
 
 Optional arguments:
   -c, --cpus CPUS          Number of CPUS (defaults to 2).
-  -d, --domain DOMAIN      The name of the new domain to be used for the test.
+  -d, --domain DOMAIN      The name of the domain to be cloned.
   -h, --help               Show this help text and exit.
-  -o, --original ORIGINAL  The name of the original domain to be cloned.
+  -n, --name NAME          The name of test domain.
   -r, --ram-size RAMSIZE   Memory size in KiB (defaults to 2048).
 EOF
 }
@@ -196,7 +189,7 @@ EOF
 
 CPUS=2
 DOMAIN=
-ORIGINAL=
+NAME=
 RAM_SIZE=2048
 cmd=
 
@@ -214,9 +207,9 @@ while [ ${#} -gt 0 ] ; do
 			usage
 			exit
 			;;
-		-o|--original)
+		-n|--name)
 			shift
-			ORIGINAL=${1}
+			NAME=${1}
 			;;
 		-r|--ram-size)
 			shift
@@ -233,27 +226,36 @@ while [ ${#} -gt 0 ] ; do
 	shift
 done
 
-if [ -z "${DOMAIN}" ] || [ -z "${ORIGINAL}" ] || [ -z "${cmd}" ] ; then
-	usage
+if [ -z "${DOMAIN}" ] || [ -z "${NAME}" ] || [ -z "${cmd}" ] ; then
+	usage >&2
 	exit 2
 fi
 
 case "${cmd}" in
+
 	open)
-		open
+		open >&2
+		open_info
 		;;
+
 	cleanup)
-		cleanup
+		cleanup >&2
 		;;
+
 	revert)
-		revert
+		cleanup >&2
+		open >&2
+		open_info
 		;;
+
 	wait-reboot)
-		wait_reboot
+		wait_reboot >&2
 		;;
+
 	debug-failure)
-		debug_failure
+		debug_failure >&2
 		;;
+
 	*)
 		echo "-- Error: Invalid command: ${cmd}" >&2
 		exit 1

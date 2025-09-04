@@ -48,15 +48,19 @@ function domain_xml_amd64()
       <address type="pci" domain="0x0000" bus="0x00" slot="0x03" function="0x0"/>
     </interface>
 
-    <serial type="pty">
-      <target type="isa-serial" port="0">
-        <model name="isa-serial"/>
-      </target>
-    </serial>
-
     <console type="pty">
-      <target type="serial" port="0"/>
+      <log file="/tmp/${DOMAIN}.console_log" append="off"/>
+      <target type="virtio" port="0"/>
     </console>
+
+    <controller type="virtio-serial" index="0">
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x06" function="0x0"/>
+    </controller>
+
+    <rng model="virtio">
+      <backend model="random">/dev/urandom</backend>
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x05" function="0x0"/>
+    </rng>
 
   </devices>
 </domain>
@@ -95,10 +99,6 @@ function domain_xml_s390x()
 
     <controller type="pci" index="0" model="pci-root"/>
 
-    <controller type="virtio-serial" index="0">
-      <address type="ccw" cssid="0xfe" ssid="0x0" devno="0x0002"/>
-    </controller>
-
     <interface type="network">
       <mac address="${MAC}"/>
       <source network="default"/>
@@ -107,13 +107,13 @@ function domain_xml_s390x()
     </interface>
 
     <console type="pty">
-      <target type="sclp" port="0"/>
+      <log file="/tmp/${DOMAIN}.console_log" append="off"/>
+      <target type="virtio" port="0"/>
     </console>
 
-    <channel type="unix">
-      <target type="virtio" name="org.qemu.guest_agent.0"/>
-      <address type="virtio-serial" controller="0" bus="0" port="1"/>
-    </channel>
+    <controller type="virtio-serial" index="0">
+      <address type="ccw" cssid="0xfe" ssid="0x0" devno="0x0002"/>
+    </controller>
 
     <rng model="virtio">
       <backend model="random">/dev/urandom</backend>
