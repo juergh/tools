@@ -78,6 +78,9 @@ function _open()
 {
 	echo "-- Cloning domain ${DOMAIN}"
 	virt-clone --auto-clone --original "${ORIGINAL}" --name "${DOMAIN}"
+	virsh setvcpus "${DOMAIN}" "${CPUS}" --config --maximum
+	virsh setmaxmem "${DOMAIN}" "$((RAM_SIZE * 1024))" --config
+	virsh setmem "${DOMAIN}" "$((RAM_SIZE * 1024))" --config
 	echo "-- OK"
 
 	echo "-- Starting domain ${DOMAIN}"
@@ -171,7 +174,7 @@ function debug_failure()
 function usage()
 {
 	cat <<EOF
-Usage: autopkgtest-virt-virsh [-h] -d DOMAIN -o ORIGINAL COMMAND
+Usage: autopkgtest-virt-virsh [-c CPUS] [-h] [-r RAMSIZE ] -o ORIGINAL -d DOMAIN COMMAND
 
 Set up a libvirt instance to use as an autopkg testbed.
 
@@ -180,21 +183,29 @@ Positional arguments:
                            open, cleanup, revert, wait-reboot or debug-failure.
 
 Optional arguments:
+  -c, --cpus CPUS          Number of CPUS (defaults to 2).
   -d, --domain DOMAIN      The name of the new domain to be used for the test.
   -h, --help               Show this help text and exit.
   -o, --original ORIGINAL  The name of the original domain to be cloned.
+  -r, --ram-size RAMSIZE   Memory size in KiB (defaults to 2048).
 EOF
 }
 
 # -----------------------------------------------------------------------------
 # Main entry point
 
+CPUS=2
 DOMAIN=
 ORIGINAL=
+RAM_SIZE=2048
 cmd=
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
+		-c|--cpus)
+			shift
+			CPUS=${1}
+			;;
 		-d|--domain)
 			shift
 			DOMAIN=${1}
@@ -206,6 +217,10 @@ while [ ${#} -gt 0 ] ; do
 		-o|--original)
 			shift
 			ORIGINAL=${1}
+			;;
+		-r|--ram-size)
+			shift
+			RAM_SIZE=${1}
 			;;
 		*)
 			if [ -z "${cmd}" ] ; then

@@ -55,7 +55,7 @@ if [ -z "${series}" ] ; then
 	exit 2
 fi
 
-output_dir=${HOME}/.cache/autopkgtest
+output_dir=${HOME}/.cache/autopkgtest/libvirt
 mkdir -p "${output_dir}"
 
 image=${output_dir}/autopkgtest-${series}-${arch}.img

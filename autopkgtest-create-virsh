@@ -9,9 +9,9 @@ function domain_xml_amd64()
 <domain type="kvm">
   <name>${DOMAIN}</name>
   <uuid>${UUID}</uuid>
-  <memory unit="KiB">1048576</memory>
-  <currentMemory unit="KiB">1048576</currentMemory>
-  <vcpu placement="static">1</vcpu>
+  <memory unit="KiB">${RAM}</memory>
+  <currentMemory unit="KiB">${RAM}</currentMemory>
+  <vcpu placement="static">${CPUS}</vcpu>
   <clock offset="utc"/>
   <on_poweroff>destroy</on_poweroff>
   <on_reboot>restart</on_reboot>
@@ -69,9 +69,9 @@ function domain_xml_s390x()
 <domain type="qemu">
   <name>${DOMAIN}</name>
   <uuid>${UUID}</uuid>
-  <memory unit="KiB">1048576</memory>
-  <currentMemory unit="KiB">1048576</currentMemory>
-  <vcpu placement="static">1</vcpu>
+  <memory unit="KiB">${RAM}</memory>
+  <currentMemory unit="KiB">${RAM}</currentMemory>
+  <vcpu placement="static">${CPUS}</vcpu>
   <clock offset="utc"/>
   <on_poweroff>destroy</on_poweroff>
   <on_reboot>restart</on_reboot>
@@ -127,24 +127,82 @@ function domain_xml_s390x()
 EOF
 }
 
-IMAGE=$1
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-a ARCH] [-f] [-h] SERIES
 
-#sudo chown libvirt-qemu:kvm "${IMAGE}"
+Create an autopkgtest libvirt domain from an autopkgtest image.
 
-DOMAIN=${IMAGE##*/}
-DOMAIN=${DOMAIN%.*}
+Optional arguments:
+  -a, --arch ARCH
+  -f, --force
+  -h, --help   Show this help text and exit.
+EOF
+}
 
-ARCH=${DOMAIN##*-}
+arch=$(dpkg-architecture -qDEB_HOST_ARCH)
+force=0
+series=
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-a|--arch)
+			shift
+			arch=${1}
+			;;
+		-f|--force)
+			force=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		*)
+			if [ -n "${series}" ] ; then
+				usage
+				exit 2
+			fi
+			series=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${series}" ] ; then
+	usage
+	exit 2
+fi
+
+DOMAIN=autopkgtest-${series}-${arch}
+IMAGE=${HOME}/.cache/autopkgtest/libvirt/${DOMAIN}.img
+
+if ! [ -e "${IMAGE}" ] ; then
+	echo "Error: No such image file: ${IMAGE}" >&2
+	exit 1
+fi
+
+if virsh dominfo "${DOMAIN}" &>/dev/null ; then
+	if [ ${force} -eq 0 ] ; then
+		echo "Error: Domain exits already. Use --force to replace it." >&2
+		exit 1
+	fi
+	virsh destroy "${DOMAIN}" &>/dev/null || true
+	virsh undefine "${DOMAIN}" || true
+fi
 
 UUID=$(uuidgen)
 MAC=52:54:00:${UUID:30:2}:${UUID:32:2}:${UUID:34:2}
+
+RAM=$((1024 * 1024))
+CPUS=1
 
 tmp_xml=/tmp/vm.$$.xml
 # shellcheck disable=SC2064
 trap "rm -f ${tmp_xml}" EXIT
 
-domain_xml_"${ARCH}" > "${tmp_xml}"
+domain_xml_"${arch}" > "${tmp_xml}"
 
 virsh define "${tmp_xml}"
 
-cat "${tmp_xml}"
+#cat "${tmp_xml}"
