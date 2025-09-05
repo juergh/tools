@@ -17,20 +17,21 @@ function domain_xml_amd64()
   <on_reboot>restart</on_reboot>
   <on_crash>destroy</on_crash>
 
+  <os>
+    <type arch="x86_64" machine="pc">hvm</type>
+    <boot dev="hd"/>
+  </os>
+
   <features>
     <acpi/>
     <apic/>
     <pae/>
   </features>
 
-  <os>
-    <type arch="x86_64" machine="pc">hvm</type>
-    <boot dev="hd"/>
-  </os>
-
   <devices>
 
     <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <controller type="pci" index="0" model="pci-root"/>
 
     <disk type="file" device="disk">
       <driver name="qemu" type="qcow2"/>
@@ -38,8 +39,6 @@ function domain_xml_amd64()
       <target dev="vda" bus="virtio"/>
       <address type="pci" domain="0x0000" bus="0x00" slot="0x04" function="0x0"/>
     </disk>
-
-    <controller type="pci" index="0" model="pci-root"/>
 
     <interface type="network">
       <mac address="${MAC}"/>
@@ -67,6 +66,73 @@ function domain_xml_amd64()
 EOF
 }
 
+function domain_xml_arm64()
+{
+	cat <<EOF
+<domain type="qemu">
+  <name>${DOMAIN}</name>
+  <uuid>${UUID}</uuid>
+  <memory unit="KiB">${RAM}</memory>
+  <currentMemory unit="KiB">${RAM}</currentMemory>
+  <vcpu placement="static">${CPUS}</vcpu>
+  <cpu mode="custom" match="exact" check="none">
+    <model fallback="allow">cortex-a72</model>
+  </cpu>
+  <clock offset="utc"/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+
+  <os firmware="efi">
+    <type arch="aarch64" machine="virt">hvm</type>
+    <loader readonly="yes" type="pflash" format="raw">/usr/share/AAVMF/AAVMF_CODE.ms.fd</loader>
+    <boot dev="hd"/>
+  </os>
+
+  <features>
+    <acpi/>
+  </features>
+
+  <devices>
+
+    <emulator>/usr/bin/qemu-system-aarch64</emulator>
+    <controller type="pci" index="0" model="pcie-root"/>
+
+    <disk type="file" device="disk">
+      <driver name="qemu" type="qcow2"/>
+      <source file="${IMAGE}"/>
+      <target dev="vda" bus="virtio"/>
+      <address type="pci" domain="0x0000" bus="0x04" slot="0x00" function="0x0"/>
+    </disk>
+
+    <interface type="network">
+      <mac address="${MAC}"/>
+      <source network="default"/>
+      <model type="virtio"/>
+      <address type="pci" domain="0x0000" bus="0x03" slot="0x00" function="0x0"/>
+    </interface>
+
+    <serial type="pty">
+      <log file="/tmp/${DOMAIN}.console_log" append="off"/>
+      <target type="system-serial" port="0">
+        <model name="pl011"/>
+      </target>
+    </serial>
+
+    <controller type="virtio-serial" index="0">
+      <address type="pci" domain="0x0000" bus="0x06" slot="0x00" function="0x0"/>
+    </controller>
+
+    <rng model="virtio">
+      <backend model="random">/dev/urandom</backend>
+      <address type="pci" domain="0x0000" bus="0x05" slot="0x00" function="0x0"/>
+    </rng>
+
+  </devices>
+</domain>
+EOF
+}
+
 function domain_xml_s390x()
 {
 	cat <<EOF
@@ -82,13 +148,14 @@ function domain_xml_s390x()
   <on_crash>destroy</on_crash>
 
   <os>
-    <type arch="s390x" machine="s390-ccw-virtio-plucky">hvm</type>
+    <type arch="s390x" machine="s390-ccw-virtio">hvm</type>
     <boot dev="hd"/>
   </os>
 
   <devices>
 
     <emulator>/usr/bin/qemu-system-s390x</emulator>
+    <controller type="pci" index="0" model="pci-root"/>
 
     <disk type="file" device="disk">
       <driver name="qemu" type="qcow2"/>
@@ -96,8 +163,6 @@ function domain_xml_s390x()
       <target dev="vda" bus="virtio"/>
       <address type="ccw" cssid="0xfe" ssid="0x0" devno="0x0000"/>
     </disk>
-
-    <controller type="pci" index="0" model="pci-root"/>
 
     <interface type="network">
       <mac address="${MAC}"/>
@@ -188,7 +253,7 @@ if virsh dominfo "${DOMAIN}" &>/dev/null ; then
 		exit 1
 	fi
 	virsh destroy "${DOMAIN}" &>/dev/null || true
-	virsh undefine "${DOMAIN}" || true
+	virsh undefine "${DOMAIN}" --nvram || true
 fi
 
 UUID=$(uuidgen)
