@@ -157,6 +157,9 @@ function set_globals()
 	if [ ${#OPT_TARGET[@]} -gt 0 ] ; then
 		TARGET=("${OPT_TARGET[@]}")
 	fi
+	if [ -n "${OPT_SRU}" ] ; then
+		SRU=${OPT_SRU}
+	fi
 }
 
 function print_globals()
@@ -529,6 +532,7 @@ cmd=
 
 OPT_SERIES=
 OPT_TARGET=()
+OPT_SRU=
 
 while [ ${#} -gt 0 ] ; do
 	case ${1} in
@@ -566,7 +570,7 @@ while [ ${#} -gt 0 ] ; do
 			TOKEN+=("${1}")
 			;;
 		-ns|--no-sru)
-			SRU=0
+			OPT_SRU=0
 			;;
 		-v|--version)
 			shift
