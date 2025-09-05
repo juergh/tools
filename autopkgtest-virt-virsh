@@ -19,6 +19,11 @@ SSH_OPTS=(
 	-o User="${SSH_USER}"
 )
 
+function prinfo()
+{
+	echo "II: [$(date +%H:%M:%S)] ${NAME}: ${*}"
+}
+
 function domain_exists()
 {
 	virsh dominfo "${NAME}" &>/dev/null
@@ -41,7 +46,7 @@ function wait_for_ip_addr()
 	timeout=$(($(now) + 300))
 	while true ; do
 		if [ "$(now)" -gt ${timeout} ] ; then
-			echo "-- Error: Timed out waiting for an IP address"
+			prinfo "Error: Timed out waiting for an IP address"
 			cleanup
 			exit 1
 		fi
@@ -61,7 +66,7 @@ function wait_for_ssh_access()
 	timeout=$(($(now) + 300))
 	while ! SSHPASS=${SSH_PASS} sshpass -e ssh "${SSH_OPTS[@]}" "${IP_ADDR}" true ; do
 		if [ "$(now)" -gt ${timeout} ] ; then
-			echo "-- Error: Timed out waiting for SSH access"
+			prinfo "Error: Timed out waiting for SSH access"
 			cleanup
 			exit 1
 		fi
@@ -73,7 +78,7 @@ function wait_for_cloud_init()
 {
 	if ! timeout 10m ssh "${SSH_OPTS[@]}" "${IP_ADDR}" \
 		 "while [ ! -e /var/lib/cloud/instance/boot-finished ] ; do sleep 1 ; done" ; then
-		echo "-- Error: Timed out waiting for cloud-init to finish"
+		prinfo "Error: Timed out waiting for cloud-init to finish"
 		cleanup
 		exit 1
 	fi
@@ -86,7 +91,7 @@ function wait_for_cloud_init()
 # Optional: port, options, capabilities
 function open()
 {
-	echo "-- Cloning domain ${DOMAIN}"
+	prinfo "Cloning domain ${DOMAIN}"
 	virt-clone --auto-clone --original "${DOMAIN}" --name "${NAME}"
 
 	# Set the number of CPUs and memory size
@@ -97,28 +102,21 @@ function open()
 	# Fix the console log filename
 	EDITOR="sed -i 's/${DOMAIN}.console_log/${NAME}.console_log/'" virsh edit "${NAME}"
 
-	echo "-- OK"
-
-	echo "-- Starting domain ${NAME}"
+	prinfo "Starting domain ${NAME}"
 	virsh start "${NAME}"
-	echo "-- OK"
 
-	echo "-- Waiting for an IP address"
+	prinfo "Waiting for an IP address"
 	wait_for_ip_addr
-	echo "-- OK (${IP_ADDR})"
 
-	echo "-- Waiting for SSH access"
+	prinfo "Waiting for SSH access"
 	wait_for_ssh_access
-	echo "-- OK"
 
-	echo "-- Copying SSH ID"
+	prinfo "Copying SSH ID"
 	SSHPASS=${SSH_PASS} sshpass -e ssh-copy-id "${SSH_OPTS[@]}" "${IP_ADDR}"
-	echo "-- OK"
 
 	# Wait for cloud-init to finish
-	echo "-- Waiting for cloud-init to finish"
+	prinfo "Waiting for cloud-init to finish"
 	wait_for_cloud_init
-	echo "-- OK"
 }
 
 function open_info()
@@ -134,39 +132,41 @@ function cleanup()
 {
 	if domain_exists ; then
 		if domain_running ; then
-			echo "-- Destroying domain ${NAME}"
+			prinfo "Destroying domain ${NAME}"
 			virsh destroy "${NAME}"
 		fi
-		echo "-- Undefining domain ${NAME}"
+		prinfo "Undefining domain ${NAME}"
 		virsh undefine "${NAME}" --remove-all-storage
 	fi
+
+	prinfo "Console log"
+	sudo cat /tmp/"${NAME}".console_log || true
+	echo
 
 	sudo rm -f /tmp/"${NAME}".console_log
 }
 
 function wait_reboot()
 {
-	echo "-- Shutting down ${NAME}"
+	prinfo "Shutting down ${NAME}"
 	virsh shutdown "${NAME}"
 	while domain_running ; do
 		sleep 2
 	done
-	echo "-- OK"
 
-	echo "-- Starting ${NAME}"
+	prinfo "Starting ${NAME}"
 	virsh start "${NAME}"
 	wait_for_ip_addr
 	wait_for_ssh_access
 	wait_for_cloud_init
-	echo "--OK"
 }
 
 function debug_failure()
 {
-	echo "-------------------- /tmp/${NAME}.console_log --------------------"
+	prinf "-------------------- /tmp/${NAME}.console_log --------------------"
 	sudo cat /tmp/"${NAME}".console_log || true
 	echo
-	echo "--------------------------------------------------------------------------------"
+	prinfo "--------------------------------------------------------------------------------"
 }
 
 function usage()
@@ -224,7 +224,7 @@ while [ ${#} -gt 0 ] ; do
 			if [ -z "${cmd}" ] ; then
 				cmd=${1,,}
 			else
-				echo "-- Error: Invalid argument: ${1}" >&2
+				echo "Error: Invalid argument: ${1}" >&2
 				exit 2
 			fi
 	esac
@@ -235,6 +235,10 @@ if [ -z "${DOMAIN}" ] || [ -z "${NAME}" ] || [ -z "${cmd}" ] ; then
 	usage >&2
 	exit 2
 fi
+
+prinfo "${cmd^^} (enter)" >&2
+# shellcheck disable=SC2064
+trap "prinfo '${cmd^^} (exit)' >&2; echo" EXIT INT TERM HUP
 
 case "${cmd}" in
 
@@ -262,7 +266,7 @@ case "${cmd}" in
 		;;
 
 	*)
-		echo "-- Error: Invalid command: ${cmd}" >&2
+		echo "Error: Invalid command: ${cmd}" >&2
 		exit 1
 		;;
 esac
