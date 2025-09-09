@@ -10,8 +10,9 @@
 
 configs=(
 	arm-bcm2709_defconfig
-	arm-bcm2711_defconfig
 	arm64-bcm2711_defconfig
+	arm64-bcm2711_rt_defconfig
+	arm64-bcm2712_defconfig
 )
 
 mkdir -p RPICONFIGS
