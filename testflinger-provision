@@ -112,5 +112,5 @@ if [ ${dry_run} -eq 1 ] ; then
 fi
 
 echo
-set -x
+echo "II: testflinger-cli --debug submit --poll ${TMPF}"
 testflinger-cli --debug submit --poll "${TMPF}"
