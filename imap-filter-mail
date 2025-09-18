@@ -74,56 +74,6 @@ end
 __EOF__
 }
 
-function move_mail_gitea_done()
-{
-	local src=${1} dst=${2}
-
-	cat <<__EOF__
-
-print('')
-print('-- Move mail: Gitea merged or closed')
-
-paths, _ = account:list_all('${src}', '*')
-for _, path in ipairs(paths) do
-  if not (path == '${dst}') then
-    messages = account[path]:contain_field('X-Gitea-Reason', 'merge') +
-               account[path]:contain_field('X-Gitea-Reason', 'close')
-
-    for _, message in ipairs(messages) do
-      mbox, uid = table.unpack(message)
-      id = mbox[uid]:fetch_field('X-Gitea-Issue-ID'):match('%d+')
-      thread = account[path]:contain_field('X-Gitea-Issue-ID', id)
-      move_messages(thread, account['${dst}'])
-    end
-  end
-end
-__EOF__
-}
-
-function move_mail_gitea()
-{
-	local src=${1}
-
-	cat <<__EOF__
-
-print('')
-print('-- Move mail: Gitea')
-
-paths = {}
-messages = account['${src}']:select_all()
-for _, message in ipairs(messages) do
-  mbox, uid = table.unpack(message)
-  path = mbox[uid]:fetch_field('X-Gitea-Repository-Path'):gsub(".*: *", "")
-  paths[path] = path
-end
-
-for _, path in pairs(paths) do
-  messages = account['${src}']:contain_field('X-Gitea-Repository-Path', path)
-  move_messages(messages, account['${src}/' .. path])
-end
-__EOF__
-}
-
 function filter_canonical()
 {
 	local username=${1}
@@ -167,10 +117,6 @@ __EOF__
 	move_mail "Mailing List/Ubuntu/kernel-team" \
 			  "Mailing List/Ubuntu/kernel-team/kernel-snaps" \
 			  "contain_subject('kernel-snaps')"
-
-	# Move Gitea mail
-#	move_mail_gitea "Canonical/gitea"
-#	move_mail_gitea_done "Canonical/gitea" "Canonical/gitea/00-done"
 
 	# Move noise mail (needs to come last)
 	move_mail_noise "Mailing List/Ubuntu/kernel-team" \
