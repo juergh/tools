@@ -163,7 +163,7 @@ function wait_reboot()
 
 function debug_failure()
 {
-	prinf "-------------------- /tmp/${NAME}.console_log --------------------"
+	prinfo "-------------------- /tmp/${NAME}.console_log --------------------"
 	sudo cat /tmp/"${NAME}".console_log || true
 	echo
 	prinfo "--------------------------------------------------------------------------------"
