@@ -139,6 +139,10 @@ __EOF__
 	move_mail "Launchpad-Message-For" \
 			  "Launchpad-Message-For/00-noise" \
 			  "contain_from('Launchpad Buildd System')"
+
+	move_mail "Canonical/Bots/kernel-team-bot" \
+			  "Canonical/Bots/00-noise" \
+			  "contain_subject('-proposed tracker')"
 }
 
 function filter_proton()
