@@ -12,9 +12,9 @@ function run_chroot()
 	pr_info "+ ${*}"
 
 	if schroot --list --all-sessions | grep -q "session:${CHROOT}" ; then
-		schroot -r -c "${CHROOT}" -- "${@}"
+		schroot -p -r -c "${CHROOT}" -- "${@}"
 	else
-		schroot -c "${CHROOT}" -- "${@}"
+		schroot -p -c "${CHROOT}" -- "${@}"
 	fi
 }
 
