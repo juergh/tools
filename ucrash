@@ -243,12 +243,16 @@ function run_crash()
 
 	# Assemble the crash command and get its version
 	crash_cmd=()
-	if [ -n "${chroot}" ] ; then
-		pr_info "chroot" "${chroot}"
-		crash_cmd=("schroot" "-p" "-c" "${chroot}" "--")
-	fi
-	if ! crash_cmd+=("$("${crash_cmd[@]}" which crash)") ; then
-		pr_error "Crash tool not found"
+	if [ -n "${CRASH}" ] ; then
+		crash_cmd=("${CRASH}")
+	else
+		if [ -n "${chroot}" ] ; then
+			pr_info "chroot" "${chroot}"
+			crash_cmd=("schroot" "-p" "-c" "${chroot}" "--")
+		fi
+		if ! crash_cmd+=("$("${crash_cmd[@]}" which crash)") ; then
+			pr_error "Crash tool not found"
+		fi
 	fi
 	crash_version=$("${crash_cmd[@]}" --version | grep -m1 '^crash ' | \
 						sed -e 's/crash //')
@@ -325,6 +329,7 @@ Positional arguments:
 
 Optional arguments:
   -c, --chroot CHROOT  Run crash in the chroot CHROOT.
+  --crash CRASH        Use the CRASH binary.
   -d, --debug          Enable debugging output (set -x).
   -h, --help           Show this help text.
   -i, --info           Just show all the info without actually running crash.
@@ -346,6 +351,7 @@ CRASH_OPTS=()
 DUMP_FILE=
 DEBUG_KERNEL=
 CHROOT=
+CRASH=
 
 # Parse the commandline
 while [ $# -gt 0 ] ; do
@@ -353,6 +359,13 @@ while [ $# -gt 0 ] ; do
 		-c|--chroot)
 			shift
 			CHROOT=${1}
+			;;
+		--crash)
+			shift
+			CRASH=${1}
+			if ! [ -x "${CRASH}" ] ; then
+				pr_error "No such file or not executable: ${CRASH}"
+			fi
 			;;
 		-d|--debug)
 			set -x;
