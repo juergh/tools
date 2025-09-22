@@ -208,9 +208,17 @@ def verify():
 
 
 @main.command()
+@click.option("--no-orig", is_flag=True)
+@click.option("--orig", is_flag=True)
 @click.argument("pocket_offset_abi")
-def build(pocket_offset_abi):
-    run(["cranky-build-sources", "-f", pocket_offset_abi])
+def build(pocket_offset_abi, no_orig, orig):
+    cmd = ["cranky-build-sources", "--force"]
+    if no_orig:
+        cmd.append("--no-orig")
+    if orig:
+        cmd.append("--orig")
+    cmd.append(pocket_offset_abi)
+    run(cmd)
 
 
 @main.command()
@@ -297,10 +305,12 @@ def x4(ctx, dry_run, re_run, cycle, force):
 
 
 @main.command(name="5--build-review")
+@click.option("--no-orig", is_flag=True)
+@click.option("--orig", is_flag=True)
 @click.argument("pocket_offset_abi")
 @click.pass_context
-def x5(ctx, pocket_offset_abi):
-    ctx.invoke(build, pocket_offset_abi=pocket_offset_abi)
+def x5(ctx, pocket_offset_abi, no_orig, orig):
+    ctx.invoke(build, pocket_offset_abi=pocket_offset_abi, no_orig=no_orig, orig=orig)
     ctx.invoke(review, pocket_offset_abi=pocket_offset_abi)
 
 
