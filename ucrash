@@ -75,7 +75,7 @@ function parse_linux_version()
 	DUMP_ABI=${DUMP_ABI%%-*}
 	DUMP_ABI=${DUMP_BASE}-${DUMP_ABI}
 
-	DUMP_FLAVOR=${DUMP_RELEASE#${DUMP_ABI}-}
+	DUMP_FLAVOR=${DUMP_RELEASE#"${DUMP_ABI}"-}
 
 	DUMP_UPLOAD=${linux_version##* #}
 	DUMP_UPLOAD=${DUMP_UPLOAD%%-*}
@@ -122,7 +122,7 @@ function parse_kdump()
 	DUMP_ABI=${DUMP_ABI%%-*}
 	DUMP_ABI=${DUMP_BASE}-${DUMP_ABI}
 
-	DUMP_FLAVOR=${DUMP_RELEASE#${DUMP_ABI}-}
+	DUMP_FLAVOR=${DUMP_RELEASE#"${DUMP_ABI}"-}
 
 	DUMP_UPLOAD=${header[4]%% *}
 	DUMP_UPLOAD=${DUMP_UPLOAD%-*}
@@ -183,10 +183,11 @@ function parse_dump_file()
 
 function run_crash()
 {
-	local kernel_bin_root kernel_src_root
-	local debug_kernel debug_modules system_map kernel_source
+	local kernel_bin_root
+	local debug_kernel debug_modules kernel_source
 	local chroot_list chroot crash_cmd crash_version crash_opts
 	local build_path infile
+#	local system_map
 
 	pr_info "dump file" "${DUMP_FILE}"
 
