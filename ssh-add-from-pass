@@ -1,0 +1,10 @@
+#!/bin/bash -u
+#
+# Add a private SSH key from the password store
+#
+
+name=${1}
+tempfile=$(mktemp /dev/shm/tmp.XXXXXX)
+pass show "${name}" > "${tempfile}"
+ssh-add "${tempfile}"
+shred -u "${tempfile}"
