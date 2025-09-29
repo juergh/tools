@@ -95,8 +95,8 @@ Optional argument:
 EOF
 }
 
-root=0
 name=
+sudo=("sudo" "-u" "${USER}")
 command=("bash")
 
 while [ $# -gt 0 ] ; do
@@ -106,7 +106,7 @@ while [ $# -gt 0 ] ; do
 			exit
 			;;
 		--root)
-			root=1
+			sudo=()
 			;;
 		--)
 			shift
@@ -146,9 +146,4 @@ if ! lxc_exists "${name}" ; then
 	lxc_launch "${image_name}" "${name}"
 fi
 
-if [ ${root} -eq 0 ] ; then
-	lxc exec "${name}" -- sudo runuser -u "${USER}" -- env debian_chroot=lxc "${command[@]}"
-#	lxc exec "${name}" -- sudo su - "${USER}" -c env debian_chroot=lxc "${command[@]}"
-else
-	lxc exec "${name}" -- "${command[@]}"
-fi
+lxc exec "${name}" -- "${sudo[@]}" sh -c "cd $(pwd) && env debian_chroot=lxc ${command[@]}"
