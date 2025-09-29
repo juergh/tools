@@ -1,0 +1,154 @@
+#!/bin/bash -eu
+
+# Colors
+__CEE="\033[91m"
+__CII="\033[96m"
+__CNO="\033[0m"
+
+# Print helpers
+function prerror() { echo -e "${__CEE}EE: $*${__CNO}" >&2 ; }
+function prinfo()  { echo -e "${__CII}II: $*${__CNO}" ; }
+
+function lxc_image_exists()
+{
+	lxc image info "${1}" &>/dev/null
+}
+
+function lxc_image_copy()
+{
+	local name=${1}
+	local series arch image
+
+	series=${name%-*}
+	arch=${name#*-}
+	image=ubuntu-daily:${series}/${arch}
+
+	prinfo "Copy image: ${image} -> ${name}"
+
+	lxc image copy --alias "${name}" "${image}" local:
+}
+
+function lxc_exists()
+{
+	lxc info "${1}" &>/dev/null
+}
+
+function lxc_wait()
+{
+	local name=${1}
+
+	prinfo "Wait for container"
+	while true ; do
+		case "$(lxc exec "${name}" -- systemctl is-system-running)" in
+			running|degraded)
+				return
+				;;
+		esac
+		sleep 1
+	done
+}
+
+function lxc_launch()
+{
+	local image_name=${1} name=${2}
+	local gid uid
+
+	prinfo "Launch container: ${name}"
+	lxc launch local:"${image_name}" "${name}"
+	lxc_wait "${name}"
+
+	prinfo "Configure container"
+
+	gid=$(id -g)
+	uid=$(id -u)
+
+	# Attach our home directory
+	lxc config device add "${name}" home disk source="${HOME}" path=/home/"${USER}"
+
+	# Add ourselves as a new user
+	lxc exec "${name}" -- groupadd --gid "${gid}" "$(id -gn)"
+	lxc exec "${name}" -- useradd --gid "${gid}" --uid "${uid}" --home-dir /home/"${USER}" \
+		--no-create-home --shell /bin/bash "${USER}"
+
+	# Map user and group IDs
+	if [ "${uid}" = "${gid}" ] ; then
+		lxc config set "${name}" raw.idmap "both ${uid} ${uid}"
+	else
+		lxc config set "${name}" raw.idmap "gid ${gid} ${gid}"
+		lxc config set "${name}" raw.idmap "uid ${uid} ${uid}"
+	fi
+
+	# Restart the container (required for the ID mapping to take effect)
+	prinfo "Restart container"
+	lxc restart "${name}"
+	lxc_wait "${name}"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: lxc-run [-h] [NAME] [-- COMMAND [ARG]...]
+
+Optional argument:
+  -h, --help  Show this help text and exit.
+  --root      Run command as the root user.
+EOF
+}
+
+root=0
+name=
+command=("bash")
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		--root)
+			root=1
+			;;
+		--)
+			shift
+			command=("${@}")
+			break
+			;;
+		-*)
+			prerror "Invalid argument: ${1}"
+			exit 2
+			;;
+		*)
+			if [ -n "${name}" ] ; then
+				prerror "Invalid argument: ${1}"
+				exit 2
+			fi
+			name=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${name}" ] ; then
+	series=$(lsb_release -s -c)
+else
+	series=${name}
+fi
+arch=$(dpkg-architecture -qDEB_HOST_ARCH)
+
+image_name=${series}-${arch}
+name=${series}-${arch}
+
+if ! lxc_image_exists "${image_name}" ; then
+	lxc_image_copy "${image_name}"
+fi
+
+if ! lxc_exists "${name}" ; then
+	lxc_launch "${image_name}" "${name}"
+fi
+
+if [ ${root} -eq 0 ] ; then
+	lxc exec "${name}" -- sudo runuser -u "${USER}" -- env debian_chroot=lxc "${command[@]}"
+#	lxc exec "${name}" -- sudo su - "${USER}" -c env debian_chroot=lxc "${command[@]}"
+else
+	lxc exec "${name}" -- "${command[@]}"
+fi
