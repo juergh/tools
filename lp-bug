@@ -4,6 +4,7 @@
 #
 
 import os
+import re
 import sys
 
 import click
@@ -131,21 +132,32 @@ def mark_as_duplicate(master, bug, dry_run=False):
     print("Modified bug")
 
 
-def wontfix(reason, bug, series=None, dry_run=False):
+def wontfix(reason, bug, series_or_kernel=None, dry_run=False):
     """Close a bug as \"Won't Fix\"."""
     if reason == "eol":
-        kernel = KERNEL_VERSION.get(series)
-        if not kernel:
-            print(f"Unsupported series: {series}", file=sys.stderr)
-            sys.exit(1)
+        if re.match(r"^[0-9]*", series_or_kernel):
+            kernel = series_or_kernel
+            series = None
 
-        distro = os.popen(f"ubuntu-distro-info -a -f | grep -i ' \"{series} '", "r").read().strip()
-        distro = distro.replace(' "', " (").replace('"', ")")
+            comment = \
+                f"Kernel {kernel} has reached end of life and this bug " + \
+                "will not be fixed for that specific version. Please file a new bug if this " + \
+                "issue still exists in a supported release with a supported kernel."
 
-        comment = \
-            f"{distro} with kernel {kernel} has reached end of life and this bug " + \
-            "will not be fixed for that specific release. Please file a new bug if this " + \
-            "issue still exists in a supported release."
+        else:
+            series = series_or_kernel
+            kernel = KERNEL_VERSION.get(series)
+            if not kernel:
+                print(f"Unsupported series: {series}", file=sys.stderr)
+                sys.exit(1)
+
+            distro = os.popen(f"ubuntu-distro-info -a -f | grep -i ' \"{series} '", "r").read().strip()
+            distro = distro.replace(' "', " (").replace('"', ")")
+
+            comment = \
+                f"{distro} with kernel {kernel} has reached end of life and this bug " + \
+                "will not be fixed for that specific release. Please file a new bug if this " + \
+                "issue still exists in a supported release."
 
     elif reason == "esm":
         comment = \
@@ -244,7 +256,7 @@ def test_proposed(bug, dry_run=False):
     print(f"LP: #{bug} -- {lp_bug.title}")
 
     comment = \
-        f"Can you please test the latest kernel [1] in combination with the latest linux-firmware [2] from -proposed [3]?\n" + \
+        "Can you please test the latest kernel [1] in combination with the latest linux-firmware [2] from -proposed [3]?\n" + \
         "Please let us know if you still encounter the problem using these updated packages and attach kernel logs.\n\n" + \
         "[1] https://launchpad.net/ubuntu/+source/linux\n" + \
         "[2] https://launchpad.net/ubuntu/+source/linux-firmware\n" + \
@@ -278,10 +290,10 @@ def duplicate_dkms(bug, dry_run):
 
 @main.command()
 @click.argument("bug")
-@click.argument("series")
+@click.argument("series_or_kernel")
 @click.option("--dry-run", is_flag=True)
-def wontfix_eol(bug, series, dry_run):
-    wontfix("eol", bug, series=series, dry_run=dry_run)
+def wontfix_eol(bug, series_or_kernel, dry_run):
+    wontfix("eol", bug, series_or_kernel=series_or_kernel, dry_run=dry_run)
 
 @main.command()
 @click.argument("bug")
