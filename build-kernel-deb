@@ -3,8 +3,8 @@
 # Build kernel Debian packages
 #
 
-function pr_error() { echo -e "\033[31mE: ${*}\033[0m" >&2 ; }
-function pr_info()  { echo -e "\033[33mI: ${*}\033[0m" ; }
+function pr_error() { echo -e "\033[31mEE: ${*}\033[0m" >&2 ; }
+function pr_info()  { echo -e "\033[33mII: ${*}\033[0m" ; }
 
 function run_chroot()
 {
