@@ -691,10 +691,13 @@ if [ "${arch}" != "$(dpkg-architecture -q DEB_BUILD_ARCH)" ] ; then
 
 	pr_info "Cross-compilation for: ${ARCH}"
 	export ARCH CROSS_COMPILE
+
+	# FIXME: Cross-builds of newer kernels fail because of libssl-dev
+	export DEB_BUILD_PROFILES=pkg.linux-upstream.nokernelheaders
 fi
 
 #
-# Set exports
+# Build directory
 #
 
 if [ -n "${buildd}" ] ; then
@@ -703,9 +706,16 @@ else
 	KBUILD_OUTPUT=buildd/${series}
 fi
 mkdir -p "${KBUILD_OUTPUT}"
-
-pr_info "Use kernel build output directory: ${KBUILD_OUTPUT}"
 export KBUILD_OUTPUT
+
+#
+# Print exports
+#
+
+pr_info "Exported build variables:"
+for var in KERNELRELEASE ARCH CROSS_COMPILE DEB_BUILD_PROFILES KBUILD_OUTPUT ; do
+	pr_info "  ${var}=${!var:-}"
+done
 
 #
 # Process the command
