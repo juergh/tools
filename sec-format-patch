@@ -13,7 +13,7 @@ function print_jira_link()
 {
 	local summary=${1}
 
-	python3 -c "
+	pyvenv python3 -c "
 import sys
 from jira import JIRA
 
@@ -21,7 +21,7 @@ server = 'https://warthogs.atlassian.net'
 summary = '${summary}'
 
 jira = JIRA(server=server)
-issues = jira.search_issues(f'project=\'KERNSEC\' and summary~\'{summary}\'')
+issues = jira.search_issues(f'project=\'KCVE\' and summary~\'{summary}\'')
 
 if issues:
     for i in issues:
