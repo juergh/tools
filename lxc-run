@@ -87,16 +87,18 @@ function lxc_launch()
 function usage()
 {
 	cat <<EOF
-Usage: lxc-run [-h] [NAME] [-- COMMAND [ARG]...]
+Usage: lxc-run [-h] [--root] [-v] [NAME] [-- COMMAND [ARG]...]
 
 Optional argument:
-  -h, --help  Show this help text and exit.
-  --root      Run command as the root user.
+  -h, --help     Show this help text and exit.
+  --root         Run command as the root user.
+  -v, --verbose
 EOF
 }
 
+root=0
+verbose=0
 name=
-sudo=("sudo" "-u" "${USER}")
 command=("bash")
 
 while [ $# -gt 0 ] ; do
@@ -106,7 +108,10 @@ while [ $# -gt 0 ] ; do
 			exit
 			;;
 		--root)
-			sudo=()
+			root=1
+			;;
+		-v|--verbose)
+			verbose=1
 			;;
 		--)
 			shift
@@ -146,4 +151,23 @@ if ! lxc_exists "${name}" ; then
 	lxc_launch "${image_name}" "${name}"
 fi
 
-lxc exec "${name}" -- "${sudo[@]}" sh -c "cd $(pwd) && env debian_chroot=lxc ${command[@]}"
+lxc_opts=(
+	--cwd "$(pwd)"
+	--env debian_chroot=lxc
+	--mode interactive
+)
+
+if [ ${root} -eq 0 ] ; then
+	lxc_opts+=(
+		--env HOME="${HOME}"
+		--env USER="${USER}"
+		--group "$(id -g)"
+		--user "$(id -u)"
+	)
+fi
+
+if [ ${verbose} -eq 1 ] ; then
+	set -x
+fi
+
+lxc exec "${name}" "${lxc_opts[@]}" -- "${command[@]}"
