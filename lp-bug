@@ -198,11 +198,17 @@ def wontfix(reason, bug, series_or_kernel=None, dry_run=False):
             source = target_name
             print(f"{color}LP: #{bug:<7} - {target_name:<14} - {status:<13} - {lp_bug.title}{NC}")
         else:
-            print(f"{color}               {target.distroseries.name.title():<14} - {status}{NC}")
+            try:
+                print(f"{color}               {target.distroseries.name.title():<14} - {status}{NC}")
+            except AttributeError:
+                pass
 
         if wontfix_task and not dry_run:
-            task.status = "Won't Fix"
-            task.lp_save()
+            try:
+                task.status = "Won't Fix"
+                task.lp_save()
+            except Exception:
+                print("Failed to set task status", file=sys.stderr)
 
     if wontfix_bug:
         print()
