@@ -14,14 +14,34 @@ function lxc_image_exists()
 	lxc image info "${1}" &>/dev/null
 }
 
-function lxc_image_copy()
+function lxc_remote_image()
 {
 	local name=${1}
-	local series arch image
+	local series arch
 
 	series=${name%-*}
 	arch=${name#*-}
-	image=ubuntu-daily:${series}/${arch}
+
+	if ubuntu-distro-info --all | grep -q "${series}" ; then
+		echo "ubuntu-daily:${series}/${arch}"
+		return
+	fi
+
+	if debian-distro-info --all | grep -q "${series}" ; then
+		echo "images:debian/${series}"
+		return
+	fi
+
+	prerror "Unsupported image name: ${name}"
+	return 1
+}
+
+function lxc_image_copy()
+{
+	local name=${1}
+	local image
+
+	image=$(lxc_remote_image "${name}")
 
 	prinfo "Copy image: ${image} -> ${name}"
 
@@ -33,13 +53,20 @@ function lxc_exists()
 	lxc info "${1}" &>/dev/null
 }
 
+function lxc_status()
+{
+	{
+		lxc info "${1}" 2>/dev/null || echo "Status: NOTFOUND"
+	} | sed -n 's/^Status: *//p'
+}
+
 function lxc_wait()
 {
 	local name=${1}
 
 	prinfo "Wait for container"
 	while true ; do
-		case "$(lxc exec "${name}" -- systemctl is-system-running)" in
+		case "$(lxc exec "${name}" -- systemctl is-system-running || true)" in
 			running|degraded)
 				return
 				;;
@@ -84,15 +111,33 @@ function lxc_launch()
 	lxc_wait "${name}"
 }
 
+function lxc_start()
+{
+	local name=${1}
+
+	prinfo "Start container"
+	lxc start "${name}"
+	lxc_wait "${name}"
+}
+
 function usage()
 {
 	cat <<EOF
 Usage: lxc-run [-h] [--root] [-v] [NAME] [-- COMMAND [ARG]...]
 
+Run the given command in an LXC container. Create the container first if it
+doesn't exits.
+
+Postional arguments:
+  NAME              LXC container name. Must be in the form of SERIES or
+                    SERIES-ARCH. If not provided, defaults to the running
+                    release ($(lsb_release -s -c)).
+  COMMAND [ARG]...  Command to run. If not provided, defaults to 'bash'.
+
 Optional argument:
-  -h, --help     Show this help text and exit.
-  --root         Run command as the root user.
-  -v, --verbose
+  -h, --help        Show this help text and exit.
+  --root            Run command as the root user.
+  -v, --verbose     Enable verbose output.
 EOF
 }
 
@@ -133,12 +178,26 @@ while [ $# -gt 0 ] ; do
 	shift
 done
 
-if [ -z "${name}" ] ; then
-	series=$(lsb_release -s -c)
-else
-	series=${name}
+arch=
+case "${name}" in
+	"")
+		series=$(lsb_release -s -c)
+		;;
+	*-*)
+		series=${name%-*}
+		arch=${name#*-}
+		;;
+	*)
+		series=${name}
+		;;
+esac
+if [ -z "${arch}" ] ; then
+	arch=$(dpkg-architecture -qDEB_HOST_ARCH)
 fi
-arch=$(dpkg-architecture -qDEB_HOST_ARCH)
+
+case "${series}" in
+	unstable) series=sid ;;
+esac
 
 image_name=${series}-${arch}
 name=${series}-${arch}
@@ -147,13 +206,25 @@ if ! lxc_image_exists "${image_name}" ; then
 	lxc_image_copy "${image_name}"
 fi
 
-if ! lxc_exists "${name}" ; then
-	lxc_launch "${image_name}" "${name}"
-fi
+status=$(lxc_status "${name}")
+case "${status}" in
+	NOTFOUND)
+		lxc_launch "${image_name}" "${name}"
+		;;
+	STOPPED)
+		lxc_start "${name}"
+		;;
+	RUNNING)
+		;;
+	*)
+		prerror "Unexpected container status: ${status}"
+		exit 1
+		;;
+esac
 
 lxc_opts=(
 	--cwd "$(pwd)"
-	--env debian_chroot=lxc
+	--env debian_chroot="lxc:${name}"
 	--mode interactive
 )
 
