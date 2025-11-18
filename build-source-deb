@@ -7,6 +7,14 @@ function run_chroot()
 {
 	local opts
 
+	if ischroot ; then
+		# Already in a chroot
+		set -x
+		"${@}"
+		set +x
+		return
+	fi
+
 	opts=("-c" "${CHROOT}")
 	if schroot --list --all-sessions | grep -q "session:${CHROOT}" ; then
 		opts+=("-r")
