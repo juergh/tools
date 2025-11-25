@@ -30,7 +30,7 @@ ${XML_UEFI_BOOT_END}
   <on_reboot>restart</on_reboot>
   <on_crash>destroy</on_crash>
   <devices>
-    <emulator>/usr/bin/kvm-spice</emulator>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
 
 ${XML_OS_IMAGE_DISK_SATA_BEGIN}
     <disk type='file' device='disk'>
