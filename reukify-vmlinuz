@@ -1,0 +1,34 @@
+#!/bin/bash -eu
+#
+# Ukify vlinuz
+#
+
+unamer=$(uname -r)
+vmlinuz=/boot/vmlinuz-${unamer}
+
+vmlinuz_tmp=$(mktemp)
+trap "rm ${vmlinuz_tmp}" EXIT
+
+objcopy --dump-section .linux="${vmlinuz_tmp}" "${vmlinuz}"
+
+if [ -d hwids ] ; then
+	hwids=hwids
+	finddtbs=hwids/finddtbs.py
+	stub=stubble.efi
+else
+	hwids=/usr/share/stubble/hwids
+	stub=/usr/lib/stubble/stubble.efi
+fi
+
+# Find dtbs based on hwids
+dtbs=$("${finddtbs}" /usr/lib/firmware/"${unamer}"/device-tree "${hwids}"/json)
+
+# rebuild stubble kernel
+ukify build \
+      --linux="${vmlinuz_tmp}" \
+      --uname="${unamer}" \
+      --stub="${stub}" \
+      $(echo "$dtbs" | xargs -i echo "--devicetree-auto={}") \
+      --hwids="${hwids}" \
+      --sbat="@/usr/share/stubble/sbat" \
+      --output="vmlinuz-${unamer}.stubble.efi"
