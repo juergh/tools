@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+
+from datetime import datetime
+from subprocess import check_output
+
+import click
+from dateutil.relativedelta import relativedelta
+from imapclient import IMAPClient
+
+
+def get_password(pass_name):
+    """Return a password from the password store"""
+    return check_output(["pass", "show", pass_name]).decode().split("\n", 1)[0]
+
+
+def print_messages(messages):
+    for msgid, data in CLIENT.fetch(messages, ["ENVELOPE"]).items():
+        envelope = data[b"ENVELOPE"]
+        subject = envelope.subject or b""
+        print(f"{msgid} -- {envelope.date} -- {subject.decode()}")
+
+
+CLIENT = None
+DRY_RUN = False
+VERBOSE = False
+
+def init(hostname, username, dry_run, verbose):
+    global DRY_RUN
+    global VERBOSE
+    global CLIENT
+
+    DRY_RUN = dry_run
+    VERBOSE = verbose
+
+    if CLIENT:
+        return
+
+    password = get_password(f"{hostname}/{username}")
+
+    CLIENT = IMAPClient(host=hostname, use_uid=True, ssl=True)
+    CLIENT.login(username, password)
+
+
+def cleanup_folder(folder, older_than=None, before=None):
+    if not before:
+        before = datetime.now() - relativedelta(months=older_than)
+
+    CLIENT.select_folder(folder)
+
+    messages = CLIENT.search(["BEFORE", before])
+    if VERBOSE and not messages:
+        print("No messages selected")
+        return
+
+    if VERBOSE:
+        print(f"Selected {len(messages)} messages in folder '{folder}'")
+        print_messages(messages)
+
+    print(f"Deleting {len(messages)} messages in folder '{folder}'")
+    if DRY_RUN:
+        print("Dry-run, exiting...")
+        return
+
+    CLIENT.delete_messages(messages)
+    CLIENT.expunge()
+
+
+def move_mail(from_folder, to_folder, criteria):
+    CLIENT.select_folder(from_folder)
+
+    messages = CLIENT.search(criteria)
+    if VERBOSE and not messages:
+        print("No messages selected")
+        return
+
+    if VERBOSE:
+        print(f"Selected {len(messages)} messages in folder '{from_folder}'")
+        print_messages(messages)
+
+    print(f"Moving {len(messages)} messages from folder '{from_folder}' to folder '{to_folder}'")
+    if DRY_RUN:
+        print("Dry-run, exiting...")
+        return
+
+    CLIENT.move(messages, to_folder)
+
+
+def noise_folder(folder):
+    """Return the noise folder for the given folder"""
+    if folder.startswith("Canonical/Bots/"):
+        return "Canonical/Bots/00-noise"
+
+    if "/" in folder:
+        base = folder.split("/")[0]
+    else:
+        base = folder
+    return f"{base}/00-noise"
+
+
+def move_mail_noise(from_folder, criteria):
+    move_mail(from_folder, noise_folder(from_folder), criteria)
+
+
+def move_mail_canonical():
+    # Daily kernel bug report
+    move_mail("Mailing List/Ubuntu/kernel-team", "Canonical/Bugs", ["SUBJECT", "The Daily Bug report for "])
+    # SalesForce
+    move_mail("Mailing List/Canonical/canonical-kernel-team", "Canonical/SalesForce", ["SUBJECT", "SFDC"])
+    # linux-firmware
+    move_mail("Mailing List/Ubuntu/kernel-team", "Mailing List/Ubuntu/kernel-team/linux-firmware", ["SUBJECT", "linux-firmware"])
+    move_mail("Launchpad-Message-For/canonical-kernel-team", "Launchpad-Message-For/juergh", ["BODY", "Launchpad-Subscription: linux-firmware"])
+    # kernel-snaps
+    move_mail("Mailing List/Ubuntu/kernel-team", "Mailing List/Ubuntu/kernel-team/kernel-snaps", ["SUBJECT", "kernel-snaps"])
+
+    # Noise (needs to come last)
+    move_mail_noise("Mailing List/Ubuntu/kernel-team", ["FROM", "kernel-team-bot@canonical.com"])
+    move_mail_noise("Launchpad-Message-For/canonical-kernel-team", ["SUBJECT", " -proposed tracker"])
+    move_mail_noise("Launchpad-Message-For/canonical-kernel-team", ["FROM", "Ubuntu Kernel Bot"])
+    move_mail_noise("Launchpad-Message-For/canonical-kernel-team", ["FROM", "Launchpad Buildd System"])
+    move_mail_noise("Launchpad-Message-For/canonical-kernel-team", ["SUBJECT", "CI build of ~canonical-kernel-team"])
+    move_mail_noise("Launchpad-Message-For/canonical-kernel-team", ["SUBJECT", "ABI testing report"])
+    move_mail_noise("Launchpad-Message-For/juergh", ["SUBJECT", " -proposed tracker"])
+    move_mail_noise("Launchpad-Message-For", ["FROM", "Launchpad Buildd System"])
+    move_mail_noise("Canonical/Bots/kernel-team-bot", ["SUBJECT", " -proposed tracker"])
+
+
+@click.group()
+@click.option("--hostname", required=True)
+@click.option("--username", required=True)
+@click.option("--dry-run/--no-dry-run", default=False)
+@click.option("--verbose/--no-verbose", default=False)
+def cli(hostname, username, dry_run, verbose):
+    init(hostname, username, dry_run, verbose)
+
+
+@cli.command(name="move-mail-canonical")
+def _move_mail_canonical():
+    move_mail_canonical()
+
+
+@cli.command(name="move-mail")
+@click.argument("from-folder", type=str)
+@click.argument("to-folder", type=str)
+@click.argument("criteria", type=str)
+def _move_mail(from_folder, to_folder, criteria):
+    move_mail(from_folder, to_folder, criteria)
+
+
+@cli.command(name="cleanup-folder")
+@click.argument("folder")
+@click.option("--older-than", type=int)
+@click.option("--before", type=str)
+def _cleanup_folder(folder, older_than, before):
+    cleanup_folder(folder, older_than=older_than, before=before)
+
+
+@cli.command(name="cleanup-trash")
+@click.option("--older-than", type=int)
+@click.option("--before", type=str)
+def _cleanup_trash(older_than, before):
+    cleanup_folder("[Gmail]/Trash", older_than=older_than, before=before)
+
+
+if __name__ == "__main__":
+    cli()
