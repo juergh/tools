@@ -46,8 +46,14 @@ case "${1}" in
 		;;
 
 	*.mk|*Kbuild)
-		# Copied from /usr/share/source-highlight/src-hilite-lesspipe.sh
+		# Derived from /usr/share/source-highlight/src-hilite-lesspipe.sh
 		source-highlight --failsafe -f esc --lang-def=makefile.lang --style-file=esc.style -i "${1}"
+		exit 0
+		;;
+
+	*.debdiff)
+		# Derived from /usr/share/source-highlight/src-hilite-lesspipe.sh
+		source-highlight --failsafe -f esc --lang-def=diff.lang --style-file=esc.style -i "${1}"
 		exit 0
 		;;
 
