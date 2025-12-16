@@ -48,8 +48,9 @@ def cleanup_folder(folder, older_than=None, before=None):
     CLIENT.select_folder(folder)
 
     messages = CLIENT.search(["BEFORE", before])
-    if VERBOSE and not messages:
-        print("No messages selected")
+    if not messages:
+        if VERBOSE:
+            print("No messages selected")
         return
 
     if VERBOSE:
@@ -69,8 +70,9 @@ def move_mail(from_folder, to_folder, criteria):
     CLIENT.select_folder(from_folder)
 
     messages = CLIENT.search(criteria)
-    if VERBOSE and not messages:
-        print("No messages selected")
+    if not messages:
+        if VERBOSE:
+            print("No messages selected")
         return
 
     if VERBOSE:
