@@ -1,4 +1,4 @@
-nn#!/bin/bash
+#!/bin/bash
 #
 # Hourly cron job
 #
