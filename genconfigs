@@ -5,7 +5,9 @@
 
 function run_chroot()
 {
-	if schroot --list --all-sessions | grep -q "session:${CHROOT}" ; then
+	if ischroot ; then
+		"${@}"
+	elif schroot --list --all-sessions | grep -q "session:${CHROOT}" ; then
 		schroot -r -c "${CHROOT}" -- "${@}"
 	else
 		schroot -c "${CHROOT}" -- "${@}"
