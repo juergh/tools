@@ -1,22 +1,24 @@
 #!/bin/bash -eu
 #
-# Tag a Debian source package release
+# Tag a Debian/Ubuntu source package release commit
 #
 
 function usage()
 {
 	cat <<EOF
-Usage: tag-release [-f] [-h]
+Usage: tag-release-commit [-f] [-h]
 
 Tag a Debian source package release.
 
 Optional arguments:
   -f, --force  Overwrite an already existing tag.
   -h, --help   Show this help text and exit.
+  --ubuntu     Create an Ubuntu release tag.
 EOF
 }
 
 force=0
+ubuntu=0
 
 while [ ${#} -gt 0 ] ; do
 	case "${1}" in
@@ -26,6 +28,9 @@ while [ ${#} -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit
+			;;
+		--ubuntu)
+			ubuntu=1
 			;;
 		*)
 			echo "Invalid argument: ${1}" 2>/dev/null
@@ -45,19 +50,22 @@ fi
 version=$(dpkg-parsechangelog -SVersion)
 
 # Check if this is an Ubuntu release commit
-ubuntu_version=$(git log --format='%s' -1 | sed -n 's/^UBUNTU: Ubuntu-//p')
-if [ -n "${ubuntu_version}" ] ; then
-    echo "Current HEAD is an Ubuntu release commit"
-	if [ "${ubuntu_version}" != "${version}" ] ; then
-		echo "Invalid Ubuntu release version: ${ubuntu_version}" >&2
-		exit 1
+if [ ${ubuntu} -eq 0 ] ; then
+	ubuntu_version=$(git log --format='%s' -1 | sed -n 's/^UBUNTU: Ubuntu-//p')
+	if [ -n "${ubuntu_version}" ] ; then
+		ubuntu=1
+		echo "Current HEAD is an Ubuntu release commit"
+		if [ "${ubuntu_version}" != "${version}" ] ; then
+			echo "Invalid Ubuntu release version: ${ubuntu_version}" >&2
+			exit 1
+		fi
 	fi
 fi
 
 tag=${version}
 tag=${tag//\~/_}
 
-if [ -n "${ubuntu_version}" ] ; then
+if [ ${ubuntu} -eq 1 ] ; then
 	tag=Ubuntu-${tag}
 	msg="UBUNTU: ${tag}"
 else
