@@ -15,49 +15,12 @@ GREEN = "\033[92m"
 YELLOW = "\033[93m"
 NC = "\033[00m"
 
-KERNEL_VERSION = {
-    "dapper": "2.6.y",
-    "edgy": "2.6.y",
-    "feisty": "2.6.y",
-    "gutsy": "2.6.y",
-    "hardy": "2.6.y",
-    "intrepid": "2.6.y",
-    "jaunty": "2.6.y",
-    "karmic": "2.6.y",
-    "lucid": "2.6.y",
-    "maverick": "2.6.y",
-    "natty": "2.6.y",
-    "oneiric": "3.0",
-    "precise": "3.2",
-    "quantal": "3.5",
-    "raring": "3.8",
-    "saucy": "3.11",
-    "trusty": "3.13",
-    "utopic": "3.16",
-    "vivid": "3.19",
-    "wily": "4.2",
-    "xenial": "4.4",
-    "yakkety": "4.8",
-    "zesty": "4.10",
-
-    "artful": "4.13",
-    "bionic": "4.15",
-    "cosmic": "4.18",
-    "disco": "5.0",
-    "eoan": "5.3",
-    "focal": "5.4",
-    "groovy": "5.8",
-    "hirsute": "5.11",
-    "impish": "5.13",
-    "jammy": "5.15",
-    "kinetic": "5.19",
-    "lunar": "6.2",
-    "mantic": "6.5",
-    "noble": "6.8",
-    "oracular": "6.11",
-    "plucky": "6.14",
-    "questing": "6.17",
-}
+STATUS_OPEN = ("New",
+               "Incomplete",
+               "Confirmed",
+               "Triaged",
+               "In Progress",
+               "Fix Committed")
 
 
 def show(item):
@@ -69,6 +32,42 @@ def show(item):
 
     for a in item.lp_attributes:
         print(f"  {a} = {getattr(item, a)}")
+
+
+def is_kernel_target(name):
+    if name.startswith("linux"):
+        return True
+    return False
+
+
+def bug_targets(lp_bug):
+    """Return the list of targets"""
+    targets = {}
+    for task in lp_bug.bug_tasks:
+        target = task.target.name
+        if target not in targets:
+            targets[target] = []
+        targets[target].append(task)
+    return list(targets.values())
+
+
+def bug_task_details(lp_task):
+    """Return relevant bug task details"""
+    task_status = lp_task.status
+    lp_target = lp_task.target
+    target_name = lp_target.name
+    try:
+        target_series_name = lp_target.distroseries.name
+    except AttributeError:
+        target_series_name = "None"
+    return target_name, target_series_name, task_status
+
+
+def print_task(bug=None, target=None, series=None, status=None, title=None, color=NC):
+    if bug:
+        print(f"{color}LP: #{bug:<7} - {target:<22} -- {series.title():<8} -- {status:<13} - {title}{NC}")
+    else:
+        print(" " * 41 + f"{color}{series.title():<8} -- {status}{NC}")
 
 
 def lp_login():
@@ -136,32 +135,7 @@ def mark_as_duplicate(master, bug, dry_run=False):
 
 def wontfix(reason, bug, series_or_kernel=None, dry_run=False):
     """Close a bug as \"Won't Fix\"."""
-    if reason == "eol":
-        if re.match(r"^[0-9]+", series_or_kernel):
-            kernel = series_or_kernel
-            series = None
-
-            comment = \
-                f"Kernel {kernel} has reached end of life and this bug " + \
-                "will not be fixed for that specific version. Please file a new bug if this " + \
-                "issue still exists in a supported release with a supported kernel."
-
-        else:
-            series = series_or_kernel
-            kernel = KERNEL_VERSION.get(series)
-            if not kernel:
-                print(f"Unsupported series: {series}", file=sys.stderr)
-                sys.exit(1)
-
-            distro = os.popen(f"ubuntu-distro-info -a -f | grep -i ' \"{series} '", "r").read().strip()
-            distro = distro.replace(' "', " (").replace('"', ")")
-
-            comment = \
-                f"{distro} with kernel {kernel} has reached end of life and this bug " + \
-                "will not be fixed for that specific release. Please file a new bug if this " + \
-                "issue still exists in a supported release."
-
-    elif reason == "esm":
+    if reason == "esm":
         comment = \
             "The release that is affected by this bug is now under ESM. The bug will " + \
             "not be fixed as it doesn't meet ESM fix criterias. Please file a new bug if you " + \
@@ -257,6 +231,7 @@ def no_logs(bug, dry_run=False):
     print("Modified bug")
 
 
+
 def test_proposed(bug, dry_run=False):
     lp = lp_login()
     lp_bug = lp.bugs[bug]
@@ -283,6 +258,72 @@ def test_proposed(bug, dry_run=False):
     print("Modified bug")
 
 
+def _list_open_tasks(series, dry_run=False):
+    lp = lp_login()
+    lp_distro = lp.distributions["ubuntu"]
+    lp_series = lp_distro.getSeries(name_or_version=series)
+    for task in lp_series.searchTasks(status=STATUS_OPEN, omit_duplicates=True):
+        if not is_kernel_target(task.target.name):
+            continue
+#        if task.bug.title.startswith("CVE-20"):
+#            continue
+        lp_bug = task.bug
+        print(f"{task.web_link:<90} -- LP: #{lp_bug.id:<7} -- {lp_bug.title}")
+
+
+def _wontfix_eol_tasks(series, bug, dry_run=False):
+    """Close a task as \"Won't Fix\"."""
+    lp = lp_login()
+    lp_bug = lp.bugs[bug]
+
+    lp_distro = lp.distributions["ubuntu"]
+    lp_series = lp_distro.getSeries(name_or_version=series)
+
+    comment = \
+        f"Ubuntu {lp_series.version} ({lp_series.title.lstrip('The ')} has reached end " + \
+        "of life and this bug will not be fixed for that specific release. Please file " + \
+        "a new bug if this issue still exists in a supported release."
+
+    modified = False
+
+    for target in bug_targets(lp_bug):
+        first = True
+        for lp_task in target:
+            target_name, target_series_name, status = bug_task_details(lp_task)
+
+            color = NC
+            if is_kernel_target(target_name) and target_series_name == series and status in STATUS_OPEN:
+                modified = True
+                color = YELLOW
+
+            if first:
+                first = False
+                print_task(bug=bug, target=target_name, series=target_series_name, status=status, title=lp_bug.title, color=color)
+            else:
+                print_task(series=target_series_name, status=status, color=color)
+
+            if color != NC and not dry_run:
+                try:
+                    lp_task.status = "Won't Fix"
+                    LP_task.lp_save()
+                except Exception:
+                    print("Failed to set task status", file=sys.stderr)
+
+    if modified:
+        print()
+        print("Comment to be added:")
+        print(comment)
+        print()
+        if dry_run:
+            print("Bug was *NOT* modified (dry run)")
+        else:
+            lp_bug.newMessage(content=comment)
+            lp_bug.lp_save()
+            print("Bug was modified")
+    else:
+        print("Bug was *NOT* modified (nothing to do)")
+
+
 @click.group()
 def main():
     pass
@@ -298,13 +339,6 @@ def duplicate_dkms(bug, dry_run):
 
 @main.command()
 @click.argument("bug")
-@click.argument("series_or_kernel")
-@click.option("--dry-run", is_flag=True)
-def wontfix_eol(bug, series_or_kernel, dry_run):
-    wontfix("eol", bug, series_or_kernel=series_or_kernel, dry_run=dry_run)
-
-@main.command()
-@click.argument("bug")
 @click.option("--dry-run", is_flag=True)
 def wontfix_esm(bug, dry_run):
     wontfix("esm", bug, dry_run=dry_run)
@@ -316,17 +350,34 @@ def wontfix_esm(bug, dry_run):
 def wontfix_no_response(bug, dry_run):
     wontfix("no-response", bug, dry_run=dry_run)
 
+
 @main.command()
 @click.argument("bug")
 @click.option("--dry-run", is_flag=True)
 def ask_for_logs(bug, dry_run):
     no_logs(bug, dry_run=dry_run)
 
+
 @main.command()
 @click.argument("bug")
 @click.option("--dry-run", is_flag=True)
 def ask_for_testing_proposed(bug, dry_run):
     test_proposed(bug, dry_run=dry_run)
+
+
+@main.command()
+@click.argument("series")
+@click.option("--dry-run", is_flag=True)
+def list_open_tasks(series, dry_run):
+    _list_open_tasks(series, dry_run=dry_run)
+
+
+@main.command()
+@click.argument("series")
+@click.argument("bug")
+@click.option("--dry-run", is_flag=True)
+def wontfix_eol_tasks(series, bug, dry_run):
+    _wontfix_eol_tasks(series, bug, dry_run=dry_run)
 
 
 if __name__ == "__main__":
