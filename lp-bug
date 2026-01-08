@@ -305,7 +305,63 @@ def _wontfix_eol_tasks(series, bug, dry_run=False):
             if color != NC and not dry_run:
                 try:
                     lp_task.status = "Won't Fix"
-                    LP_task.lp_save()
+                    lp_task.lp_save()
+                except Exception:
+                    print("Failed to set task status", file=sys.stderr)
+
+    if modified:
+        print()
+        print("Comment to be added:")
+        print(comment)
+        print()
+        if dry_run:
+            print("Bug was *NOT* modified (dry run)")
+        else:
+            lp_bug.newMessage(content=comment)
+            lp_bug.lp_save()
+            print("Bug was modified")
+    else:
+        print("Bug was *NOT* modified (nothing to do)")
+
+
+def _wontfix_eol_bug(bug, series=None, dry_run=False):
+    """Close all open tasks of a bug as \"Won't Fix\"."""
+    lp = lp_login()
+    lp_bug = lp.bugs[bug]
+
+    if series:
+        lp_distro = lp.distributions["ubuntu"]
+        lp_series = lp_distro.getSeries(name_or_version=series)
+        ubuntu_release = f"Ubuntu {lp_series.version} ({lp_series.title.removeprefix('The ')}"
+    else:
+        ubuntu_release = "The Ubuntu release this bug has been reported for"
+
+    comment = \
+        f"{ubuntu_release} has reached end of life and this bug will not be fixed for that " + \
+        "specific release. Please file a new bug if this issue still exists in a supported release."
+
+    modified = False
+
+    for target in bug_targets(lp_bug):
+        first = True
+        for lp_task in target:
+            target_name, target_series_name, status = bug_task_details(lp_task)
+
+            color = NC
+            if status in STATUS_OPEN:
+                modified = True
+                color = YELLOW
+
+            if first:
+                first = False
+                print_task(bug=bug, target=target_name, series=target_series_name, status=status, title=lp_bug.title, color=color)
+            else:
+                print_task(series=target_series_name, status=status, color=color)
+
+            if color != NC and not dry_run:
+                try:
+                    lp_task.status = "Won't Fix"
+                    lp_task.lp_save()
                 except Exception:
                     print("Failed to set task status", file=sys.stderr)
 
@@ -378,6 +434,15 @@ def list_open_tasks(series, dry_run):
 @click.option("--dry-run", is_flag=True)
 def wontfix_eol_tasks(series, bug, dry_run):
     _wontfix_eol_tasks(series, bug, dry_run=dry_run)
+
+
+@main.command()
+@click.argument("bug")
+@click.option("--series")
+@click.option("--dry-run", is_flag=True)
+def wontfix_eol_bug(bug, series, dry_run):
+    """Close all open tasks of a bug as \"Won't Fix\"."""
+    _wontfix_eol_bug(bug, series=series, dry_run=dry_run)
 
 
 if __name__ == "__main__":
