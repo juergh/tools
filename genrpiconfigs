@@ -22,10 +22,12 @@ for config in "${configs[@]}" ; do
 	arch=${config%%-*}
 	defconfig=${config#*-}
 
-	rm -rf buildd
-	mkdir buildd
-	ARCH=${arch} make O=buildd "${defconfig}"
-	localversion=$(grep '^CONFIG_LOCALVERSION=' buildd/.config | \
-					   sed 's/.*=//' | tr -d '"')
-	mv buildd/.config RPICONFIGS/"${config}.${localversion#-}"
+	if [ -e arch/"${arch}"/configs/"${defconfig}" ] ; then
+		rm -rf buildd
+		mkdir buildd
+		ARCH=${arch} make O=buildd "${defconfig}"
+		localversion=$(grep '^CONFIG_LOCALVERSION=' buildd/.config | \
+		               sed 's/.*=//' | tr -d '"')
+		mv buildd/.config RPICONFIGS/"${config}.${localversion#-}"
+	fi
 done
