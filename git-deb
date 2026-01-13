@@ -332,6 +332,7 @@ function do_send_email()
 	opts=(
 		"--suppress-cc=all"
 		"--to=${TO}"
+		"--8bit-encoding=utf-8"
 	)
 	if [ "${DRY_RUN}" -eq 1 ] ; then
 		opts+=("--dry-run")
