@@ -43,7 +43,10 @@ def init(hostname, username, dry_run, verbose):
 
 def cleanup_folder(folder, older_than=None, before=None):
     if not before:
-        before = datetime.now() - relativedelta(months=older_than)
+        if older_than:
+            before = datetime.now() - relativedelta(months=older_than)
+        else:
+            before = datetime.now()
 
     CLIENT.select_folder(folder)
 
@@ -150,17 +153,23 @@ def _move_mail(from_folder, to_folder, criteria):
 
 @cli.command(name="cleanup-folder")
 @click.argument("folder")
-@click.option("--older-than", type=int)
-@click.option("--before", type=str)
+@click.option("--older-than", type=int, help="Older than MONTHS")
+@click.option("--before", type=str, help="Before DATE")
 def _cleanup_folder(folder, older_than, before):
     cleanup_folder(folder, older_than=older_than, before=before)
 
 
 @cli.command(name="cleanup-trash")
-@click.option("--older-than", type=int)
-@click.option("--before", type=str)
+@click.option("--older-than", type=int, help="Older than MONTHS")
+@click.option("--before", type=str, help="Before DATE")
 def _cleanup_trash(older_than, before):
     cleanup_folder("[Gmail]/Trash", older_than=older_than, before=before)
+
+
+@cli.command(name="cleanup-noise")
+def _cleanup_noise():
+    for _, _, folder in CLIENT.list_folders(pattern="*/00-noise"):
+        cleanup_folder(folder)
 
 
 if __name__ == "__main__":
