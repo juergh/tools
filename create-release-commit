@@ -6,7 +6,7 @@
 function usage()
 {
 	cat <<EOF
-Usage: create-release [-d] [-h] [-s SUFFIX] [-u] [PREV_REL_COMMIT]
+Usage: create-release [-h] [-n] [-s SUFFIX] [-u] [PREV_REL_COMMIT]
 
 Create a Debian package release commit.
 
@@ -14,7 +14,7 @@ Postional arguments:
   PREV_REL_COMMIT      Previous release commit.
 
 Optional arguments:
-  -d, --dry-run        Show the new changelog entry without committing it.
+  -n, --dry-run        Show the new changelog entry without committing it.
   -h, --help           Show this help text and exit.
   -s, --suffix SUFFIX  Append SUFFIX to the current package version to generate
                        the new version rather than bumping the upload number.
@@ -29,7 +29,7 @@ prev_release=
 
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
-		-d|--dry-run)
+		-n|--dry-run)
 			dry_run=1
 			;;
 		-h|--help)
@@ -53,6 +53,18 @@ while [ "${#}" -gt 0 ] ; do
 	esac
 	shift
 done
+
+# FIXME: Shortcut for non-Ubuntu packages
+dist=$(dpkg-parsechangelog -S Distribution)
+if [ "${dist}" = UNRELEASED ] ; then
+	src=$(dpkg-parsechangelog -S Source)
+	version=$(dpkg-parsechangelog -S Version)
+	dist=$(dpkg-parsechangelog -S Distribution -o 1 -c 1)
+	dch --release --distribution "${dist}" ""
+	git add debian/changelog
+	git commit -s -m "Release ${src} (${version})"
+	exit
+fi
 
 DEBIAN=debian
 if [ -e debian/debian.env ] ; then

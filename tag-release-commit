@@ -64,7 +64,8 @@ if [ ${ubuntu} -eq 1 ] ; then
 	msg=${head_subject}
 else
 	tag=${version}
-	msg="Release: ${version}"
+	src=$(dpkg-parsechangelog -S Source)
+	msg="Release ${src} (${version})"
 fi
 
 tag=${tag//\~/_}
