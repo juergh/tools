@@ -6,7 +6,7 @@
 function usage()
 {
 	cat <<EOF
-Usage: create-release [-h] [-n] [-s SUFFIX] [-u] [PREV_REL_COMMIT]
+Usage: create-release [-h] [-s SUFFIX] [-u] [PREV_REL_COMMIT]
 
 Create a Debian package release commit.
 
@@ -14,7 +14,6 @@ Postional arguments:
   PREV_REL_COMMIT      Previous release commit.
 
 Optional arguments:
-  -n, --dry-run        Show the new changelog entry without committing it.
   -h, --help           Show this help text and exit.
   -s, --suffix SUFFIX  Append SUFFIX to the current package version to generate
                        the new version rather than bumping the upload number.
@@ -22,16 +21,12 @@ Optional arguments:
 EOF
 }
 
-dry_run=0
 suffix=
 ubuntu=0
 prev_release=
 
 while [ "${#}" -gt 0 ] ; do
 	case "${1}" in
-		-n|--dry-run)
-			dry_run=1
-			;;
 		-h|--help)
 			usage
 			exit
@@ -54,18 +49,6 @@ while [ "${#}" -gt 0 ] ; do
 	shift
 done
 
-# FIXME: Shortcut for non-Ubuntu packages
-dist=$(dpkg-parsechangelog -S Distribution)
-if [ "${dist}" = UNRELEASED ] ; then
-	src=$(dpkg-parsechangelog -S Source)
-	version=$(dpkg-parsechangelog -S Version)
-	dist=$(dpkg-parsechangelog -S Distribution -o 1 -c 1)
-	dch --release --distribution "${dist}" ""
-	git add debian/changelog
-	git commit -s -m "Release ${src} (${version})"
-	exit
-fi
-
 DEBIAN=debian
 if [ -e debian/debian.env ] ; then
 	ubuntu=1
@@ -74,61 +57,66 @@ if [ -e debian/debian.env ] ; then
 fi
 changelog=${DEBIAN}/changelog
 
-version=$(dpkg-parsechangelog -l"${changelog}" -S Version)
-
-ubuntu_prefix=
-if [ -z "${prev_release}" ] ; then
-	prev_release=$(git log --oneline -1000 | \
-	               grep -m1 -P "^[0-9a-f]{12,} UBUNTU: Ubuntu(-.*)?-${version}$" || \
-					   true)
-	ubuntu_prefix=${prev_release%-"${version}"}
-	ubuntu_prefix=${ubuntu_prefix#* Ubuntu}
-	prev_release=${prev_release%% *}
-fi
-if [ -z "${prev_release}" ] ; then
-	echo "Unable to find previous release commit" >&2
-	exit 1
-fi
-
-if [ -n "${suffix}" ] ; then
-	new_version=${version}${suffix}
-else
-	upload=$(echo "${version}" | grep -oP '[0-9]+$')
-	new_version=${version%"${upload}"}$((upload + 1))
-fi
-
 src=$(dpkg-parsechangelog -l"${changelog}" -S Source)
-dist=$(dpkg-parsechangelog -l"${changelog}" -S Distribution)
+version=$(dpkg-parsechangelog -l"${changelog}" -S Version)
+dist=$(dpkg-parsechangelog -l "${changelog}" -S Distribution)
 urgency=$(dpkg-parsechangelog -l"${changelog}" -S Urgency)
 
-TMP=$(mktemp)
-{
-	echo "${src} (${new_version}) ${dist}; urgency=${urgency}"
-	echo
-	if [ ${ubuntu} -eq 1 ] ; then
-		git log "${prev_release}".. | git-ubuntu-log
-	else
-		git log --format='  * %s' --reverse "${prev_release}"..
+case "${src}" in
+	linux-firmware*)
+		ubuntu=1
+		ubuntu_prefix=
+		;;
+esac
+
+if [ "${dist}" != UNRELEASED ] ; then
+	# Add a new changelog entry
+
+	ubuntu_prefix=
+	if [ -z "${prev_release}" ] ; then
+		prev_release=$(git log --oneline -1000 | \
+		               grep -m1 -P "^[0-9a-f]{12,} UBUNTU: Ubuntu(-.*)?-${version}$" || \
+		               true)
+		ubuntu_prefix=${prev_release%-"${version}"}
+		ubuntu_prefix=${ubuntu_prefix#* Ubuntu}
+		prev_release=${prev_release%% *}
 	fi
-	echo
-	echo " -- ${DEBFULLNAME} <${DEBEMAIL}>  $(date -R)"
-	if [ "${dry_run}" -eq 0 ] ; then
+	if [ -z "${prev_release}" ] ; then
+		echo "Unable to find previous release commit" >&2
+		exit 1
+	fi
+
+	if [ -n "${suffix}" ] ; then
+		new_version=${version}${suffix}
+	else
+		upload=$(echo "${version}" | grep -oP '[0-9]+$')
+		new_version=${version%"${upload}"}$((upload + 1))
+	fi
+
+	{
+		echo "${src} (${new_version}) UNRELEASED; urgency=${urgency}"
+		echo
+		if [ ${ubuntu} -eq 1 ] ; then
+			git log "${prev_release}".. | git-ubuntu-log
+		else
+			git log --format='  * %s' --reverse "${prev_release}"..
+		fi
+		echo
+		echo " -- ${DEBFULLNAME} <${DEBEMAIL}>  $(date -R)"
 		echo
 		cat "${changelog}"
-	fi
-} > "${TMP}"
-
-if [ "${dry_run}" -eq 1 ] ; then
-	cat "${TMP}"
-	exit
+	} > "${changelog}".new
+	mv "${changelog}".new "${changelog}"
 fi
 
-mv "${TMP}" "${changelog}"
+# Close the release
+dist=$(dpkg-parsechangelog -l "${changelog}" -S Distribution -o 1 -c 1)
+dch --changelog "${changelog}" --release --distribution "${dist}" ""
 
+# Commit the release
+version=$(dpkg-parsechangelog -l"${changelog}" -S Version)
 if [ ${ubuntu} -eq 1 ] ; then
-	set -x
-	git commit -s -m "UBUNTU: Ubuntu${ubuntu_prefix}-${new_version}" -- "${changelog}"
+	git commit -s -m "UBUNTU: Ubuntu${ubuntu_prefix}-${version}" -- "${changelog}"
 else
-	set -x
-	git commit -s -m "Release: ${new_version}" -- debian/changelog
+	git commit -s -m "Release ${src} (${version})" -- "${changelog}"
 fi
