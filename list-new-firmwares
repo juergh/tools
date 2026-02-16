@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+#
+# List firmwares that exists on new branch but not on old branch
+#
+# Example:
+#   list-new-firmwares noble questing fwinfo | \
+#   xargs git log --graph --oneline noble..questing --
+#
+
+import subprocess
+import sys
+
+
+def load_whence(branch):
+    w = subprocess.check_output(["git", "show", f"{branch}:WHENCE"], text=True)
+    u = subprocess.check_output(["git", "show", f"{branch}:WHENCE.ubuntu"], text=True)
+
+    entries = []
+    for line in (w + u).split("\n"):
+        if line.startswith("File:") or line.startswith("RawFile:") or  line.startswith("Link:"):
+            entry = line.split(":", 1)[1].partition(" -> ")[0]
+            entry = entry.replace(r"\ ", " ").replace('"', "").replace("'", "").strip()
+            entries.append(entry)
+    return entries
+
+
+def load_fwinfo(fwinfo):
+    entries = []
+    with open(fwinfo, encoding="utf-8") as fh:
+        for entry in fh:
+            entry = entry.removeprefix("firmware:")
+            entry = entry.strip()
+            entries.append(entry)
+    return entries
+
+
+if len(sys.argv) != 4:
+    print("Usage: list-new-firmwares <old-branch> <new-branch> <fwinfo-file>")
+    sys.exit(2)
+
+old_branch, new_branch, fwinfo = sys.argv[1:]
+
+old_files = load_whence(old_branch)
+new_files = load_whence(new_branch)
+fwinfo_files = load_fwinfo(fwinfo)
+
+for fw in fwinfo_files:
+    if fw in new_files and fw not in old_files:
+        print(fw)
