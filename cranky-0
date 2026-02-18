@@ -81,7 +81,7 @@ def rebase(dry_run, tag, tag2):
     run(["cranky-rebase", "--tag", tag] + opts)
 
     ch = parse_changelog()
-    if ch.package == "linux-raspi-realtime":
+    if ch.package == "linux-raspi-realtime" and os.path.exists("debian.realtime"):
         run(["cranky-update-tree"] + opts + ["--strategy", "cherry-pick", "realtime", tag2[0]])
 
 
@@ -142,7 +142,7 @@ def close_(force):
 
     run([CRANKY, "close"])
 
-    if parse_changelog().package == "linux-raspi-realtime":
+    if parse_changelog().package == "linux-raspi-realtime" and os.path.exists("debian.realtime"):
         print()
         print("*** FIXME ***")
         print()
