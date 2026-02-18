@@ -196,14 +196,12 @@ Kernel selections:
         epilog=epilog,
     )
     parser.add_argument(
-        "-f",
         "--field",
         help="List only the provided fields. If not provided, lists all fields. "
         "Comma-separated list. "
         f"Possible values are: {', '.join(PKG_FIELDS)}.",
     )
     parser.add_argument(
-        "-t",
         "--pkg-type",
         choices=("main", "meta", "signed", "lrm", "extra", "extra2", "snap"),
         help="List only packages of the provided type. "
