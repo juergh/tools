@@ -165,9 +165,9 @@ def print_package(pkg, fields=None, verbose=False):
         fields = PKG_FIELDS
 
     if verbose:
-        data = [f"{f}={pkg[f]}" for f in PKG_FIELDS if f in fields]
+        data = [f"{f}={pkg[f]}" for f in fields if f in PKG_FIELDS]
     else:
-        data = [pkg[f] for f in PKG_FIELDS if f in fields]
+        data = [pkg[f] for f in fields if f in PKG_FIELDS]
 
     print(" ".join(data))
 
