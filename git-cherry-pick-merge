@@ -1,0 +1,31 @@
+#!/bin/bash -eu
+#
+# Cherry-pick (transplant) a merge
+#
+
+merge_commit=${1}
+
+read -r p1 p2 < <(git show -s --format=%p "${merge_commit}")
+
+if [ -z "${p2}" ] ; then
+	echo "EE: Not a merge commit: ${merge_commit}" >&2
+	exit 1
+fi
+
+branch=$(git symbolic-ref --short HEAD)
+
+tmp_branch=tmp-$$
+git checkout -b "${tmp_branch}"
+
+while IFS= read -r line ; do
+	echo "II: Cherry-pick ${line}"
+	git cherry-pick "${line%% *}"
+done < <(git log --reverse --oneline "${p1}".."${p2}")
+
+git checkout "${branch}"
+
+echo "II: Merge branch ${tmp_branch}"
+git merge "${tmp_branch}" --no-ff -m "tbd"
+git commit --amend -C "${merge_commit}"
+
+git branch -d "${tmp_branch}"
