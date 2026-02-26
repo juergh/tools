@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+#
+# Create Jira issue(s) from LP bug(s)
+#
+
+# if you get an error like:
+#   AttributeError: 'Magic' object has no attribute 'cookie'
+# then:
+#   apt purge python3-magic OR
+#   pip3 install filemagic
+
+import argparse
+import json
+import sys
+
+from jira import JIRA
+from launchpadlib.launchpad import Launchpad
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Create Jira issue(s) from LP bug(s).")
+    parser.add_argument("-c", "--component", required=True, help="Jira component name.")
+    parser.add_argument(
+        "-l",
+        "--label",
+        action="append",
+        help="Jira label name to add to the issue. Can be provided multiple times to add multiple labels.",
+    )
+    parser.add_argument("-d", "--dry-run", action="store_true", help="Enable dry-run mode.")
+    parser.add_argument("-f", "--force", action="store_true", help="Create card even " + "if it exists already")
+    parser.add_argument(
+        "-p", "--project", default="KERN", help="Jira project key. " + "If not provided, defaults to 'KERN'"
+    )
+    parser.add_argument(
+        "-s", "--status", default="Untriaged", help="Jira issue status. " + "If not provided, defaults to 'Untriaged'"
+    )
+    parser.add_argument("bug", type=int, nargs="+", help="LP bug number to create the Jira issue from.")
+    args = parser.parse_args()
+
+    jira_server = "https://warthogs.atlassian.net"
+    jira_options = {
+        "server": jira_server,
+    }
+
+    # Note: Python JIRA uses ~/.netrc for authentication
+    jira = JIRA(jira_options)
+    lp = Launchpad.login_with("bug2issue", "production", version="devel")
+
+    for bug in args.bug:
+        # Fetch the LP bug
+        lp_bug = lp.bugs[bug]
+
+        # Check if the card exists already
+        if not args.force:
+            jql = 'project = "{}" and component = "{}" and summary ~ "#{} "'.format(args.project, args.component, bug)
+            issues = jira.search_issues(jql)
+            if issues:
+                print("Issue might exist already:")
+                for issue in issues:
+                    print("{}/browse/{} ({})".format(jira_server, issue.key, issue.fields.summary))
+                print("Use -f, --force to create it anyways")
+                sys.exit(1)
+
+        # Populate the necessary fields for the new Jira issue
+        jira_summary = "LP: #{} - {}".format(bug, lp_bug.title)
+        jira_fields = {
+            "components": [
+                {
+                    "name": args.component,
+                },
+            ],
+            "description": lp_bug.description[:4000],
+            "issuetype": {
+                "name": "Task",
+                "subtask": False,
+            },
+            "project": {
+                "key": args.project,
+            },
+            "summary": jira_summary[:250],
+        }
+
+        # Add a label
+        if args.label:
+            jira_fields["labels"] = args.label
+
+        # Add a link to the LP bug
+        for field in jira.fields():
+            if field["name"] == "Bug Link":
+                jira_fields[field["id"]] = "https://bugs.launchpad.net/bugs/{}".format(bug)
+                break
+
+        # Create the Jira issue
+        if args.dry_run:
+            print("[dry-run] Create issue ({})".format(json.dumps(jira_fields, indent=4)))
+        else:
+            jira_issue = jira.create_issue(fields=jira_fields)
+            print("{}/browse/{} ({})".format(jira_server, jira_issue.key, jira_issue.fields.summary))
+
+        # Tag the LP bug
+        if args.dry_run:
+            print("[dry-run] Tagging LP: #{}".format(bug))
+        else:
+            lp_bug.tags += [jira_issue.key.lower()]
+            lp_bug.lp_save()
+
+        # Add a web link to the LP bug as well (just in case)
+        simple_link = {
+            "url": "https://bugs.launchpad.net/bugs/{}".format(bug),
+            "title": "LP: #{}".format(bug),
+        }
+        if args.dry_run:
+            print("[dry-run] Add simple link ({})".format(json.dumps(simple_link, indent=4)))
+        else:
+            jira.add_simple_link(jira_issue, simple_link)
+
+        # Transition the issue to the provided status
+        if args.dry_run:
+            print("[dry-run] Transition issue ({})".format(args.status))
+        else:
+            # Find the transition ID for the provided status
+            jira_transition = None
+            for t in jira.transitions(jira_issue):
+                if args.status.lower() == t["name"].lower():
+                    jira_transition = t["id"]
+                    break
+            if jira_transition is None:
+                print("No transition found for status: {}".format(args.status), file=sys.stderr)
+            else:
+                jira.transition_issue(jira_issue, jira_transition)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
