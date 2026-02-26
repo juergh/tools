@@ -1,0 +1,41 @@
+#!/bin/bash -eu
+#
+# Patch board-2.bin for xxx
+#
+
+function out()
+{
+	rm -rf "${TMP_D}"
+}
+
+TMP_D=$(mktemp -d)
+trap out EXIT
+
+cwd=$(pwd)
+
+echo "Use temp dir ${TMP_D}"
+
+cd "${TMP_D}"
+
+if [ -e "${cwd}"/ath12k-bdencoder ] ; then
+	cp "${cwd}"/ath12k-bdencoder .
+else
+	wget https://raw.githubusercontent.com/qca/qca-swiss-army-knife/refs/heads/master/tools/scripts/ath12k/ath12k-bdencoder
+fi
+
+fw_dir=/usr/lib/firmware/ath12k/WCN7850/hw2.0/
+
+cp ${fw_dir}/board-2.bin.zst .
+unzstd -f board-2.bin.zst
+
+new_board_name="bus=pci,vendor=17cb,device=1103,subsystem-vendor=105b,subsystem-device=e108,qmi-chip-id=18,qmi-board-id=255"
+existing_board_name="bus=pci,vendor=17cb,device=1103,subsystem-vendor=105b,subsystem-device=e0c4,qmi-chip-id=18,qmi-board-id=255,variant=HP_G8_Lancia14"
+
+python3 ath12k-bdencoder -e board-2.bin
+cp "${existing_board_name}".bin "${new_board_name}".bin
+
+python3 ath12k-bdencoder -a board-2.bin "${new_board_name}".bin "${new_board_name}"
+
+echo "Copy modified board-2.bin.zst to ${fw_dir}"
+zstd -f -19 board-2.bin
+sudo cp board-2.bin.zst "${fw_dir}"
