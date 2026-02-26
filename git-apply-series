@@ -1,0 +1,21 @@
+#!/bin/bash -eu
+#
+# Apply a Debian patch series
+#
+
+series=${1}
+
+if ! [ -e "${series}" ] ; then
+	echo "Series file not found: ${series}" >&2
+	exit 1
+fi
+
+patches_dir=$(dirname "${series}")
+
+readarray -t patches < <(grep -vP '^\s*#|^\s*$' "${1}")
+
+for patch in "${patches[@]}" ; do
+	p=${patches_dir}/${patch}
+	echo "-- Apply ${p}"
+	git am "${p}"
+done
