@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+
+import json
+
+from launchpadlib.launchpad import Launchpad
+
+lp = Launchpad.login_with("tools", "production", version="devel")
+
+#repo = lp.git_repositories.getByPath(path="~ubuntu-kernel/ubuntu/+source/linux-firmware")
+repo = lp.git_repositories.getByPath(path="~juergh/+git/linux")
+print(json.dumps(repo.getRules(), indent=4))
