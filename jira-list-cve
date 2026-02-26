@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+#
+# List Jira issues
+#
+
+import argparse
+import json
+import sys
+
+from jira import JIRA
+from prettytable import PrettyTable
+
+
+def dump(issue):
+    print(json.dumps(issue.raw["fields"], indent=4))
+
+
+def search(jira, query, max_results=50):
+    start_at = 0
+    while True:
+        results = jira.search_issues(query, startAt=start_at, maxResults=max_results)
+        for issue in results:
+            yield issue
+
+        num_results = len(results)
+        if num_results < max_results:
+            return
+        start_at += num_results
+
+def sort_by_series(issue):
+    series = issue.fields.summary.split()[1].lower()
+    if series in ("trusty", "xenial"):
+        return "1 " + series
+    return "2 " + series
+    
+
+def main():
+    parser = argparse.ArgumentParser(description="List Jira issues")
+    args = parser.parse_args()
+
+    # Note: Python JIRA uses ~/.netrc for authentication
+    jira_server = "https://warthogs.atlassian.net"
+    jira = JIRA(server=jira_server)
+
+
+    for issue in search(jira,
+                        ("project='KCVE' and "
+                         "summary~'CVE-*' and "
+                         "status='In Evaluation' and "
+                         "priority='highest' and "
+                         "issuetype!='Subtask'"),
+                        max_results=10):
+
+        subtasks = []
+        for subtask in issue.fields.subtasks:
+            if str(subtask.fields.status).lower() in ("done", "won't fix", "not affected"):
+                continue
+            subtasks.append(subtask)
+
+        print()
+        print(f"{jira_server}/browse/{issue.key}")
+        for subtask in sorted(subtasks, key=sort_by_series, reverse=True):
+            print(f"   {subtask.fields.summary:<21} -- {subtask.fields.status}")
+
+    return 0
+
+#        if parent and task:
+#            table.add_row([f"{jira_server}/browse/{task.key}",
+#                           task.fields.summary,
+#                           task.fields.priority,
+#                           task.fields.assignee,
+#                           getattr(task.fields, sla_id, "N/A"),
+#                           getattr(task.fields, tc_id, "N/A"),
+#                           parent.fields.priority,
+#                           parent.fields.assignee])
+                        
+
+if __name__ == "__main__":
+    sys.exit(main())
