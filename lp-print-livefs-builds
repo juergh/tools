@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+
+from launchpadlib.launchpad import Launchpad
+
+series_n = "noble"
+owner = "ubuntu-cdimage"
+name = "ubuntustudio"
+
+lp = Launchpad.login_with("tools", "production", version="devel")
+
+#distro = lp.distributions["ubuntu"]
+#series = distro.getSeries(name_or_version=series_n)
+
+#f = lp.livefses.getByName(distro_series=series, owner=lp.people[owner], name=name)
+url = "https://api.launchpad.net/devel/~ubuntu-cdimage/+livefs/ubuntu/noble/ubuntustudio/builds"
+
+builds = lp.load(url)
+
+for b in builds:
+    print(b)
+
+#print(b)
