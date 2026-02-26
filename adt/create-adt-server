@@ -1,0 +1,328 @@
+#!/bin/bash -eu
+#
+# Create an ADT server VM
+#
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	if [ -n "${USER_DATA}" ] ; then
+		rm -f "${USER_DATA}"
+	fi
+
+	if [ -n "${SERVER_NAME}" ] && [ "${KEEP}" -eq 0 ] ; then
+		echo "-- Delete server ${SERVER_NAME}"
+		openstack server delete "${SERVER_NAME}"
+	fi
+
+	if [ ${rc} -ne 0 ] ; then
+		echo "-- Error: Script failed (rc=${rc})" >&2
+	fi
+
+	exit "${rc}"
+}
+
+function wait_for_status()
+{
+	local timeout=${1} type=${2} name=${3} status=${4}
+	local abs_timeout cur_status
+
+	abs_timeout=$(($(date +%s) + timeout))
+	while [ "$(date +%s)" -lt "${abs_timeout}" ] ; do
+		cur_status=$(openstack "${type}" show "${name}" | \
+						 awk '$2 == "status" { print $4 }')
+		echo "-- ${type^} status: ${cur_status}"
+		if [ "${cur_status}" = "${status}" ] ; then
+			return 0
+		fi
+		sleep 10
+	done
+
+	echo "-- Error: Timeout" >&2
+	return 1
+}
+
+function list_image_props()
+{
+	local image=${1}
+
+	cat <<EOF | python3 -
+import json
+import sys
+
+try:
+    image_meta = json.loads('''
+$(openstack image show -f json "${image}" | sed "/simplestreams_metadata/d")
+''')
+except:
+    sys.exit(1)
+
+for key, val in image_meta['properties'].items():
+        print(key + '=' + val)
+EOF
+}
+
+function set_IMAGE_PROPS()
+{
+	local image=${1}
+	local prop
+
+	while IFS= read -r prop ; do
+		key=${prop%%=*}
+		val=${prop#*=}
+		IMAGE_PROPS["${key}"]="${val}"
+	done < <(list_image_props "${image}")
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] IMAGE
+
+Postional arguments:
+  IMAGE                   OpenStack image name or ID.
+
+Optional arguments:
+  -a, --arch ARCH         Image OS architecture.
+  -e, --keep              Keep server.
+  -h, --help              Show this help text and exit.
+  -k, --key-name KEYNAME  An existing OpenStack SSH keyname. If not provided,
+                          uses the current username as the keyname.
+  -r, --release RELEASE   Image OS release.
+  -x, --debug             Enable debugging output.
+EOF
+}
+
+declare -A release_map=(
+	["23.04"]="lunar"
+	["22.10"]="kinetic"
+	["22.04"]="jammy"
+	["20.04"]="focal"
+	["18.04"]="bionic"
+	["16.04"]="xenial"
+	["14.04"]="trusty"
+	["XXX"]=""
+)
+
+declare -A arch_map=(
+	["aarch64"]="arm64"
+	["arm"]="armhf"
+	["i686"]="i386"
+	["powerpc64el"]="ppc64le"
+	["s390x"]="s390x"
+	["x86_64"]="amd64"
+	["XXX"]=""
+)
+
+arch=
+keep=0
+debug=0
+key_name=${USER}
+release=
+image=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-a|--arch)
+			shift
+			arch=${1}
+			;;
+		-e|--keep)
+			keep=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-k|--key-name)
+			shift
+			key_name=${1}
+			;;
+		-r|--release)
+			shift
+			release=${1}
+			;;
+		-x|--debug)
+			debug=1
+			;;
+		-*)
+			echo "-- Error: Invalid argument: ${1}" >&2
+			exit 2
+			;;
+		*)
+			if [ -n "${image}" ] ; then
+				echo "-- Error: Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			image=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${image}" ] ; then
+	usage
+	exit 2
+fi
+
+flavor=m1.small
+
+# FIXME
+case "${OS_AUTH_URL}" in
+	*.bos01.scalingstack*)
+		network=net_kernel-automated-tests
+		security_group=allow-ping-and-ssh
+		;;
+	*.bos02.scalingstack*)
+		network=net_prod_kernel-testing
+		security_group=allow-ssh
+		;;
+	*)
+		echo "Unsupported environment: ${OS_AUTH_URL}" >&2
+		exit 1
+		;;
+esac
+
+setup_testbed=${AUTOPKGTEST}/setup-commands/setup-testbed
+setup_canonical=${AUTOPKGTEST_CLOUD}/autopkgtest-cloud/worker-config-production/setup-canonical.sh
+
+# Globals
+USER_DATA=
+SERVER_NAME=
+KEEP=${keep}
+trap out EXIT INT TERM HUP
+
+test -e "${setup_testbed}"
+test -e "${setup_canonical}"
+
+# Get the image properties
+declare -A IMAGE_PROPS
+set_IMAGE_PROPS "${image}"
+
+if [ ${debug} -eq 1 ] ; then
+	echo "++ IMAGE_PROPS:"
+	for k in "${!IMAGE_PROPS[@]}" ; do
+		echo "   $k: ${IMAGE_PROPS[${k}]}"
+	done
+fi
+
+if [ -z "${release}" ] ; then
+	release_num=${IMAGE_PROPS["os_version"]:-XXX}
+	release=${release_map[${release_num}]}
+else
+	for num in "${!release_map[@]}" ; do
+		if [ "${release}" = "${release_map[${num}]}" ] ; then
+			release_num=${num}
+			break
+		fi
+	done
+fi
+
+if [ -z "${arch}" ] ; then
+	arch=${arch_map[${IMAGE_PROPS["architecture"]:-XXX}]}
+fi
+
+if [ -z "${release}" ] || [ -z "${arch}" ] ; then
+	echo "-- Error: Unable to determine image release and/or architecture" >&2
+	exit 1
+fi
+echo "-- Image release/architecture: ${release}/${arch}"
+
+# Create cloud-init userdata
+USER_DATA=$(mktemp)
+cat << EOF > "${USER_DATA}"
+#cloud-config
+
+manage_etc_hosts: true
+package_update: true
+
+packages:
+  - linux-generic
+EOF
+
+if [ "${arch}" = amd64 ] && [ "${release_num%.*}" -ge 20 ] ; then
+	cat << EOF >> "${USER_DATA}"
+apt:
+  primary:
+    - arches: [amd64, i386]
+      uri: http://ftpmaster.internal/ubuntu
+runcmd:
+    - dpkg --add-architecture i386
+EOF
+fi
+
+# Create a server
+SERVER_NAME=juergh/adt-${release}-${arch}-$(date +%Y%m%d-%H%M%S)
+echo "-- Server name: ${SERVER_NAME}"
+server_id=$(openstack server create \
+					  --flavor "${flavor}" \
+					  --image "${image}" \
+					  --user-data "${USER_DATA}" \
+					  --key-name "${key_name}" \
+					  --network "${network}" \
+					  --security-group "${security_group}" \
+					  "${SERVER_NAME}" | \
+				tee /dev/stderr | awk '$2 == "id" { print $4 }')
+echo "-- Server ID: ${server_id}"
+wait_for_status 300 server "${server_id}" ACTIVE
+
+# Get the server's IP address
+ip_addr=$(openstack server show "${server_id}" | \
+			  awk '$2 == "addresses" { print $4 }')
+ip_addr=${ip_addr#*=}
+echo "-- Server IP address: ${ip_addr}"
+
+ssh_cmd=(
+	"ssh"
+	"-o" "UserKnownHostsFile=/dev/null"
+	"-o" "StrictHostKeyChecking=no"
+	"-o" "ConnectTimeout=10"
+	"-o" "LogLevel=ERROR"
+	"ubuntu@${ip_addr}"
+)
+
+echo "-- Wait for SSH"
+timeout 300 sh -c "while ! ${ssh_cmd[*]} true ; do sleep 5 ; done"
+
+echo "-- Wait until cloud-init is done"
+timeout 25m "${ssh_cmd[@]}" "while [ ! -e /var/lib/cloud/instance/boot-finished ] ; do sleep 1 ; done"
+
+echo "-- Run setup_testbed script"
+# shellcheck disable=SC2002
+cat "${setup_testbed}" | \
+	"${ssh_cmd[@]}" "sudo env MIRROR='${MIRROR:-}' RELEASE='${release}' sh -"
+
+echo "-- Run setup_canonical script"
+# shellcheck disable=SC2002
+cat "${setup_canonical}" | \
+	"${ssh_cmd[@]}" "sudo env MIRROR='${MIRROR:-}' RELEASE='${release}' sh -"
+
+echo "-- Stop server"
+"${ssh_cmd[@]}" "( sudo poweroff >/dev/null 2>&1 & ) &"
+wait_for_status 300 server "${server_id}" SHUTOFF
+
+echo "-- Start server"
+openstack server start "${server_id}"
+
+echo "-- Wait for SSH"
+timeout 300 sh -c "while ! ${ssh_cmd[*]} true ; do sleep 5 ; done"
+
+echo "-- Clean systemd journal"
+"${ssh_cmd[@]}" "sudo journalctl --rotate --vacuum-time=12h" || true
+
+echo "-- Stop server"
+"${ssh_cmd[@]}" "( sudo poweroff >/dev/null 2>&1 & ) &"
+wait_for_status 300 server "${server_id}" SHUTOFF
+
+# Create the image
+image_name=juergh/adt-${release}-${arch}-$(date +%Y%m%d).img
+echo "-- Image name: ${image_name}"
+image_id=$(openstack server image create \
+					 --name "${image_name}" "${server_id}" | \
+			   tee /dev/stderr | awk '$2 == "id" { print $4 }')
+echo "-- Image ID: ${image_id}"
+wait_for_status 300 image "${image_id}" active
+echo "-- Created image: ${image_name}"

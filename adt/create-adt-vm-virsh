@@ -1,0 +1,129 @@
+#!/bin/bash -eu
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	[ -n "${TMPFILE}" ] && rm -f "${TMPFILE}"
+	[ ${rc} -ne 0 ] && echo "Error: Script failed" >&2
+
+	exit "${rc}"
+}
+
+function create_os_volume()
+{
+	local vol_size
+
+	vol_size=$(qemu-img info "${IMAGE}" | grep '^virtual size')
+	vol_size=${vol_size#*\(}
+	vol_size=${vol_size%% *}
+
+	cat <<EOF >"${TMPFILE}"
+<volume type='file'>
+  <name>${NAME}.img</name>
+  <capacity unit='bytes'>${vol_size}</capacity>
+  <target>
+    <format type='qcow2'/>
+  </target>
+</volume>
+EOF
+
+	virsh vol-create --pool default "${TMPFILE}"
+	virsh vol-upload --pool default "${NAME}".img "${IMAGE}"
+}
+
+function define_vm()
+{
+	local uuid vol_path mac_addr
+
+	uuid=$(uuidgen)
+	vol_path=$(virsh vol-path --pool default "${NAME}".img | grep "${NAME}")
+	mac_addr="52:54:00:${uuid:0:2}:${uuid:2:2}:${uuid:4:2}"
+	
+	cat <<EOF >"${TMPFILE}"
+<domain type='qemu'>
+  <name>${NAME}</name>
+  <uuid>${uuid}</uuid>
+  <memory unit='MiB'>1024</memory>
+  <vcpu placement='static'>1</vcpu>
+  <os>
+    <type arch='aarch64' machine='virt'>hvm</type>
+    <loader readonly='yes' type='pflash'>/usr/share/AAVMF/AAVMF_CODE.fd</loader>
+    <nvram>/var/lib/libvirt/qemu/nvram/${NAME}_VARS.fd</nvram>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <gic version='2'/>
+  </features>
+  <cpu mode='custom' match='exact' check='none'>
+    <model fallback='allow'>cortex-a57</model>
+  </cpu>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-aarch64</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='${vol_path}'/>
+      <target dev='vda' bus='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x0'/>
+    </disk>
+    <controller type='pci' index='0' model='pcie-root'/>
+    <controller type='pci' index='1' model='pcie-root-port'>
+      <model name='pcie-root-port'/>
+      <target chassis='1' port='0x8'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x0' multifunction='on'/>
+    </controller>
+    <interface type='network'>
+      <mac address='${mac_addr}'/>
+      <source network='default'/>
+      <model type='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x02' slot='0x00' function='0x0'/>
+    </interface>
+    <serial type='pty'>
+      <target type='system-serial' port='0'>
+        <model name='pl011'/>
+      </target>
+    </serial>
+    <console type="pty">
+      <target type="serial" port="0"/>
+    </console>
+  </devices>
+</domain>
+EOF
+
+	virsh define "${TMPFILE}"
+}
+
+function start_vm()
+{
+	virsh start "${NAME}"
+}
+
+function get_ip_addr()
+{
+}
+
+NAME=foobar
+release=hirsute
+ARCH=arm64
+
+IMAGE=/data/images/autopkgtest/autopkgtest-${release}-${ARCH}.img
+
+if ! [ -f "${IMAGE}" ] ; then
+	echo "Error: No such image file: ${IMAGE}" >&2
+	exit 1
+fi
+
+TMPFILE=$(mktemp)
+trap out EXIT INT TERM HUP
+
+create_os_volume
+define_vm
+start_vm
+get_ip_addr
