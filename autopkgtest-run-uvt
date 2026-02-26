@@ -1,0 +1,39 @@
+#!/bin/bash
+#
+# Run autopkgtest in a local uvt libvirt instance
+#
+
+#	--apt-pocket=proposed=src:linux-base \
+#	--env=ADT_TEST_TRIGGERS=linux-base/4.14ubuntu1 \
+
+series=questing
+package=kdump-tools
+#trigger=linux-base
+
+function out()
+{
+	rm -rf "${WORK_DIR}"
+
+}
+
+WORK_DIR=/tmp/autopkgtest-work.$$
+trap out EXIT INT TERM HUP
+
+apt_pocket=()
+if [ -n "${trigger}" ] ; then
+	apt_pocket=("--apt-pocket=proposed=src:${trigger}")
+fi
+
+autopkgtest \
+	--output-dir "${WORK_DIR}" \
+	--apt-upgrade \
+	--timeout-copy=6000 \
+	--timeout-short=300 \
+	--timeout-copy=20000 \
+	--timeout-build=20000 \
+	"${apt_pocket[@]}" \
+	"${package}" \
+	-- \
+	ssh -s ./autopkgtest-virt-uvt \
+	-- \
+	-s "${series}"

@@ -1,0 +1,41 @@
+#!/bin/bash
+#
+# Run autopkgtest in a local libvirt instance
+#
+
+#	--apt-pocket=proposed=src:linux-base \
+#	--env=ADT_TEST_TRIGGERS=linux-base/4.14ubuntu1 \
+
+arch=s390x
+package=initramfs-tools
+#trigger=linux-base
+
+function out()
+{
+	rm -rf "${WORK_DIR}"
+
+}
+
+WORK_DIR=/tmp/autopkgtest-work.$$
+trap out EXIT INT TERM HUP
+
+apt_pocket=()
+if [-n "${trigger}" ] ; then
+	apt_pocket=("--apt-pocket=proposed=src:${trigger}")
+fi
+
+autopkgtest \
+	--output-dir "${WORK_DIR}" \
+	--apt-upgrade "${package}" \
+	"${apt_pocket[@]}" \
+	--timeout-copy=6000 \
+	--timeout-short=300 \
+	--timeout-copy=20000 \
+	--timeout-build=20000 \
+	-- \
+	ssh -s autopkgtest-virt-virsh \
+	-- \
+	-c 4 \
+	-r 4096 \
+	-d autopkgtest-questing-"${arch}" \
+    -n autopkgtest-"${arch}"

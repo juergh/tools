@@ -1,0 +1,173 @@
+#!/bin/bash -eu
+#
+# This is an autopkgtest-virt-ssh setup script that sets up a uvt libvirt instance
+# to use as an autopkg testbed.
+# See man autopkgtest-virt-ssh for details.
+
+# uvt-simplestreams-libvirt --verbose --source http://cloud-images.ubuntu.com/daily release=questing arch=amd64
+
+# uvt-destroy autopkgtest
+
+# Add testbed capabilities here (possibly dynamically), see
+# doc/README.virtualisation-server.rst
+CAPABILITIES="isolation-machine,reboot,revert,revert-full-system"
+
+# The SSH username and password
+SSH_USER=ubuntu
+SSH_PASS=ubuntu
+
+function prinfo()
+{
+	echo "II: [$(date +%H:%M:%S)] ${NAME}: ${*}"
+}
+
+function domain_running()
+{
+	virsh dominfo "${NAME}" | grep -qi '^state:\s*running'
+}
+
+function now()
+{
+	date +%s
+}
+
+# Create a testbed (if necessary), configure ssh, copy ssh key into it,
+# configure sudo, etc.; print a list of "key=value" parameters to stdout on
+# success
+# Required: login, hostname, and one of identity or password
+# Optional: port, options, capabilities
+function open()
+{
+	prinfo "Creating domain ${NAME}"
+	uvt-kvm create --memory 2048 --cpu 2 --password "${SSH_PASS}" "${NAME}" release="${SERIES}"
+
+	prinfo "Waiting for domain ${NAME}"
+	uvt-kvm wait "${NAME}"
+
+	# Add source debs
+	uvt-kvm ssh "${NAME}" 'sudo sed -i "s/Types: deb.*/Types: deb deb-src/" /etc/apt/sources.list.d/*.sources'
+	
+	IP_ADDR=$(uvt-kvm ip "${NAME}")
+}
+
+function open_info()
+{
+    cat <<EOF
+login=${SSH_USER}
+hostname=${IP_ADDR}
+capabilities=${CAPABILITIES}
+EOF
+}
+
+function cleanup()
+{
+	prinfo "Destroying domain ${NAME}"
+	uvt-kvm destroy "${NAME}"
+}
+
+function wait_reboot()
+{
+	prinfo "Shutting down domain ${NAME}"
+	virsh shutdown "${NAME}"
+	while domain_running ; do
+		sleep 2
+	done
+
+	prinfo "Starting domain ${NAME}"
+	virsh start "${NAME}"
+	uvt-kvm wait "${NAME}"
+}
+
+function debug_failure()
+{
+	prinfo "-------------------- /tmp/${NAME}.console_log --------------------"
+	sudo cat /tmp/"${NAME}".console_log || true
+	echo
+	prinfo "--------------------------------------------------------------------------------"
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: autopkgtest-virt-virsh [-h] -s SERIES COMMAND
+
+Create a libvirt instance to use as an autopkg testbed.
+
+Positional arguments:
+  COMMAND              The autopkgtest command:
+                       open, cleanup, revert, wait-reboot or debug-failure.
+
+Optional arguments:
+  -h, --help           Show this help text and exit.
+  -s, --series SERIES  Ubuntu series name.
+EOF
+}
+
+# -----------------------------------------------------------------------------
+# Main entry point
+
+SERIES=
+cmd=
+
+while [ ${#} -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-s|--series)
+			shift
+			SERIES=${1}
+			;;
+		*)
+			if [ -z "${cmd}" ] ; then
+				cmd=${1,,}
+			else
+				echo "Error: Invalid argument: ${1}" >&2
+				exit 2
+			fi
+	esac
+	shift
+done
+
+if [ -z "${SERIES}" ] || [ -z "${cmd}" ] ; then
+	usage >&2
+	exit 2
+fi
+
+NAME=autopkgtest-"${SERIES}"
+
+prinfo "${cmd^^} (enter)" >&2
+# shellcheck disable=SC2064
+trap "prinfo '${cmd^^} (exit)' >&2; echo" EXIT INT TERM HUP
+
+case "${cmd}" in
+
+	open)
+		open >&2
+		open_info
+		;;
+
+	cleanup)
+		cleanup >&2
+		;;
+
+	revert)
+		cleanup >&2
+		open >&2
+		open_info
+		;;
+
+	wait-reboot)
+		wait_reboot >&2
+		;;
+
+	debug-failure)
+		debug_failure >&2
+		;;
+
+	*)
+		echo "Error: Invalid command: ${cmd}" >&2
+		exit 1
+		;;
+esac
