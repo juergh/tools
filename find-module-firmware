@@ -1,0 +1,36 @@
+#!/bin/bash
+#
+# List files that load firmware
+#
+
+funcs=(
+	request_firmware
+	firmware_request_nowarn
+	firmware_request_platform
+	request_firmware_nowait
+	request_firmware_direct
+	request_firmware_into_buf
+	request_partial_firmware_into_buf
+
+	request_ihex_firmware
+)
+	
+re_funcs=$(printf "|%s" "${funcs[@]}")
+re_funcs=${re_funcs:1}
+
+pres=(
+	"^"
+	"="
+	"\("
+	"!"
+	"return\s"
+	"&&"
+	"\|\|"
+	"->"
+)	
+
+re_pres=$(printf "|%s" "${pres[@]}")
+re_pres=${re_pres:1}
+
+re="(${re_pres})\s*(${re_funcs})\s*\([^)]+($|\))"
+git grep -E "${re}" -- *.c
