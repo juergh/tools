@@ -7,43 +7,73 @@
 #   xargs git log --graph --oneline noble..questing --
 #
 
+import argparse
+import os
 import subprocess
-import sys
 
 
 def load_whence(branch):
+    """Load WHENCE and WHENCE.ubuntu from the provided branch and return the listed files and links"""
     w = subprocess.check_output(["git", "show", f"{branch}:WHENCE"], text=True)
     u = subprocess.check_output(["git", "show", f"{branch}:WHENCE.ubuntu"], text=True)
 
-    entries = []
+    entries = {}
     for line in (w + u).split("\n"):
-        if line.startswith("File:") or line.startswith("RawFile:") or  line.startswith("Link:"):
-            entry = line.split(":", 1)[1].partition(" -> ")[0]
-            entry = entry.replace(r"\ ", " ").replace('"', "").replace("'", "").strip()
-            entries.append(entry)
+        if line.startswith("File:") or line.startswith("RawFile:") or line.startswith("Link:"):
+            key, val = line.split(":", 1)
+            val = val.replace(r"\ ", " ").replace('"', "").replace("'", "").strip()
+
+            if key == "Link":
+                lnk, _, rel_tgt = [p.strip() for p in val.partition(" -> ")]
+                tgt = os.path.normpath(os.path.join(os.path.dirname(lnk), rel_tgt))
+                entries[lnk] = tgt
+            else:
+                entries[val] = None
+
     return entries
 
 
 def load_fwinfo(fwinfo):
+    """Load a fwinfo file and return the listed firmwares"""
     entries = []
     with open(fwinfo, encoding="utf-8") as fh:
         for entry in fh:
-            entry = entry.removeprefix("firmware:")
-            entry = entry.strip()
+            entry = entry.removeprefix("firmware:").strip()
             entries.append(entry)
+
     return entries
 
 
-if len(sys.argv) != 4:
-    print("Usage: list-new-firmwares <old-branch> <new-branch> <fwinfo-file>")
-    sys.exit(2)
+def resolve_fw(fw, entries):
+    """Resolve a firmware link and return the real target file"""
+    tgt = entries[fw]
+    if tgt:
+        return resolve_fw(tgt, entries)
+    return fw
 
-old_branch, new_branch, fwinfo = sys.argv[1:]
 
-old_files = load_whence(old_branch)
-new_files = load_whence(new_branch)
-fwinfo_files = load_fwinfo(fwinfo)
+parser = argparse.ArgumentParser(description="List firmware files (and links) listed in a fwinfo file, "
+                                 "that exist on one branch (new) but not on another (old).")
+parser.add_argument("--diff", action="store_true", help="List firmwares that exist on both branches but are different")
+parser.add_argument("old_branch", metavar="old-branch", help="Name of the old branch")
+parser.add_argument("new_branch", metavar="new-branch", help="Name of the new branch")
+parser.add_argument("fwinfo", help="fwinfo file")
+args = parser.parse_args()
+
+old_entries = load_whence(args.old_branch)
+new_entries = load_whence(args.new_branch)
+fwinfo_files = load_fwinfo(args.fwinfo)
 
 for fw in fwinfo_files:
-    if fw in new_files and fw not in old_files:
+    if args.diff and fw in new_entries and fw in old_entries:
+        new_file = resolve_fw(fw, new_entries)
+        new_md5sum = subprocess.check_output(f"git show {args.new_branch}:{new_file} | md5sum", text=True, shell=True)
+
+        old_file = resolve_fw(fw, old_entries)
+        old_md5sum = subprocess.check_output(f"git show {args.old_branch}:{old_file} | md5sum", text=True, shell=True)
+
+        if old_md5sum != new_md5sum:
+            print(fw)
+
+    if not args.diff and fw in new_entries and fw not in old_entries:
         print(fw)
