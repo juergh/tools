@@ -1,0 +1,72 @@
+#!/bin/bash -eu
+#
+# (Test-) Build a single kernel module/directory
+#
+
+function usage()
+{
+	cat <<EOF
+Usage: make-kernel-module [-a ARCH] [-h] DIR|OBJ
+
+Build a single kernel object/module/directory.
+
+Optional arguments:
+  -a, --arch ARCH  Kernel build architecture.
+  -h, --help       Show this help text and exit.
+EOF
+}
+
+arch=amd64
+m=
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-a|--arch)
+			shift
+			arch=${1}
+			;;
+		*)
+			if [ -n "${m}" ] ; then
+				usage
+				exit 2
+			fi
+			m=${1}
+			;;
+	esac
+	shift
+done
+
+if [ -z "${m}" ] ; then
+	usage
+	exit 2
+fi
+
+case "${arch}" in
+	amd64)   ARCH=x86_64 ;;
+	arm64)   ARCH=arm64 ;;
+	armhf)   ARCH=arm ;;
+	i386)    ARCH=i386 ;;
+	powerpc) ARCH=powerpc ;;
+	ppc64el) ARCH=powerpc ;;
+	*)
+		echo "Invalid architecture: ${arch}" >&2
+		exit 1
+		;;
+esac
+
+export ARCH
+export $(dpkg-architecture -a "${arch}" 2>/dev/null)
+export CROSS_COMPILE=${DEB_HOST_GNU_TYPE}-
+
+echo "-- make allmodconfig"
+make allmodconfig
+
+echo
+if [ -d "${m}" ] ; then
+	echo "-- make M=${m}"
+	make M="${m}"
+else
+	echo "-- make ${m}"
+	make "${m}"
+fi
+
