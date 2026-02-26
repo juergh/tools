@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+#
+# Trigger a snap build
+#
+
+import sys
+
+from launchpadlib.launchpad import Launchpad
+
+recipe_owner = "juergh"
+recipe_name = "oracular--pc-kernel"
+source_ppa = "ppa:canonical-kernel-team/ubuntu/ppa-snap"
+
+lp = Launchpad.login_with("tools", "production", version="devel")
+
+source_archive = lp.archives.getByReference(reference=source_ppa)
+if not source_archive:
+    print(f"Failed to get source PPA: {source_ppa}", file=sys.stderr)
+    sys.exit(1)
+
+snap = lp.snaps.getByName(name=recipe_name, owner=lp.people[recipe_owner])
+build = snap.requestBuilds(
+    archive=source_archive,
+    channels={"snapcraft": "latest/edge/kernel-snaps-with-bases"},
+    pocket="Release",
+)
+
+print(build.web_link)
