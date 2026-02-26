@@ -1,0 +1,23 @@
+#!/bin/bash -eu
+#
+# Diff HEAD against the auto branch
+#
+
+# shellcheck disable=SC1091
+. debian/debian.env
+
+read -r _bug cycle < <(cat "${DEBIAN}"/tracking-bug)
+
+while IFS= read -r path ; do
+	echo "-----------------------------------------------------------------------------------"
+	echo "$path"
+	echo
+
+	cd "${path}"
+		 
+	branch=$(git rev-parse --abbrev-ref HEAD)
+	auto_branch="origin/${branch#*/}--${cycle}--auto"
+	
+	git --no-pager diff "${auto_branch}" || true
+
+done < <(cranky shell-helper source-packages-path)
