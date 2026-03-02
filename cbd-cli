@@ -115,21 +115,17 @@ function cbd_download()
 	echo "${cbd_job}" > "${OUT_DIR}"/cbd_job.id
 }
 
-function cbd_help()
-{
-	if [ -z "${SERIES}" ] ; then
-		ssh cbd help
-	else
-		git push cbd:"${SERIES}".git -o help
-	fi
-}
+function cbd_help()   { ssh cbd help ; }
+function cbd_list()   { ssh cbd list ; }
+function cbd_queue()  { ssh cbd queue ; }
+function cbd_status() { ssh cbd status ; }
 
 function usage()
 {
 	cat <<EOF
 Usage: cbd-cli [-h] [-d DIR] [-n] [-s SERIES] build [COMMIT] [CBD_OPTS]
        cbd-cli [-h] [-d DIR] download CBD_JOB
-       cbd-cli [-h] help
+       cbd-cli [-h] help|list|queue|status
 
 Commandline interface for the CBD kernel builder.
 
@@ -137,6 +133,9 @@ Supported commands:
   build                Build (and download) kernel packages.
   download             Download kernel packages.
   help                 Show CBD help.
+  list                 Show supported <series>.git.
+  queue                Show currently queued jobs.
+  status               Show CBD server status summary.
 
 Optional arguments:
   -h, --help           Show this help text and exit.
@@ -171,7 +170,7 @@ while [ $# -gt 0 ] ; do
 			shift
 			SERIES=${1}
 			;;
-		build|download|help)
+		build|download|help|list|queue|status)
 			cmd=${1}
 			shift
 			break
