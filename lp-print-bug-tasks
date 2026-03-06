@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+#
+# Print bug tasks of the given bugs
+#
+
+import argparse
+from dataclasses import dataclass, field, asdict
+
+from launchpadlib.launchpad import Launchpad
+from lazr.restfulclient.errors import ClientError
+
+def print_bug(bug, target=None):
+    print(f"LP: #{bug.id:<7} -- {bug.title}")
+    for task in bug.bug_tasks:
+        name = task.target.name
+        if target and name != target:
+            continue
+        try:
+            series = task.target.distroseries.name
+        except AttributeError:
+            series = "None"
+
+        print(f"    {name:<14} -- {series.title():<8} -- {task.status}")
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--target", help="Only display specified task targets")
+parser.add_argument("bug", nargs="+", type=int, help="Bug number")
+args = parser.parse_args()
+
+lp = Launchpad.login_with("tools", "production", version="devel")
+
+for bugnum in args.bug:
+    print()
+    print_bug(lp.bugs[bugnum], target=args.target)
