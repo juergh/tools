@@ -7,6 +7,7 @@ import argparse
 from dataclasses import dataclass, field, asdict
 
 from launchpadlib.launchpad import Launchpad
+from lazr.restfulclient.errors import ClientError
 
 
 BUG_STATUS_OPEN = [
@@ -44,12 +45,19 @@ class Bug:
 
 
 def process_bug(lp_bug, source_name):
+    try:
+        owner_name = lp_bug.owner.name
+        owner_display_name = lp_bug.owner.display_name
+    except ClientError:
+        owner_name = "gone"
+        owner_display_name = "User Gone"
+
     bug = Bug(
         id=lp_bug.id,
         status="",
         is_open=False,
         title= lp_bug.title,
-        reporter=f"{lp_bug.owner.name} ({lp_bug.owner.display_name})",
+        reporter=f"{owner_name} ({owner_display_name})",
         tasks = [],
     )
 
