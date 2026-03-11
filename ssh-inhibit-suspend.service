@@ -1,0 +1,13 @@
+# sudo cp ssh-inhibit-suspend.service /etc/systemd/system/
+# sudo systemctl daemon-reload
+# sudo systemctl enable --now ssh-inhibit-suspend.service
+
+[Unit]
+Description=Inhibit suspend when SSH is active
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/systemd-inhibit --what=idle:sleep --who="SSH User" --why="Active remote session" --mode=block /usr/bin/sleep infinity
+
+[Install]
+WantedBy=default.target
