@@ -10,19 +10,26 @@ MODULES = {}
 
 
 def depends(mod):
-    for line in subprocess.check_output(["modinfo", mod], text=True).split("\n"):
-        if line.startswith("depends:"):
-            depends = line[8:].strip()
-            return depends.split(",") if depends else []
-    return []
+    try:
+        for line in subprocess.check_output(["modinfo", mod], text=True).split("\n"):
+            if line.startswith("depends:"):
+                depends = line[8:].strip()
+                return depends.split(",") if depends else []
+        return []
+    except subprocess.CalledProcessError:
+        return None
 
 
 def list_depends(mod, level=0):
+    deps = depends(mod)
+    if deps is None:
+        return
+
     yield mod, level
 
     if mod not in MODULES:
         MODULES[mod] = 1
-        for dep in depends(mod):
+        for dep in deps:
             yield from list_depends(dep, level=level+1)
 
 
