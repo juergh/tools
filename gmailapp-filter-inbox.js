@@ -1,7 +1,7 @@
 function filter_inbox() {
 
     // All messages with this label are filtered
-    const FILTER_LABEL = "__Inbox__"
+    const FILTER_LABEL = "00-Inbox"
 
     // Filter rules
     const FILTERS = [
