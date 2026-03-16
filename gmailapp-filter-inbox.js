@@ -10,6 +10,11 @@ function filter_inbox() {
 
     // Filter rules
     const FILTERS = [
+        // Pre-filter
+        ["subject.includes('The Daily Bug Report for 20')",         "Canonical/Bugs"],
+        ["subject.includes('SFDC')",                                "Canonical/SalesForce"],
+        ["body.includes('Launchpad-Subscription: linux-firmware')", "Launchpad-Message-For/juergh"],
+
         // From
         ["from.includes('jira@warthogs.atlassian.net')",             "Canonical/Jira"],
         ["from.includes('noreply+ckctreview-bot@canonical.com')",    "Canonical/Bots"],
@@ -34,7 +39,7 @@ function filter_inbox() {
         ["body.includes('Launchpad-Message-For: canonical-livepatch-kernel')",     "Launchpad-Message-For/canonical-livepatch-kernel"],
         ["body.includes('Launchpad-Message-For: juergh')",                         "Launchpad-Message-For/juergh"],
 
-
+        // Post-filter
         ["body.includes('Launchpad-Message-For: ')",                         "Launchpad-Message-For"],
         ["to.includes('kernel-team-bot@canonical.com')",                     "Canonical/Bots"],
         ["to.includes('kernel-team-bot+ancillary@canonical.com')",           "Canonical/Bots"],
@@ -61,7 +66,7 @@ function filter_inbox() {
 
         const from = message.getFrom().toLowerCase();
         const to = message.getTo().toLowerCase();
-        const subject = message.getSubject().toLowerCase();
+        const subject = message.getSubject();
         const body = message.getPlainBody();
 
         const list_id = message.getHeader("List-Id");
