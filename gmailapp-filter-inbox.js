@@ -9,6 +9,7 @@ function filter_inbox() {
         ["from", "jira@warthogs.atlassian.net", "Canonical/Jira"],
         ["from", "noreply+ckctreview-bot@canonical.com", "Canonical/Bots/ckctreview-bot"],
         ["from", "noreply+forgejo-bot@canonical.com", "Canonical/Forgejo"],
+        ["from", "kernel-esm-reviews@groups.canonical.com", "Mailing List/Canonical/canonical-kernel-esm"],
 
         // To
         ["to", "kernel-team@lists.ubuntu.com", "Mailing List/Ubuntu/kernel-team"],
@@ -43,10 +44,14 @@ function filter_inbox() {
         labels[label.getName()] = label
     }
 
-    // Walk through 50 messages with the "__Inbox__" label
-    var threads = GmailApp.search(`label:"${FILTER_LABEL}"`, 0, 50);
+    // Walk through 50 messages with the filter label
+    for (const thread of GmailApp.search(`label:"${FILTER_LABEL}"`, 0, 50)) {
+        if (thread.isInSpam()) {
+            // Ignore it if it's spam
+            thread.removeLabel(labels[FILTER_LABEL]);
+            continue;
+        }
 
-    for (const thread of threads) {
         const message = thread.getMessages()[0];
 
         const from = message.getFrom().toLowerCase();
