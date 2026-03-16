@@ -6,37 +6,36 @@ function filter_inbox() {
     // Filter rules
     const FILTERS = [
         // From
-        ["from", "jira@warthogs.atlassian.net", "Canonical/Jira"],
-        ["from", "noreply+ckctreview-bot@canonical.com", "Canonical/Bots/ckctreview-bot"],
-        ["from", "noreply+forgejo-bot@canonical.com", "Canonical/Forgejo"],
-        ["from", "kernel-esm-reviews@groups.canonical.com", "Mailing List/Canonical/canonical-kernel-esm"],
+        ["from.includes('jira@warthogs.atlassian.net')",             "Canonical/Jira"],
+        ["from.includes('noreply+ckctreview-bot@canonical.com')",    "Canonical/Bots/ckctreview-bot"],
+        ["from.includes('noreply+forgejo-bot@canonical.com')",       "Canonical/Forgejo"],
+        ["from.includes('kernel-esm-reviews@groups.canonical.com')", "Mailing List/Canonical/canonical-kernel-esm"],
 
         // To
-        ["to", "kernel-team@lists.ubuntu.com", "Mailing List/Ubuntu/kernel-team"],
+        ["to.includes('kernel-team@lists.ubuntu.com')", "Mailing List/Ubuntu/kernel-team"],
 
-        // List-ID
-        ["list-id", "canonical.github.com", "Canonical/Bots/github"],
-        ["list-id", "discourse.ubuntu.com", "Canonical/Discourse"],
-        ["list-id", "discourse.canonical.com", "Canonical/Discourse"],
+        // List-Id
+        ["list_id.includes('canonical.github.com')",    "Canonical/Bots/github"],
+        ["list_id.includes('discourse.ubuntu.com')",    "Canonical/Discourse"],
+        ["list_id.includes('discourse.canonical.com')", "Canonical/Discourse"],
 
         // Body
-        ["body", "Launchpad-Message-For: canonical-kernel-crankers", "Launchpad-Message-For/canonical-kernel-crankers"],
-        ["body", "Launchpad-Message-For: canonical-kernel-esm", "Launchpad-Message-For/canonical-kernel-esm"],
-        ["body", "Launchpad-Message-For: canonical-kernel-private", "Launchpad-Message-For/canonical-kernel-private"],
-        ["body", "Launchpad-Message-For: canonical-kernel-rt", "Launchpad-Message-For/canonical-kernel-rt"],
-        ["body", "Launchpad-Message-For: canonical-kernel-rt", "Launchpad-Message-For/canonical-kernel-rt"],
-        ["body", "Launchpad-Message-For: canonical-kernel-security-team", "Launchpad-Message-For/canonical-kernel-security-team"],
-        ["body", "Launchpad-Message-For: canonical-kernel-team", "Launchpad-Message-For/canonical-kernel-team"],
-        ["body", "Launchpad-Message-For: canonical-livepatch-kernel", "Launchpad-Message-For/canonical-livepatch-kernel"],
-        ["body", "Launchpad-Message-For: juergh", "Launchpad-Message-For/juergh"],
+        ["body.includes('Launchpad-Message-For: canonical-kernel-crankers')",      "Launchpad-Message-For/canonical-kernel-crankers"],
+        ["body.includes('Launchpad-Message-For: canonical-kernel-esm')",           "Launchpad-Message-For/canonical-kernel-esm"],
+        ["body.includes('Launchpad-Message-For: canonical-kernel-private')",       "Launchpad-Message-For/canonical-kernel-private"],
+        ["body.includes('Launchpad-Message-For: canonical-kernel-rt')",            "Launchpad-Message-For/canonical-kernel-rt"],
+        ["body.includes('Launchpad-Message-For: canonical-kernel-security-team')", "Launchpad-Message-For/canonical-kernel-security-team"],
+        ["body.includes('Launchpad-Message-For: canonical-kernel-team')",          "Launchpad-Message-For/canonical-kernel-team"],
+        ["body.includes('Launchpad-Message-For: canonical-livepatch-kernel')",     "Launchpad-Message-For/canonical-livepatch-kernel"],
+        ["body.includes('Launchpad-Message-For: juergh')",                         "Launchpad-Message-For/juergh"],
 
 
-        ["body", "Launchpad-Message-For: ", "Launchpad-Message-For"],
-        ["to", "kernel-team-bot@canonical.com", "Canonical/Bots/kernel-team-bot"],
-        ["to", "kernel-team-bot+ancillary@canonical.com", "Canonical/Bots/kernel-team-bot"],
+        ["body.includes('Launchpad-Message-For: ')",               "Launchpad-Message-For"],
+        ["to.includes('kernel-team-bot@canonical.com')",           "Canonical/Bots/kernel-team-bot"],
+        ["to.includes('kernel-team-bot+ancillary@canonical.com')", "Canonical/Bots/kernel-team-bot"],
     ];
 
-    /* --------------------------------------------------------------------------------------------------------------------------- */
+    /* --------------------------------------------------------------------------------------------------------------------------------- */
 
     // Get all user labels
     var labels = {};
@@ -47,7 +46,7 @@ function filter_inbox() {
     // Walk through 50 messages with the filter label
     for (const thread of GmailApp.search(`label:"${FILTER_LABEL}"`, 0, 50)) {
         if (thread.isInSpam()) {
-            // Ignore it if it's spam
+            // Ignore spam
             thread.removeLabel(labels[FILTER_LABEL]);
             continue;
         }
@@ -59,45 +58,14 @@ function filter_inbox() {
         const subject = message.getSubject().toLowerCase();
         const body = message.getPlainBody();
 
-        const listID = message.getHeader("List-Id");
+        const list_id = message.getHeader("List-Id");
 
         // Add a single label based on the filter rules
         var labeled = false;
         for (const filter of FILTERS) {
-            switch (filter[0]) {
-            case "from":
-                if (from.includes(filter[1])) {
-                    thread.addLabel(labels[filter[2]]);
-                    labeled = true;
-                }
-                break;
-            case "to":
-                if (to.includes(filter[1])) {
-                    thread.addLabel(labels[filter[2]]);
-                    labeled = true;
-                }
-                break;
-            case "subject":
-                if (subject.includes(filter[1])) {
-                    thread.addLabel(labels[filter[2]]);
-                    labeled = true;
-                }
-                break;
-            case "body":
-                if (body.includes(filter[1])) {
-                    thread.addLabel(labels[filter[2]]);
-                    labeled = true;
-                }
-                break;
-            case "list-id":
-                if (listID.includes(filter[1])) {
-                    thread.addLabel(labels[filter[2]]);
-                    labeled = true;
-                }
-                break;
-            }
-
-            if (labeled) {
+            if (eval(filter[0])) {
+                thread.addLabel(labels[filter[1]]);
+                labeled = true;
                 break;
             }
         }
