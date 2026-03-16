@@ -1,3 +1,8 @@
+// Note to self: Define a catch-all filter in the Gmail UI:
+//   if hasTheWords "-is:spam" and Size greater than 0 Bytes then
+//     skipTheInbox
+//     applyTheLabel "00-Inbox"
+
 function filter_inbox() {
 
     // All messages with this label are filtered
@@ -30,9 +35,10 @@ function filter_inbox() {
         ["body.includes('Launchpad-Message-For: juergh')",                         "Launchpad-Message-For/juergh"],
 
 
-        ["body.includes('Launchpad-Message-For: ')",               "Launchpad-Message-For"],
-        ["to.includes('kernel-team-bot@canonical.com')",           "Canonical/Bots/kernel-team-bot"],
-        ["to.includes('kernel-team-bot+ancillary@canonical.com')", "Canonical/Bots/kernel-team-bot"],
+        ["body.includes('Launchpad-Message-For: ')",                         "Launchpad-Message-For"],
+        ["to.includes('kernel-team-bot@canonical.com')",                     "Canonical/Bots/kernel-team-bot"],
+        ["to.includes('kernel-team-bot+ancillary@canonical.com')",           "Canonical/Bots/kernel-team-bot"],
+        ["to.includes('kernel-team-bot+ubuntu-kernel-gitea@canonical.com')", "Canonical/Bots/kernel-team-bot"],
     ];
 
     /* --------------------------------------------------------------------------------------------------------------------------------- */
