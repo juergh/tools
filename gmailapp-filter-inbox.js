@@ -12,7 +12,7 @@ function filter_inbox() {
     const FILTERS = [
         // From
         ["from.includes('jira@warthogs.atlassian.net')",             "Canonical/Jira"],
-        ["from.includes('noreply+ckctreview-bot@canonical.com')",    "Canonical/Bots/ckctreview-bot"],
+        ["from.includes('noreply+ckctreview-bot@canonical.com')",    "Canonical/Bots"],
         ["from.includes('noreply+forgejo-bot@canonical.com')",       "Canonical/Forgejo"],
         ["from.includes('kernel-esm-reviews@groups.canonical.com')", "Mailing List/Canonical/canonical-kernel-esm"],
 
@@ -20,7 +20,7 @@ function filter_inbox() {
         ["to.includes('kernel-team@lists.ubuntu.com')", "Mailing List/Ubuntu/kernel-team"],
 
         // List-Id
-        ["list_id.includes('canonical.github.com')",    "Canonical/Bots/github"],
+        ["list_id.includes('canonical.github.com')",    "Canonical/Github"],
         ["list_id.includes('discourse.ubuntu.com')",    "Canonical/Discourse"],
         ["list_id.includes('discourse.canonical.com')", "Canonical/Discourse"],
 
@@ -36,9 +36,9 @@ function filter_inbox() {
 
 
         ["body.includes('Launchpad-Message-For: ')",                         "Launchpad-Message-For"],
-        ["to.includes('kernel-team-bot@canonical.com')",                     "Canonical/Bots/kernel-team-bot"],
-        ["to.includes('kernel-team-bot+ancillary@canonical.com')",           "Canonical/Bots/kernel-team-bot"],
-        ["to.includes('kernel-team-bot+ubuntu-kernel-gitea@canonical.com')", "Canonical/Bots/kernel-team-bot"],
+        ["to.includes('kernel-team-bot@canonical.com')",                     "Canonical/Bots"],
+        ["to.includes('kernel-team-bot+ancillary@canonical.com')",           "Canonical/Bots"],
+        ["to.includes('kernel-team-bot+ubuntu-kernel-gitea@canonical.com')", "Canonical/Bots"],
     ];
 
     /* --------------------------------------------------------------------------------------------------------------------------------- */
