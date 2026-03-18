@@ -10,6 +10,9 @@ function filter_inbox() {
 
     // Filter rules
     const FILTERS = [
+        // Trash
+        ["subject.includes('abi-testing: ABI testing report')", "Trash"],
+
         // Pre-filter
         ["subject.includes('The Daily Bug Report for 20')",         "Canonical/Bugs"],
         ["subject.includes('SFDC')",                                "Canonical/SalesForce"],
@@ -54,8 +57,8 @@ function filter_inbox() {
         labels[label.getName()] = label
     }
 
-    // Walk through 50 messages with the filter label
-    for (const thread of GmailApp.search(`label:"${FILTER_LABEL}"`, 0, 50)) {
+    // Walk through 100 messages with the filter label
+    for (const thread of GmailApp.search(`label:"${FILTER_LABEL}"`, 0, 100)) {
         if (thread.isInSpam()) {
             // Ignore spam
             thread.removeLabel(labels[FILTER_LABEL]);
@@ -71,19 +74,27 @@ function filter_inbox() {
 
         const list_id = message.getHeader("List-Id");
 
-        // Add a single label based on the filter rules
-        var labeled = false;
+        // Find the first filter rule that matches
+        var action = "Inbox";
         for (const filter of FILTERS) {
             if (eval(filter[0])) {
-                thread.addLabel(labels[filter[1]]);
-                labeled = true;
+                action = filter[1];
                 break;
             }
         }
 
         thread.removeLabel(labels[FILTER_LABEL]);
-        if (!labeled) {
+
+        switch (action) {
+        case "Inbox":
             thread.moveToInbox();
+            break;
+        case "Trash":
+            thread.moveToTrash();
+            break;
+        default:
+            thread.addLabel(labels[action]);
+            break;
         }
     }
 }
