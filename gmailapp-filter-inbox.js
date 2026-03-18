@@ -29,9 +29,12 @@ function filter_inbox() {
         ["to.includes('kernel-team@lists.ubuntu.com')", "Mailing List/Ubuntu/kernel-team"],
 
         // List-Id
-        ["list_id.includes('canonical.github.com')",    "Canonical/Github"],
-        ["list_id.includes('discourse.ubuntu.com')",    "Canonical/Discourse"],
-        ["list_id.includes('discourse.canonical.com')", "Canonical/Discourse"],
+        ["list_id.includes('canonical.github.com')",               "Canonical/Github"],
+        ["list_id.includes('discourse.ubuntu.com')",               "Canonical/Discourse"],
+        ["list_id.includes('discourse.canonical.com')",            "Canonical/Discourse"],
+        ["list_id.includes('devel-permissions.lists.ubuntu.com')", "Mailing List/Ubuntu/devel-permissions"],
+        ["list_id.includes('ubuntu-devel.lists.ubuntu.com')",      "Mailing List/Ubuntu/ubuntu-devel"],
+        ["list_id.includes('ubuntu-release.lists.ubuntu.com')",    "Mailing List/Ubuntu/ubuntu-release"],
 
         // Body
         ["body.includes('Launchpad-Message-For: canonical-kernel-crankers')",      "Launchpad-Message-For/canonical-kernel-crankers"],
