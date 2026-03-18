@@ -12,6 +12,7 @@ function filter_inbox() {
     const FILTERS = [
         // Trash
         ["subject.includes('abi-testing: ABI testing report')", "Trash"],
+        ["subject.includes(' -proposed tracker')", "Trash"],
 
         // Pre-filter
         ["subject.includes('The Daily Bug Report for 20')",         "Canonical/Bugs"],
