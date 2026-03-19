@@ -11,8 +11,10 @@ function filter_inbox() {
     // Filter rules
     const FILTERS = [
         // Trash
-        ["subject.includes('abi-testing: ABI testing report')", "Trash"],
-        ["subject.includes(' -proposed tracker')", "Trash"],
+        ["subject.includes(' abi-testing: ABI testing report')", "Trash"],
+        ["subject.includes(' -proposed tracker')",               "Trash"],
+        ["subject.includes(' Workflow done!')",                  "Trash"],
+        ["subject.includes(' uploaded (ABI bump)')",             "Trash"],
 
         // Pre-filter
         ["subject.includes('The Daily Bug Report for 20')",         "Canonical/Bugs"],
@@ -20,19 +22,19 @@ function filter_inbox() {
         ["body.includes('Launchpad-Subscription: linux-firmware')", "Launchpad-Message-For/juergh"],
 
         // From
-        ["from.includes('jira@warthogs.atlassian.net')",             "Canonical/Jira"],
-        ["from.includes('noreply+ckctreview-bot@canonical.com')",    "Canonical/Bots"],
-        ["from.includes('noreply+forgejo-bot@canonical.com')",       "Canonical/Forgejo"],
-        ["from.includes('kernel-esm-reviews@groups.canonical.com')", "Mailing List/Canonical/canonical-kernel-esm"],
+        ["from.includes('jira@warthogs.atlassian.net')",          "Canonical/Jira"],
+        ["from.includes('noreply+ckctreview-bot@canonical.com')", "Canonical/Bots"],
+        ["from.includes('noreply+forgejo-bot@canonical.com')",    "Canonical/Forgejo"],
 
-        // To
-        ["to.includes('kernel-team@lists.ubuntu.com')", "Mailing List/Ubuntu/kernel-team"],
+        // List-Id (Canonical)
+        ["list_id.includes('canonical.github.com')",                    "Canonical/Github"],
+        ["list_id.includes('discourse.canonical.com')",                 "Canonical/Discourse"],
+        ["list_id.includes('kernel-esm-reviews.groups.canonical.com')", "Mailing List/Canonical/canonical-kernel-esm"],
 
-        // List-Id
-        ["list_id.includes('canonical.github.com')",               "Canonical/Github"],
+        // List-Id (Ubuntu)
         ["list_id.includes('discourse.ubuntu.com')",               "Canonical/Discourse"],
-        ["list_id.includes('discourse.canonical.com')",            "Canonical/Discourse"],
         ["list_id.includes('devel-permissions.lists.ubuntu.com')", "Mailing List/Ubuntu/devel-permissions"],
+        ["list_id.includes('kernel-team.lists.ubuntu.com')",       "Mailing List/Ubuntu/kernel-team"],
         ["list_id.includes('ubuntu-devel.lists.ubuntu.com')",      "Mailing List/Ubuntu/ubuntu-devel"],
         ["list_id.includes('ubuntu-release.lists.ubuntu.com')",    "Mailing List/Ubuntu/ubuntu-release"],
 
