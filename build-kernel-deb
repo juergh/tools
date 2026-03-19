@@ -8,6 +8,13 @@ function pr_info()  { echo -e "\033[33mII: ${*}\033[0m" ; }
 
 function run_chroot()
 {
+	if ischroot ; then
+		pr_info "Run:"
+		pr_info "+ ${*}"
+		"${@}"
+		return
+	fi
+
 	pr_info "Run in chroot (${CHROOT}):"
 	pr_info "+ ${*}"
 
@@ -681,24 +688,6 @@ if [ -z "${cmd}" ] ; then
 fi
 
 #
-# Determine the chroot and series
-#
-
-if [ -n "${chroot}" ] ; then
-	CHROOT=${chroot}
-	series=$(run_chroot cat /etc/lsb-release | sed -n 's/DISTRIB_CODENAME=//p')
-else
-	# shellcheck disable=SC1091
-	if [ -e debian/debian.env ] ; then
-		. debian/debian.env
-		series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
-	else
-		series=$(lsb_release -c -s 2>/dev/null)
-	fi
-	CHROOT=cranky--${series}-amd64
-fi
-
-#
 # Determine architecture and cross-compilation
 #
 
@@ -715,6 +704,24 @@ if [ "${arch}" != "$(dpkg-architecture -q DEB_BUILD_ARCH)" ] ; then
 
 	# FIXME: Cross-builds of newer kernels fail because of libssl-dev
 	export DEB_BUILD_PROFILES=pkg.linux-upstream.nokernelheaders
+fi
+
+#
+# Determine the chroot and series
+#
+
+if [ -n "${chroot}" ] ; then
+	CHROOT=${chroot}
+	series=$(run_chroot cat /etc/lsb-release | sed -n 's/DISTRIB_CODENAME=//p')
+else
+	# shellcheck disable=SC1091
+	if [ -e debian/debian.env ] ; then
+		. debian/debian.env
+		series=$(dpkg-parsechangelog -l "${DEBIAN}"/changelog -S Distribution)
+	else
+		series=$(lsb_release -c -s 2>/dev/null)
+	fi
+	CHROOT=cranky--${series}-${arch}
 fi
 
 #
