@@ -85,7 +85,7 @@ if [ "${series}" = "UNRELEASED" ] ; then
 	series=$(dpkg-parsechangelog -SDistribution -o1 -c1)
 fi
 
-CHROOT=cranky--${series}-amd64
+CHROOT=cranky--${series}-$(dpkg-architecture -q DEB_BUILD_ARCH)
 run_chroot debian/rules genconfigs || true
 
 rm -rf MASTERCONFIGS
