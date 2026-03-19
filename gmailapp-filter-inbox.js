@@ -89,8 +89,6 @@ function filter_inbox() {
             }
         }
 
-        thread.removeLabel(labels[FILTER_LABEL]);
-
         switch (action) {
         case "Inbox":
             thread.moveToInbox();
@@ -102,5 +100,8 @@ function filter_inbox() {
             thread.addLabel(labels[action]);
             break;
         }
+
+        // Last step: Remove the filter label
+        thread.removeLabel(labels[FILTER_LABEL]);
     }
 }
