@@ -89,6 +89,8 @@ function filter_inbox() {
             }
         }
 
+        console.log(action + " -- " + subject);
+
         switch (action) {
         case "Inbox":
             thread.moveToInbox();
