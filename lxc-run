@@ -134,15 +134,14 @@ function lxc_start()
 function usage()
 {
 	cat <<EOF
-Usage: lxc-run [-h] [--root] [-v] [NAME] [-- COMMAND [ARG]...]
+Usage: lxc-run [-h] [--root] [-v] NAME [-- COMMAND [ARG]...]
 
 Run the given command in an LXC container. Create the container first if it
 doesn't exits.
 
 Postional arguments:
   NAME              LXC container name. Must be in the form of SERIES or
-                    SERIES-ARCH. If not provided, defaults to the running
-                    release ($(lsb_release -s -c)).
+                    SERIES-ARCH.
   COMMAND [ARG]...  Command to run. If not provided, defaults to 'bash'.
 
 Optional argument:
@@ -192,7 +191,8 @@ done
 arch=
 case "${name}" in
 	"")
-		series=$(lsb_release -s -c)
+		usage >&2
+		exit 2
 		;;
 	*-*)
 		series=${name%-*}
