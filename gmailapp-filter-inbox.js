@@ -11,10 +11,11 @@ function filter_inbox() {
     // Filter rules
     const FILTERS = [
         // Trash
-        ["subject.includes(' abi-testing: ABI testing report')", "Trash"],
-        ["subject.includes(' -proposed tracker')",               "Trash"],
-        ["subject.includes(' Workflow done!')",                  "Trash"],
-        ["subject.includes(' uploaded (ABI bump)')",             "Trash"],
+        ["subject.includes(' abi-testing: ABI testing report')",      "Trash"],
+        ["subject.includes(' -proposed tracker')",                    "Trash"],
+        ["subject.includes(' Workflow done!')",                       "Trash"],
+        ["subject.includes(' uploaded (ABI bump)')",                  "Trash"],
+        ["subject.includes(' Live Kernel Patching release tracker')", "Trash"],
 
         // Pre-filter
         ["subject.includes('The Daily Bug Report for 20')",         "Canonical/Bugs"],
