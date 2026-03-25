@@ -1,0 +1,35 @@
+#!/bin/bash -eu
+#
+# Generate an SSH keypair and add it to a repo so that an action can push to its own repo
+#
+
+repo=${1}
+
+AUTH_TOKEN=$(pass show canonical/forgejo/AUTH_TOKEN)
+
+base_url=https://kernel.ubuntu.com/forgejo/api/v1
+
+tmpd=$(mktemp -d)
+trap "rm -rf ${tmpd}" EXIT
+
+ssh-keygen -t ed25519 -C "${repo}" -f "${tmpd}"/foo -N ""
+
+private_key=$(cat "${tmpd}"/foo | \
+              python3 -c 'import sys; print(sys.stdin.read().replace("\n", "\\n").strip())')
+public_key=$(cat "${tmpd}"/foo.pub | tr -d "\n")
+
+echo "Add action secret: SSH_PRIVATE_KEY"
+curl -X PUT "${base_url}"/repos/"${repo}"/actions/secrets/SSH_PRIVATE_KEY \
+     -H "Authorization: token ${AUTH_TOKEN}" \
+     -H "Content-Type: application/json" \
+     -d "{\"data\": \"${private_key}\"}"
+
+echo "Add deploy key: ${repo}"
+curl -X POST "${base_url}"/repos/"${repo}"/keys \
+     -H "Authorization: token ${AUTH_TOKEN}" \
+     -H "Content-Type: application/json" \
+     -d "{
+           \"title\": \"${repo}\",
+           \"key\": \"${public_key}\",
+           \"read_only\": false
+         }"
