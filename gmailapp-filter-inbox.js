@@ -31,6 +31,7 @@ function filter_inbox() {
         ["list_id.includes('canonical.github.com')",                    "Canonical/Github"],
         ["list_id.includes('discourse.canonical.com')",                 "Canonical/Discourse"],
         ["list_id.includes('kernel-esm-reviews.groups.canonical.com')", "Mailing List/Canonical/canonical-kernel-esm"],
+        ["list_id.includes('warthogs.lists.canonical.com')",            "Mailing List/Canonical/warthogs"],
 
         // List-Id (Ubuntu)
         ["list_id.includes('discourse.ubuntu.com')",               "Canonical/Discourse"],
