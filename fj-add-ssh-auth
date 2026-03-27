@@ -1,7 +1,25 @@
 #!/bin/bash -eu
 #
-# Generate an SSH keypair and add it to a repo so that an action can push to its own repo
+# Generate an SSH keypair and add it to a repo so that an action can use SSH for
+# checkouts (and subsequent pushes).
 #
+
+if [ $# -ne 1 ] ; then
+	cat <<EOF
+Usage: $(basename "$0") <repo>
+
+Generate an SSH keypair and add it to a Forgejo repo so that actions
+can use SSH for checkouts. This enables the bypassing of the (problemaic)
+content cache.
+
+The public key is added as deploy key with write access.
+The private key is added as an action secret named SSH_PRIVATE_KEY.
+
+Example:
+  $(basename "$0") kernel/linux-firmware
+EOF
+	exit 2
+fi
 
 repo=${1}
 
