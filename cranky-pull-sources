@@ -63,10 +63,16 @@ trap out EXIT INT TERM HUP
 
 # Get the source package versions from the provided pocket
 if [ "${pocket}" != "none" ] ; then
+	echo "II: Looking up package versions in pocket"
 	declare -A versions=()
-	while IFS=' ' read -r package version rest ; do
-		versions[${package}]=${version}
-	done < <("${CRANKY}" rmadison -s -p "${pocket}" .)
+	while IFS=' ' read -r x_package x_version x_pocket _ ; do
+		case "${x_pocket}" in
+			*-"${pocket}")
+				echo "II: ${x_pocket} ${x_package} ${x_version}"
+				versions[${x_package}]=${x_version}
+				;;
+		esac
+	done < <("${CRANKY}" rmadison -s .)
 fi
 
 # Walk through the package set
