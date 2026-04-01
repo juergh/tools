@@ -9,8 +9,12 @@ if [ "$(id -u)" -eq 0 ] ; then
 	exec sudo -u juergh "$0"
 fi
 
-# shellcheck disable=SC2155
-export SSH_AUTH_SOCK=/run/user/$(id -u)/keyring/ssh
+for sock in /run/user/"$(id -u)"/{gcr,keyring}/ssh ; do
+	if [ -S "${sock}" ] ; then
+		export SSH_AUTH_SOCK=${sock}
+		break
+	fi
+done
 
 while IFS= read -r repo ; do
 	if [ -d "${repo}" ] ; then
