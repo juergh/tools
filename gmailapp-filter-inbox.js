@@ -16,6 +16,7 @@ function filter_inbox() {
         ["subject.includes(' Workflow done!')",                       "Trash"],
         ["subject.includes(' uploaded (ABI bump)')",                  "Trash"],
         ["subject.includes(' Live Kernel Patching release tracker')", "Trash"],
+        ["subject.includes(' build of livepatch-linux-')",            "Trash"],
 
         // Pre-filter
         ["subject.includes('The Daily Bug Report for 20')",         "Canonical/Bugs"],
