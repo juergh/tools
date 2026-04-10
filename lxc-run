@@ -11,7 +11,18 @@ function prinfo()  { echo -e "${__CII}II: $*${__CNO}" ; }
 
 function lxc_image_exists()
 {
-	lxc image info "${1}" &>/dev/null
+	local name=${1}
+
+	lxc image info "${name}" &>/dev/null
+}
+
+function flags_from_name()
+{
+	local name=${1}
+
+	if [ "${name/--vm/}" != "${name}" ] ; then
+		echo "--vm"
+	fi
 }
 
 function lxc_remote_image()
@@ -19,6 +30,7 @@ function lxc_remote_image()
 	local name=${1}
 	local series arch
 
+	name=${name%--*}
 	series=${name%-*}
 	arch=${name#*-}
 
@@ -39,13 +51,14 @@ function lxc_remote_image()
 function lxc_image_copy()
 {
 	local name=${1}
-	local image
+	local image flags
 
 	image=$(lxc_remote_image "${name}")
 
 	prinfo "Copy image: ${image} -> ${name}"
 
-	lxc image copy --alias "${name}" "${image}" local:
+	readarray -t flags < <(flags_from_name "${name}")
+	lxc image copy "${image}" local: --alias "${name}" "${flags[@]}"
 }
 
 function lxc_exists()
@@ -78,10 +91,12 @@ function lxc_wait()
 function lxc_launch()
 {
 	local image_name=${1} name=${2}
-	local gid uid
+	local gid uid flags
 
 	prinfo "Launch container: ${name}"
-	lxc launch local:"${image_name}" "${name}"
+
+	readarray -t flags < <(flags_from_name "${name}")
+	lxc launch local:"${image_name}" "${name}" "${flags[@]}"
 	lxc_wait "${name}"
 
 	prinfo "Configure container"
@@ -89,9 +104,6 @@ function lxc_launch()
 	gname=$(id -gn)
 	gid=$(id -g)
 	uid=$(id -u)
-
-	# Attach our home directory
-	lxc config device add "${name}" home disk source="${HOME}" path=/home/"${USER}"
 
 	# Add group
 	lxc_gid=$(lxc exec "${name}" -- id -g "${gname}" 2>/dev/null || true)
@@ -110,15 +122,22 @@ function lxc_launch()
 		    --no-create-home --shell /bin/bash "${USER}"
 	fi
 
+	# Stop the container (required for ID mapping to take effect)
+	prinfo "Stop container"
+	lxc stop "${name}"
+
 	# Map group and user IDs
 	cat <<EOF | lxc config set "${name}" raw.idmap -
 gid ${gid} ${lxc_gid}
 uid ${uid} ${lxc_uid}
 EOF
 
-	# Restart the container (required for the ID mapping to take effect)
-	prinfo "Restart container"
-	lxc restart "${name}"
+	# Attach our home directory
+	lxc config device add "${name}" home disk source="${HOME}" path=/home/"${USER}"
+
+	# Start the container again
+	prinfo "Start container"
+	lxc start "${name}"
 	lxc_wait "${name}"
 }
 
@@ -134,7 +153,7 @@ function lxc_start()
 function usage()
 {
 	cat <<EOF
-Usage: lxc-run [-h] [--root] [-v] NAME [-- COMMAND [ARG]...]
+Usage: lxc-run [-h] [--root] [-v] [--vm] NAME [-- COMMAND [ARG]...]
 
 Run the given command in an LXC container. Create the container first if it
 doesn't exits.
@@ -148,11 +167,13 @@ Optional argument:
   -h, --help        Show this help text and exit.
   --root            Run command as the root user.
   -v, --verbose     Enable verbose output.
+  --vm              Run a VM instead of a container.
 EOF
 }
 
 root=0
 verbose=0
+vm=0
 name=
 command=("bash")
 
@@ -167,6 +188,9 @@ while [ $# -gt 0 ] ; do
 			;;
 		-v|--verbose)
 			verbose=1
+			;;
+		--vm)
+			vm=1
 			;;
 		--)
 			shift
@@ -212,6 +236,11 @@ esac
 
 image_name=${series}-${arch}
 name=${series}-${arch}
+
+if [ ${vm} -eq 1 ] ; then
+	image_name=${image_name}--vm
+	name=${name}--vm
+fi
 
 if ! lxc_image_exists "${image_name}" ; then
 	lxc_image_copy "${image_name}"
