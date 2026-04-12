@@ -1,0 +1,68 @@
+#!/bin/bash -eu
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] --series SERIES RECIPE WORKDIR
+EOF
+}
+
+series=
+recipe=
+workdir=
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit 0
+			;;
+		--series)
+			shift
+			series=${1}
+			;;
+		-*)
+			echo "Error: Invalid argument: ${1}" >&2
+			exit 2
+			;;
+		*)
+			if [ -z "${recipe}" ] ; then
+				recipe=${1}
+			elif [ -z "${workdir}" ] ; then
+				workdir=${1}
+			else
+				echo "EE: Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			;;
+	esac
+	shift
+done
+
+if [ -z "${series}" ] || [ -z "${recipe}" ] || [ -z "${workdir}" ] ; then
+	usage >&2
+	exit 2
+fi
+
+if ! [ -e "${recipe}" ] ; then
+	echo "EE: Recipe not found: ${recipe}" >&2
+	exit 1
+fi
+
+yymm=$(ubuntu-distro-info --release --series="${series}" || true)
+yymm=${yymm% *}
+if [ -z "${yymm}" ] ; then
+	echo "EE: Invalid series: ${series}" >&2
+	exit 1
+fi
+
+mkdir -p "${workdir}"
+git-build-recipe \
+	--safe \
+	--no-build \
+	--allow-fallback-to-native \
+	--distribution "${series}" \
+	--append-version "~ubuntu${yymm}.1" \
+	--manifest "${workdir}"/manifest \
+	"${recipe}" \
+	"${workdir}"
