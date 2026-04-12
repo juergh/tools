@@ -49,20 +49,27 @@ if ! [ -e "${recipe}" ] ; then
 	exit 1
 fi
 
-yymm=$(ubuntu-distro-info --release --series="${series}" || true)
-yymm=${yymm% *}
-if [ -z "${yymm}" ] ; then
+release=$(distro-info --release --series="${series}" 2>/dev/null || true)
+if [ -z "${release}" ] ; then
 	echo "EE: Invalid series: ${series}" >&2
 	exit 1
 fi
 
+release=${release% *}
+case "${release}" in
+	sid|experimental) append_version=~debian99.1 ;;
+	??.??)            append_version=~ubuntu${release}.1 ;;
+	*)                append_version=~debian${release}.1 ;;
+esac
+
 mkdir -p "${workdir}"
+set -x
 git-build-recipe \
 	--safe \
 	--no-build \
 	--allow-fallback-to-native \
 	--distribution "${series}" \
-	--append-version "~ubuntu${yymm}.1" \
+	--append-version "${append_version}" \
 	--manifest "${workdir}"/manifest \
 	"${recipe}" \
 	"${workdir}"
