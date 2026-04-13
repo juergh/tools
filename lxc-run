@@ -122,6 +122,13 @@ function lxc_launch()
 		    --no-create-home --shell /bin/bash "${USER}"
 	fi
 
+	# Enable sudo
+	prinfo "Enable sudo for user ${USER}"
+	cat <<EOF | lxc exec "${name}" -- bash -
+echo "${USER} ALL = NOPASSWD: ALL" > /etc/sudoers.d/"${USER}"
+chmod 440 /etc/sudoers.d/"${USER}"
+EOF
+
 	# Stop the container (required for ID mapping to take effect)
 	prinfo "Stop container"
 	lxc stop "${name}"
