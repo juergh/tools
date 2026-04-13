@@ -745,6 +745,9 @@ for var in KERNELRELEASE ARCH CROSS_COMPILE DEB_BUILD_PROFILES KBUILD_OUTPUT ; d
 	pr_info "  ${var}=${!var:-}"
 done
 
+export LC_ALL=C
+export LANG=C
+
 #
 # Process the command
 #
