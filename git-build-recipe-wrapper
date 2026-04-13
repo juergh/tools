@@ -1,13 +1,51 @@
 #!/bin/bash -eu
+#
+# Build a Debian source package from git using git-build-recipe
+#
+# Modeled after launchpad-buildd/bin/buildrecipe
+#
+
+function run()
+{
+	echo "RUN: ${*}"
+	"${@}"
+}
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT INT TERM HUP
+
+	if [ -n "${BUILD_DEPS_DEB}" ] ; then
+		run sudo apt-get purge --yes "${BUILD_DEPS_DEB%%_*}"
+	fi
+
+	if [ ${rc} -eq 0 ] ; then
+		echo "II: Script finished successfully"
+	else
+		echo "EE: Script failed (rc=${rc})" >&2
+	fi
+
+	exit ${rc}
+}
 
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [-h] --series SERIES RECIPE WORKDIR
+Usage: $(basename "${0}") [-h] RECIPE WORKDIR
+
+Build a Debian source package from git using git-build-recipe.
+
+Positional arguments:
+  RECIPE      Build recipe.
+  WORKDIR     Working directory.
+
+Optional arguments:
+  -h, --help  Show this help text and exit.
 EOF
 }
 
-series=
 recipe=
 workdir=
 
@@ -16,10 +54,6 @@ while [ $# -gt 0 ] ; do
 		-h|--help)
 			usage
 			exit 0
-			;;
-		--series)
-			shift
-			series=${1}
 			;;
 		-*)
 			echo "Error: Invalid argument: ${1}" >&2
@@ -39,7 +73,7 @@ while [ $# -gt 0 ] ; do
 	shift
 done
 
-if [ -z "${series}" ] || [ -z "${recipe}" ] || [ -z "${workdir}" ] ; then
+if [ -z "${recipe}" ] || [ -z "${workdir}" ] ; then
 	usage >&2
 	exit 2
 fi
@@ -49,11 +83,15 @@ if ! [ -e "${recipe}" ] ; then
 	exit 1
 fi
 
+series=$(lsb_release -s -c)
 release=$(distro-info --release --series="${series}" 2>/dev/null || true)
 if [ -z "${release}" ] ; then
 	echo "EE: Invalid series: ${series}" >&2
 	exit 1
 fi
+
+BUILD_DEPS_DEB=
+trap out EXIT INT TERM HUP
 
 release=${release% *}
 case "${release}" in
@@ -62,9 +100,11 @@ case "${release}" in
 	*)                append_version=~debian${release}.1 ;;
 esac
 
+workdir=$(realpath -m "${workdir}")
 mkdir -p "${workdir}"
-set -x
-git-build-recipe \
+
+# RecipeBuilder.buildTree
+run git-build-recipe \
 	--safe \
 	--no-build \
 	--allow-fallback-to-native \
@@ -73,3 +113,17 @@ git-build-recipe \
 	--manifest "${workdir}"/manifest \
 	"${recipe}" \
 	"${workdir}"
+
+sourcedir=$(ls "${workdir}"/*/debian/control)
+sourcedir=${sourcedir%/debian/control}
+
+# RecipeBuilder.installBuildDeps
+cd "${workdir}"
+run mk-build-deps "${sourcedir}"/debian/control
+BUILD_DEPS_DEB=$(ls ./*.deb)
+BUILD_DEPS_DEB=${BUILD_DEPS_DEB#./}
+run sudo apt-get install --yes ./"${BUILD_DEPS_DEB}"
+
+# RecipeBuilder.buildSourcePackage
+cd "${sourcedir}"
+run dpkg-buildpackage -i -I.bzr -I.git -us -uc -S -sa
