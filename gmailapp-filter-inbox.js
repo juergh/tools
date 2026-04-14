@@ -24,9 +24,10 @@ function filter_inbox() {
         ["body.includes('Launchpad-Subscription: linux-firmware')", "Launchpad-Message-For/juergh"],
 
         // From
-        ["from.includes('jira@warthogs.atlassian.net')",          "Canonical/Jira"],
         ["from.includes('noreply+ckctreview-bot@canonical.com')", "Canonical/Bots"],
+        ["from.includes('prod-kernel-team-janitor')",             "Canonical/Bots"],
         ["from.includes('noreply+forgejo-bot@canonical.com')",    "Canonical/Forgejo"],
+        ["from.includes('jira@warthogs.atlassian.net')",          "Canonical/Jira"],
 
         // List-Id (Canonical)
         ["list_id.includes('canonical.github.com')",                    "Canonical/Github"],
