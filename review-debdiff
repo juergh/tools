@@ -3,18 +3,22 @@
 # Review a debdiff file
 #
 
-function do_colordiff()
+COLS=$(tput cols)
+
+function colorize()
 {
     local line color
 
     while IFS= read -r line ; do
 		case "${line}" in
-			"-"*)     color="\e[31m" ;;
-			"+"*)     color="\e[32m" ;;
-			"!"*)     color="\e[33m" ;;
-			"@@"*)    color="\e[36m" ;;
-			"diff "*) color="\e[1m\e[36m" ;;
-			*)        color="" ;;
+			"-"*)             color="\e[31m" ;;
+			"+"*)             color="\e[32m" ;;
+			"!"*)             color="\e[33m" ;;
+			"@@"*)            color="\e[36m" ;;
+			"diff "*)         color="\e[1m\e[36m" ;;
+			"Binary files "*) color="\e[33m" ;;
+			"| "*)            color="\e[96m" ;;
+			*)                color="" ;;
 		esac
 
 		if [ -n "${color}" ] ; then
@@ -23,6 +27,15 @@ function do_colordiff()
 			echo "${line}"
 		fi
 	done
+}
+
+function header()
+{
+	echo
+	printf "| "; printf '%.0s-' $(seq 6 "${COLS}"); printf "\n"
+	echo "| ${*}"
+	printf "| "; printf '%.0s-' $(seq 6 "${COLS}"); printf "\n"
+	echo
 }
 
 function usage()
@@ -84,28 +97,26 @@ fi
 
 changes=${debdiff%.debdiff}_source.changes
 
-# Header of debdiff
-echo
-echo -e "\e[96m*** header ${debdiff} ***\e[0m"
-echo
-sed -n 's/^# HEADER //p' "${debdiff}"
+{
+	# Header of debdiff
+	header "header ${debdiff}"
+	sed -n 's/^# HEADER //p' "${debdiff}"
 
-# lsdiff debdiff
-echo
-echo -e "\e[96m*** lsdiff -s ${debdiff} ***\e[0m"
-echo
-sed '/^# HEADER /d' "${debdiff}" | lsdiff -s | uniq | do_colordiff
+	# lsdiff debdiff
+	header "lsdiff -s ${debdiff}"
+	sed '/^# HEADER /d' "${debdiff}" | lsdiff -s | uniq
 
-# filterdiff debdiff
-echo
-echo -e "\e[96m*** filterdiff ${debdiff} ***\e[0m"
-echo
-sed '/^# HEADER /d' "${debdiff}" | filterdiff -x '*/abi/*' | do_colordiff
+	# filterdiff debdiff (non-binary files)
+	header "filterdiff ${debdiff} (non-binary files)"
+	sed '/^# HEADER /d' "${debdiff}" | filterdiff -x '*/abi/*' | grep -v '^Binary files '
+
+	# filterdiff debdiff (binary files)
+	header "filterdiff ${debdiff} (binary files)"
+	sed '/^# HEADER /d' "${debdiff}" | filterdiff -x '*/abi/*' | grep '^Binary files '
+} | awk '/^diff / { print "" } { print }' | cat -s | colorize
 
 # Content of .changes
-echo
-echo -e "\e[96m*** cat ${changes} ***\e[0m"
-echo
+header "cat ${changes}" | colorize
 if [ -e "${changes}" ] ; then
 	cat "${changes}"
 else
