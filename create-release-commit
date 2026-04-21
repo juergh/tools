@@ -74,9 +74,8 @@ if [ "${dist}" != UNRELEASED ] ; then
 
 	ubuntu_prefix=
 	if [ -z "${prev_release}" ] ; then
-		prev_release=$(git log --oneline -1000 | \
-		               grep -m1 -P "^[0-9a-f]{12,} UBUNTU: Ubuntu(-.*)?-${version}$" || \
-		               true)
+		blame=$(git blame -L 1,1 -- "${changelog}" || echo 00000000)
+		prev_release=$(git log --oneline "${blame%% *}" -1 || true)
 		ubuntu_prefix=${prev_release%-"${version}"}
 		ubuntu_prefix=${ubuntu_prefix#* Ubuntu}
 		prev_release=${prev_release%% *}
