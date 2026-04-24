@@ -205,7 +205,7 @@ else
 		fi
 
 		if [ -z "${package}" ] || [ -z "${version}" ] ; then
-			echo "Failed to determine package and/or version" >&2
+			echo "Failed to determine package and/or version in ${path}" >&2
 			exit 1
 		fi
 
