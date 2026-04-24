@@ -3,6 +3,46 @@
 # Cherry-pick (transplant) a merge
 #
 
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-a] [-h] [-u] <merge-commit>
+
+Cherry-pick (transplant) a git merge.
+
+Optional arguments:
+  -a, --amend  Ammend commit messages.
+  -h, --help   Show this help text and exit.
+EOF
+}
+
+ammend=0
+
+while [ $# -ne 0 ] ; do
+	case "${1}" in
+		-a|--ammend)
+			ammend=1
+			;;
+		-h|--help)
+			usage
+			exit
+			;;
+		-*)
+			usage >&2
+			exit 2
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
+
+if [ $# -ne 1 ] ; then
+	usage >&2
+	exit 2
+fi
+
 merge_commit=${1}
 
 read -r p1 p2 < <(git show -s --format=%p "${merge_commit}")
@@ -20,6 +60,9 @@ git checkout -b "${tmp_branch}"
 while IFS= read -r line ; do
 	echo "II: Cherry-pick ${line}"
 	git cherry-pick "${line%% *}"
+	if [ ${ammend} -eq 1 ] ; then
+		git commit --amend
+	fi
 done < <(git log --reverse --oneline "${p1}".."${p2}")
 
 git checkout "${branch}"
