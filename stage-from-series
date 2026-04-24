@@ -1,0 +1,95 @@
+#!/bin/bash -eu
+
+export PYTHONWARNINGS="ignore::DeprecationWarning"
+
+function show_depends()
+{
+	local chdist=${1} series=${2}
+	local pkg
+
+	while read -r pkg ; do
+		echo "${pkg}"
+		chdist -d "${chdist}" apt "${series}" depends -o APT::Cache::ShowOnlyFirstOr=true "${pkg}" 2>/dev/null | \
+			awk '(($1 == "Depends:" || $1 == "PreDepends:") && $2 !~ /^</) { print $2 }'
+	done
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "${0}") [-h] [-u] <series> <package>
+
+Stage <package> from <series> to the current directory.
+
+Optional arguments:
+  -h, --help    Show this help text and exit.
+  -u, --update  Run apt update before the download.
+EOF
+}
+
+update=0
+
+while [ $# -ne 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-u|--update)
+			update=1
+			;;
+		*)
+			break
+			;;
+	esac
+	shift
+done
+
+if [ $# -ne 2 ] ; then
+	usage >&2
+	exit 2
+fi
+
+series=${1}
+pkg=${2}
+
+chdist=${HOME}/.cache/chdist
+
+#CHDIST=$(pwd)/__chdist
+#CACHE=${STAGE_DIR}/__cache.${SERIES}
+#touch "${CACHE}"
+
+if [ ! -d "${chdist}"/"${series}" ] ; then
+	chdist -d "${chdist}" create "${series}"
+
+	# Copy (and update) the sources file(s)
+	. /etc/os-release
+	for f in /etc/apt/sources.list /etc/apt/sources.list.d/* ; do
+		if [ -e "${f}" ] ; then
+			sed "s/${UBUNTU_CODENAME}/${series}/g" "${f}" > "${chdist}"/"${series}"/"${f}"
+		fi
+	done
+
+	# We also need any trusted keys that LP might have injected
+	cp /etc/apt/trusted.gpg.d/*.gpg "${chdist}"/"${series}"/etc/apt/trusted.gpg.d/ || true
+
+	chdist -d "${chdist}" apt-get "${series}" update
+fi
+
+if [ ${update} -eq 1 ] ; then
+	chdist -d "${chdist}" apt-get "${series}" update
+fi
+
+# Download package plus dependencies
+while IFS= read -r pkg ; do
+#	if ! grep -qFx "${pkg}" "${CACHE}"  ; then
+		echo "-- Download ${pkg}"
+		chdist -d "${chdist}" apt-get "${series}" download "${pkg}"
+#		echo "${pkg}" >> "${CACHE}"
+#	fi
+done < <(
+	# FIXME: Currently three levels deep to also get linux-main-modules-zfs.
+	# There must be a better way to do this, check snapcraft...
+	echo "${pkg}"
+	 #| show_depends | show_depends | show_depends | sort -u
+)
