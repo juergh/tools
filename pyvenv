@@ -1,26 +1,37 @@
-#!/bin/bash
+#!/bin/bash -eu
 
 function usage()
 {
 	cat <<EOF
-Usage: pyvenv [-h] [-u] [<command> ...]
+Usage: pyvenv [-e <dir>] [-h] [-n] [-u] [<command> ...]
 
 Enter the Python virtual env or run the provided command in it. Create the
 virtual env first, if it doesn't exist.
 
 Optional arguments:
-  -h, --help     Show this help text and exit.
-  -u, --upgrade  Upgrade the installed pip packages.
+  -e, --env-dir <dir>            Python virtual env directory (default: ~/.cache/python-venv).
+  -h, --help                     Show this help text and exit.
+  -n, --no-system-site-packages  Don't enable system site packages when creating the virtual env.
+  -u, --upgrade                  Upgrade the installed pip packages.
 EOF
 }
 
+env_dir=${HOME}/.cache/python-venv
+ssp=1
 upgrade=0
 
-for arg in "${@}" ; do
-	case "${arg}" in
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-e|--env-dir)
+			shift
+			env_dir=${1}
+			;;
 		-h|--help)
 			usage
 			exit
+			;;
+		-n|--no-system-site-packages)
+			ssp=0
 			;;
 		-u|--upgrade)
 			upgrade=1
@@ -30,12 +41,15 @@ for arg in "${@}" ; do
 			break
 			;;
 	esac
+	shift
 done
 
-env_dir=${HOME}/.cache/python-venv
-
 if ! [ -d "${env_dir}" ] ; then
-	python3 -m venv --system-site-packages "${env_dir}"
+	opts=()
+	if [ ${ssp} -eq 1 ] ; then
+		opts=(--system-site-packages)
+	fi
+	python3 -m venv "${opts[@]}" "${env_dir}"
 fi
 
 export debian_chroot=pyvenv
@@ -45,8 +59,7 @@ export debian_chroot=pyvenv
 
 if [ ${upgrade} -eq 1 ] ; then
 	echo "-- Upgrade installed packages"
-	pip list --local --outdated | tail -n +3 | awk '{print $1}' | \
-		xargs -n1 pip install -U
+	pip list --local --outdated | tail -n +3 | awk '{print $1}' | xargs -n1 pip install -U
 elif [ ${#} -eq 0 ] ; then
 	/bin/bash
 else
