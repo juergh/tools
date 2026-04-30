@@ -11,28 +11,14 @@ function prinfo()  { echo -e "${__CII}II: $*${__CNO}" ; }
 
 function lxc_image_exists()
 {
-	local name=${1}
+	local image=${1}
 
-	lxc image info "${name}" &>/dev/null
-}
-
-function flags_from_name()
-{
-	local name=${1}
-
-	if [ "${name/--vm/}" != "${name}" ] ; then
-		echo "--vm"
-	fi
+	lxc image info "${image}" &>/dev/null
 }
 
 function lxc_remote_image()
 {
-	local name=${1}
-	local series arch
-
-	name=${name%--*}
-	series=${name%-*}
-	arch=${name#*-}
+	local series=${1} arch=${2}
 
 	if ubuntu-distro-info --all | grep -q "${series}" ; then
 		echo "ubuntu-daily:${series}/${arch}"
@@ -44,21 +30,19 @@ function lxc_remote_image()
 		return
 	fi
 
-	prerror "Unsupported image name: ${name}"
+	prerror "Unsupported image series: ${series}"
 	return 1
 }
 
 function lxc_image_copy()
 {
-	local name=${1}
-	local image flags
+	local image=${1} series=${2} arch=${3}
+	local remote_image
 
-	image=$(lxc_remote_image "${name}")
+	remote_image=$(lxc_remote_image "${series}" "${arch}")
 
-	prinfo "Copy image: ${image} -> ${name}"
-
-	readarray -t flags < <(flags_from_name "${name}")
-	lxc image copy "${image}" local: --alias "${name}" "${flags[@]}"
+	prinfo "Copy image: ${remote_image} -> ${image}"
+	lxc image copy "${remote_image}" local: --alias "${image}"
 }
 
 function lxc_exists()
@@ -90,13 +74,17 @@ function lxc_wait()
 
 function lxc_launch()
 {
-	local image_name=${1} name=${2}
-	local gid uid flags
+	local name=${1} series=${2} arch=${3}
+	local image gname gid uid lxc_gid lxc_uid
+
+	image=${series}-${arch}
+	if ! lxc_image_exists "${image}" ; then
+		lxc_image_copy "${image}" "${series}" "${arch}"
+	fi
 
 	prinfo "Launch container: ${name}"
 
-	readarray -t flags < <(flags_from_name "${name}")
-	lxc launch local:"${image_name}" "${name}" "${flags[@]}"
+	lxc launch local:"${image}" "${name}"
 	lxc_wait "${name}"
 
 	prinfo "Configure container"
@@ -140,7 +128,9 @@ uid ${uid} ${lxc_uid}
 EOF
 
 	# Attach our home directory
-	lxc config device add "${name}" home disk source="${HOME}" path=/home/"${USER}"
+	if [ ${ATTACH_HOME} -eq 1 ] ; then
+		lxc config device add "${name}" home disk source="${HOME}" path=/home/"${USER}"
+	fi
 
 	# Start the container again
 	prinfo "Start container"
@@ -160,29 +150,33 @@ function lxc_start()
 function usage()
 {
 	cat <<EOF
-Usage: lxc-run [-h] [--root] [-v] [--vm] NAME [-- COMMAND [ARG]...]
+Usage: lxc-run [-h] [--root] [--series SERIES] [-v] [--vm] [NAME] [-- COMMAND [ARG]...]
 
 Run the given command in an LXC container. Create the container first if it
 doesn't exits.
 
 Postional arguments:
-  NAME              LXC container name. Must be in the form of SERIES or
-                    SERIES-ARCH.
-  COMMAND [ARG]...  Command to run. If not provided, defaults to 'bash'.
+  NAME              LXC container name (default: ${series}-${arch}).
+  COMMAND [ARG]...  Command to run (default: /usr/bin/bash).
 
 Optional argument:
   -h, --help        Show this help text and exit.
+  --no-home         Don't attach the home directory to the container.
   --root            Run command as the root user.
+  --series SERIES   OS series name (default: ${series}).
   -v, --verbose     Enable verbose output.
-  --vm              Run a VM instead of a container.
 EOF
 }
 
+ATTACH_HOME=1
+
+arch=$(dpkg-architecture -qDEB_HOST_ARCH)
 root=0
+series=$(lsb_release -s -c)
 verbose=0
-vm=0
+
 name=
-command=("bash")
+command=("/usr/bin/bash")
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -190,14 +184,18 @@ while [ $# -gt 0 ] ; do
 			usage
 			exit
 			;;
+		--no-home)
+			ATTACH_HOME=0
+			;;
 		--root)
 			root=1
 			;;
+		--series)
+			shift
+			series=${1}
+			;;
 		-v|--verbose)
 			verbose=1
-			;;
-		--vm)
-			vm=1
 			;;
 		--)
 			shift
@@ -219,44 +217,18 @@ while [ $# -gt 0 ] ; do
 	shift
 done
 
-arch=
-case "${name}" in
-	"")
-		usage >&2
-		exit 2
-		;;
-	*-*)
-		series=${name%-*}
-		arch=${name#*-}
-		;;
-	*)
-		series=${name}
-		;;
-esac
-if [ -z "${arch}" ] ; then
-	arch=$(dpkg-architecture -qDEB_HOST_ARCH)
-fi
-
 case "${series}" in
 	unstable) series=sid ;;
 esac
 
-image_name=${series}-${arch}
-name=${series}-${arch}
-
-if [ ${vm} -eq 1 ] ; then
-	image_name=${image_name}--vm
-	name=${name}--vm
-fi
-
-if ! lxc_image_exists "${image_name}" ; then
-	lxc_image_copy "${image_name}"
+if [ -z "${name}" ] ; then
+	name=${series}-${arch}
 fi
 
 status=$(lxc_status "${name}")
 case "${status}" in
 	NOTFOUND)
-		lxc_launch "${image_name}" "${name}"
+		lxc_launch "${name}" "${series}" "${arch}"
 		;;
 	STOPPED)
 		lxc_start "${name}"
@@ -271,7 +243,7 @@ esac
 
 lxc_opts=(
 	--cwd "$(pwd)"
-	--env debian_chroot="lxc:${series}"
+	--env debian_chroot="lxc:${name}"
 	--mode interactive
 )
 
