@@ -3,21 +3,21 @@
 function usage()
 {
 	cat <<EOF
-Usage: pyvenv [-e <dir>] [-h] [-n] [-u] [<command> ...]
+Usage: pyvenv [-e <dir>] [-h] [-s] [-u] [<command> ...]
 
 Enter the Python virtual env or run the provided command in it. Create the
 virtual env first, if it doesn't exist.
 
 Optional arguments:
-  -e, --env-dir <dir>            Python virtual env directory (default: ~/.cache/python-venv).
-  -h, --help                     Show this help text and exit.
-  -n, --no-system-site-packages  Don't enable system site packages when creating the virtual env.
-  -u, --upgrade                  Upgrade the installed pip packages.
+  -e, --env-dir <dir>         Python virtual env directory (default: ~/.cache/python-venv).
+  -h, --help                  Show this help text and exit.
+  -s, --system-site-packages  Enable system site packages when creating the virtual env.
+  -u, --upgrade               Upgrade the installed pip packages.
 EOF
 }
 
 env_dir=${HOME}/.cache/python-venv
-ssp=1
+ssp=0
 upgrade=0
 
 while [ $# -gt 0 ] ; do
@@ -30,8 +30,8 @@ while [ $# -gt 0 ] ; do
 			usage
 			exit
 			;;
-		-n|--no-system-site-packages)
-			ssp=0
+		-s|--system-site-packages)
+			ssp=1
 			;;
 		-u|--upgrade)
 			upgrade=1
