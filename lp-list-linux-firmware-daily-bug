@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+#
+# List bugs with linux-firmware-daily-bug tag
+#
+
+from launchpadlib.launchpad import Launchpad
+
+
+BUG_STATUS_OPEN = [
+    "New",
+    "Incomplete",
+    "Confirmed",
+    "Triaged",
+    "In Progress",
+    "Fix Committed",
+]
+
+BUG_STATUS_CLOSED = [
+    "Invalid",
+    "Won't Fix",
+    "Expired",
+    "Deferred",
+    "Fix Released",
+]
+
+status = BUG_STATUS_OPEN #+ BUG_STATUS_CLOSED
+tags = "linux-firmware-daily-bug"
+
+lp = Launchpad.login_with("tools", "production", version="devel")
+lp_dist = lp.distributions["ubuntu"]
+bug_tasks = lp_dist.searchTasks(status=status, tags=tags)
+
+for task in bug_tasks:
+    target_name = task.target.name
+    if target_name.startswith("linux-firmware"):
+        bug = task.bug
+        bug_id = bug.id
+        print(f"LP: #{bug_id} -- {target_name:<32} -- {bug.title}")
