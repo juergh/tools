@@ -1,0 +1,78 @@
+#!/bin/bash -eu
+#
+# Wrapper around git cherry-pick
+#
+
+function commit_message()
+{
+	local sha1=${1} bug=${2} provenance=${3}
+
+	while IFS= read -r line ; do
+		case "${line}" in
+			"(cherry picked from commit ${sha1})")
+				if [ -n "${provenance}" ] ; then
+					line=${line:0:-1}
+					line="${line} ${provenance})"
+				fi
+				echo "${line}"
+				echo "BugLink: https://bugs.launchpad.net/bugs/${bug}"
+				echo "Signed-off-by: $(git config user.name) <$(git config user.email)>"
+				exit
+				;;
+			*)
+				echo "${line}"
+				;;
+		esac
+	done < <(git log --format=%B HEAD -1)
+
+	echo "EE: Trailer not found" >&2
+	exit 1
+}
+
+function usage()
+{
+	cat <<EOF
+Usage: $(basename "$0") [-b BUG] [-h] [-p PROVENANCE] COMMIT..
+EOF
+}
+
+bug=
+provenance=
+
+commits=()
+
+while [ $# -gt 0 ] ; do
+	case "${1}" in
+		-h|--help)
+			usage
+			exit
+			;;
+		-b|--bug)
+			shift
+			bug=${1}
+			;;
+		-p|--provenance)
+			shift
+			provenance=${1}
+			;;
+		-*)
+			usage >&2
+			exit 2
+			;;
+		*)
+			commits+=("${1}")
+			;;
+	esac
+	shift
+done
+
+if [ -z "${bug}" ] ; then
+	echo "EE: Missing --bug" >&2
+	exit 1
+fi
+
+for commit in "${commits[@]}" ; do
+	sha1=$(git rev-parse "${commit}")
+	git cherry-pick -x "${sha1}"
+	commit_message "${sha1}" "${bug}" "${provenance}" | git commit --amend --quiet -F -
+done
