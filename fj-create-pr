@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+#
+# Create e Forgejo PR from the current branch
+#
+
+import argparse
+import os
+import sys
+from subprocess import check_output
+
+import requests
+from git import Repo
+from launchpadlib.launchpad import Launchpad
+
+
+def get_password(pass_name):
+    """Return a password from the password store"""
+    return check_output(["pass", "show", pass_name]).decode().split("\n", 1)[0]
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-n", "--dry-run", action="store_true")
+parser.add_argument("-f", "--force", action="store_true")
+args = parser.parse_args()
+
+FORGEJO_URL = "https://kernel.ubuntu.com/forgejo"
+FORGEJO_USER = os.getenv("USER")
+FORGEJO_TOKEN = get_password("canonical/forgejo/AUTH_TOKEN")
+
+repo = Repo(os.getcwd())
+branch = repo.active_branch.name
+
+bug_id, series = branch.removeprefix("lp").split("--")
+
+# Fetch details from Launchpad
+print(f"Fetch bug LP: #{bug_id} from Launchpad...")
+lp = Launchpad.login_with("tools", "production")
+bug = lp.bugs[bug_id]
+
+title = f"[SRU][{series[0].upper()}] {bug.title}"
+body = f"BugLink: https://bugs.launchpad.net/bugs/{bug_id}\n\n{bug.description}"
+
+if not args.force and "[impact]" not in body.replace(" ", "").lower():
+    print("EE: SRU template not found in bug description, exiting...", file=sys.stderr)
+    print("EE: Use --force to continue", file=sys.stderr)
+    sys.exit(1)
+
+# Push branch to origin
+if args.dry_run:
+    print(f"(dry-run) Push {branch} to origin...")
+else:
+    print(f"Push {branch} to origin...")
+    origin = repo.remote(name="origin")
+    origin.push(refspec=f"{branch}:{branch}")
+
+# Get Forgejo target user/repo
+upstream = repo.remote(name="upstream")
+user, repo = upstream.url.removesuffix(".git").replace(":", "/").split("/")[-2:]
+
+url = f"{FORGEJO_URL}/api/v1/repos/{user}/{repo}/pulls"
+headers = {"Authorization": f"token {FORGEJO_TOKEN}", "Content-Type": "application/json"}
+data = {
+    "title": title,
+    "body": body,
+    "head": f"{FORGEJO_USER}:{branch}",
+    "base": series,
+}
+
+#print(data)
+
+if args.dry_run:
+    print("(dry-run) Create PR on Forgejo...")
+else:
+    print("Create PR on Forgejo...")
+    response = requests.post(url, headers=headers, json=data)
+    response.raise_for_status()
+    resp = response.json()
+    print(f"Created PR: {resp['html_url']}")
