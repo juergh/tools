@@ -117,6 +117,17 @@ echo "${USER} ALL = NOPASSWD: ALL" > /etc/sudoers.d/"${USER}"
 chmod 440 /etc/sudoers.d/"${USER}"
 EOF
 
+	# Create the home directory
+	if [ ${ATTACH_HOME} -eq 0 ] && ! lxc exec "${name}" -- test -d /home/"${USER}" ; then
+		prinfo "Create home directory /home/${USER}"
+		cat <<EOF | lxc exec "${name}" -- bash -
+mkdir -p /home/${USER}
+cp -r /etc/skel/. /home/${USER}/
+chown -R ${lxc_uid}:${lxc_gid} /home/${USER}
+chmod 755 /home/${USER}
+EOF
+	fi
+
 	# Stop the container (required for ID mapping to take effect)
 	prinfo "Stop container"
 	lxc stop "${name}"
@@ -129,6 +140,7 @@ EOF
 
 	# Attach our home directory
 	if [ ${ATTACH_HOME} -eq 1 ] ; then
+		prinfo "Attach home directory /home/${USER} to container"
 		lxc config device add "${name}" home disk source="${HOME}" path=/home/"${USER}"
 	fi
 
