@@ -6,6 +6,12 @@
 # Copy to ~/.lessfilter
 #
 
+if head -1 "${1}" | grep -q '^#!/.*python' ; then
+	# Derived from /usr/share/source-highlight/src-hilite-lesspipe.sh
+	source-highlight --failsafe -f esc --lang-def=python.lang --style-file=esc.style -i "${1}"
+	exit 0
+fi
+
 CYAN="\o33[36m"
 NC="\o33[0m"
 
