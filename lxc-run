@@ -89,7 +89,7 @@ function lxc_group_id()
 function lxc_launch()
 {
 	local name=${1} series=${2} arch=${3}
-	local image gname gid uid lxc_gid lxc_uid
+	local image gid uid lxc_gid lxc_uid
 
 	image=${series}-${arch}
 	if ! lxc_image_exists "${image}" ; then
@@ -103,16 +103,15 @@ function lxc_launch()
 
 	prinfo "Configure container"
 
-	gname=$(id -gn)
 	gid=$(id -g)
 	uid=$(id -u)
 
 	# Add group
-	lxc_gid=$(lxc_group_id "${name}" "${gname}")
+	lxc_gid=$(lxc_group_id "${name}" "${GROUP}")
 	if [ -z "${lxc_gid}" ] ; then
-		prinfo "Add group ${gname}"
-		lxc exec "${name}" -- groupadd "${gname}"
-		lxc_gid=$(lxc_group_id "${name}" "${gname}")
+		prinfo "Add group ${GROUP}"
+		lxc exec "${name}" -- groupadd "${GROUP}"
+		lxc_gid=$(lxc_group_id "${name}" "${GROUP}")
 	fi
 
 	# Add user
@@ -201,6 +200,8 @@ Optional argument:
 EOF
 }
 
+GROUP=$(id -gn)
+
 ATTACH_HOME=1
 ATTACH_SCRATCH=1
 
@@ -288,8 +289,8 @@ if [ ${root} -eq 0 ] ; then
 	lxc_opts+=(
 		--env HOME="${HOME}"
 		--env USER="${USER}"
-		--group "$(id -g)"
-		--user "$(id -u)"
+		--group "$(lxc_group_id "${name}" "${GROUP}")"
+		--user "$(lxc_user_id "${name}" "${USER}")"
 	)
 fi
 
