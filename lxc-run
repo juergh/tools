@@ -72,6 +72,20 @@ function lxc_wait()
 	done
 }
 
+function lxc_user_id()
+{
+	local name=${1} user=${2}
+
+	lxc exec "${name}" -- id -u "${user}" 2>/dev/null || true
+}
+
+function lxc_group_id()
+{
+	local name=${1} group=${2}
+
+	lxc exec "${name}" -- getent group "${group}" | awk -F: '{print $3 }'
+}
+
 function lxc_launch()
 {
 	local name=${1} series=${2} arch=${3}
@@ -94,20 +108,20 @@ function lxc_launch()
 	uid=$(id -u)
 
 	# Add group
-	lxc_gid=$(lxc exec "${name}" -- getent group "${gname}" | awk -F: '{print $3}')
+	lxc_gid=$(lxc_group_id "${name}" "${gname}")
 	if [ -z "${lxc_gid}" ] ; then
 		prinfo "Add group ${gname}"
 		lxc exec "${name}" -- groupadd "${gname}"
-		lxc_gid=$(lxc exec "${name}" -- getent group "${gname}" | awk -F: '{print $3}')
+		lxc_gid=$(lxc_group_id "${name}" "${gname}")
 	fi
 
 	# Add user
-	lxc_uid=$(lxc exec "${name}" -- id -u "${USER}" 2>/dev/null || true)
+	lxc_uid=$(lxc_user_id "${name}" "${USER}")
 	if [ -z "${lxc_uid}" ] ; then
 		prinfo "Add user ${USER}"
 		lxc exec "${name}" -- useradd --gid "${lxc_gid}" --home-dir /home/"${USER}" \
 		    --no-create-home --shell /bin/bash "${USER}"
-		lxc_uid=$(lxc exec "${name}" -- id -u "${USER}" 2>/dev/null)
+		lxc_uid=$(lxc_user_id "${name}" "${USER}")
 	fi
 
 	# Enable sudo
