@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+
+import argparse
+
+from launchpadlib.launchpad import Launchpad
+
+def show(item):
+    print(item)
+    print("attributes:  {}".format(sorted(item.lp_attributes)))
+    print("collections: {}".format(sorted(item.lp_collections)))
+    print("entries:     {}".format(sorted(item.lp_entries)))
+    print("operations:  {}".format(sorted(item.lp_operations)))
+
+
+def tag_bug(lp_bug, tag, dry_run=False):
+    p = "(Dry run) " if dry_run else ""
+    tags = lp_bug.tags
+    print(f"{p}LP: #{lp_bug.id} -- {tags} -- {lp_bug.title}")
+
+    if tag in tags or dry_run:
+        return
+
+    tags.append(tag)
+    lp_bug.tags = tags
+    lp_bug.lp_save()
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--tag", required=True)
+    parser.add_argument("bug", nargs="+", type=int, help="Launchpad bug number")
+    args = parser.parse_args()
+
+    lp = Launchpad.login_with("tools", "production", version="devel")
+
+    for bug in args.bug:
+        try:
+            lp_bug = lp.bugs[bug]
+        except KeyError:
+            continue
+        tag_bug(lp_bug, args.tag, dry_run=args.dry_run)
+
+if __name__ == "__main__":
+    main()
