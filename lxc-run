@@ -266,6 +266,12 @@ fi
 status=$(lxc_status "${name}")
 case "${status}" in
 	NOTFOUND)
+		echo "Container not found: ${name}"
+		echo -n "Do you want to create it (y|n)? "
+		read -r tmp
+		if [ "${tmp,,}" != "y" ] ; then
+			exit 0
+		fi
 		lxc_launch "${name}" "${series}" "${arch}"
 		;;
 	STOPPED)
