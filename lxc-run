@@ -157,10 +157,10 @@ EOF
 		lxc config device add "${name}" home disk source="${HOME}" path=/home/"${USER}"
 	fi
 
-	# Attach the scratch directory
-	if [ ${ATTACH_SCRATCH} -eq 1 ] ; then
-		prinfo "Attach scratch directory /scratch to container"
-		lxc config device add "${name}" scratch disk source=/scratch path=/scratch
+	# Attach the data directory
+	if [ ${ATTACH_DATA} -eq 1 ] ; then
+		prinfo "Attach data directory /data to container"
+		lxc config device add "${name}" data disk source=/data path=/data
 	fi
 
 	# Start the container again
@@ -192,8 +192,8 @@ Postional arguments:
 
 Optional argument:
   -h, --help        Show this help text and exit.
+  --no-data         Don't attach the data directory to the container.
   --no-home         Don't attach the home directory to the container.
-  --no-scratch      Don't attach the scratch directory to the container.
   --root            Run command as the root user.
   --series SERIES   OS series name (default: ${series}).
   -v, --verbose     Enable verbose output.
@@ -202,8 +202,8 @@ EOF
 
 GROUP=$(id -gn)
 
+ATTACH_DATA=1
 ATTACH_HOME=1
-ATTACH_SCRATCH=1
 
 arch=$(dpkg-architecture -qDEB_HOST_ARCH)
 root=0
@@ -219,11 +219,11 @@ while [ $# -gt 0 ] ; do
 			usage
 			exit
 			;;
+		--no-data)
+			ATTACH_DATA=0
+			;;
 		--no-home)
 			ATTACH_HOME=0
-			;;
-		--no-scratch)
-			ATTACH_SCRATCH=0
 			;;
 		--root)
 			root=1
