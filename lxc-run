@@ -89,7 +89,7 @@ function lxc_group_id()
 function lxc_launch()
 {
 	local name=${1} series=${2} arch=${3}
-	local image gid uid lxc_gid lxc_uid
+	local image lxc_gid lxc_uid
 
 	image=${series}-${arch}
 	if ! lxc_image_exists "${image}" ; then
@@ -102,9 +102,6 @@ function lxc_launch()
 	lxc_wait "${name}"
 
 	prinfo "Configure container"
-
-	gid=$(id -g)
-	uid=$(id -u)
 
 	# Add group
 	lxc_gid=$(lxc_group_id "${name}" "${GROUP}")
@@ -122,6 +119,23 @@ function lxc_launch()
 		    --no-create-home --shell /bin/bash "${USER}"
 		lxc_uid=$(lxc_user_id "${name}" "${USER}")
 	fi
+
+	# Create custom profile.d
+	prinfo "Create /etc/profile.d/lxc_custom.sh"
+	lxc exec "${name}" -- bash -c 'cat > /etc/profile.d/lxc_custom.sh' << EOF
+eval "$(dircolors -b)"
+
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+alias fgrep='fgrep --color=auto'
+alias egrep='egrep --color=auto'
+
+alias rm="rm -i"
+alias mv="mv -i"
+alias cp="cp -i"
+
+PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+EOF
 
 	# Enable sudo
 	prinfo "Enable sudo for user ${USER}"
@@ -147,8 +161,8 @@ EOF
 
 	# Map group and user IDs
 	cat <<EOF | lxc config set "${name}" raw.idmap -
-gid ${gid} ${lxc_gid}
-uid ${uid} ${lxc_uid}
+gid $(id -g) ${lxc_gid}
+uid $(id -u) ${lxc_uid}
 EOF
 
 	# Attach our home directory
@@ -162,6 +176,10 @@ EOF
 		prinfo "Attach data directory /data to container"
 		lxc config device add "${name}" data disk source=/data path=/data
 	fi
+
+	# Store the group and user IDs in the config
+	lxc config set "${name}" user.gid."${GROUP}" "${lxc_gid}"
+	lxc config set "${name}" user.uid."${USER}" "${lxc_uid}"
 
 	# Start the container again
 	prinfo "Start container"
@@ -266,7 +284,7 @@ fi
 status=$(lxc_status "${name}")
 case "${status}" in
 	NOTFOUND)
-		echo "Container not found: ${name}"
+		echo "Container not found: ${name} (series=${series}, arch=${arch})"
 		echo -n "Do you want to create it (y|n)? "
 		read -r tmp
 		if [ "${tmp,,}" != "y" ] ; then
@@ -295,8 +313,8 @@ if [ ${root} -eq 0 ] ; then
 	lxc_opts+=(
 		--env HOME="${HOME}"
 		--env USER="${USER}"
-		--group "$(lxc_group_id "${name}" "${GROUP}")"
-		--user "$(lxc_user_id "${name}" "${USER}")"
+		--group "$(lxc config get "${name}" user.gid."${GROUP}")"
+		--user "$(lxc config get "${name}" user.uid."${USER}")"
 	)
 fi
 
