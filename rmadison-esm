@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+#
+# esm-madison -- query ESM PPAs for Ubuntu source package versions
+#
+
+import argparse
+import logging
+import sys
+
+from launchpadlib.launchpad import Launchpad
+
+
+PPAS = [
+    ("esm-infra-updates",  "~ubuntu-esm/ubuntu/esm-infra-updates"),
+    ("esm-infra-security", "~ubuntu-esm/ubuntu/esm-infra-security"),
+    ("esm-apps-updates",   "~ubuntu-esm/ubuntu/esm-apps-updates"),
+    ("esm-apps-security",  "~ubuntu-esm/ubuntu/esm-apps-security"),
+]
+
+
+def query_esm_ppas(lp, packages):
+    rows = []
+    for ppa_name, ppa_ref in PPAS:
+        archive = lp.archives.getByReference(reference=ppa_ref)
+        if not archive:
+            continue
+        for pkg in packages:
+            sources = archive.getPublishedSources(
+                source_name=pkg,
+                exact_match=True,
+                status="Published",
+                order_by_date=True,
+            )
+            seen = set()
+            for src in sources:
+                version = src.source_package_version
+                # distro_series_link looks like https://api.launchpad.net/devel/ubuntu/jammy
+                series = src.distro_series_link.rstrip("/").split("/")[-1]
+                key = (pkg, version, series, ppa_name)
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append((pkg, version, f"{series}/main ({ppa_name})", "source"))
+    return rows
+
+
+def print_rows(rows):
+    if not rows:
+        return
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    for row in rows:
+        parts = [cell.ljust(widths[i]) for i, cell in enumerate(row)]
+        # Trim trailing whitespace from the last column, match rmadison style
+        parts[-1] = row[-1]
+        print(" " + " | ".join(parts))
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Query ESM PPAs for Ubuntu source package versions"
+    )
+    parser.add_argument("packages", nargs="+", metavar="package",
+                        help="Source package name(s) to query")
+    args = parser.parse_args()
+
+    logging.disable(logging.INFO)
+    lp = Launchpad.login_with("tools", "production", version="devel")
+    logging.disable(logging.NOTSET)
+
+    rows = query_esm_ppas(lp, args.packages)
+    print_rows(rows)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
