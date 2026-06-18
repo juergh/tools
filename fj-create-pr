@@ -8,8 +8,8 @@ import os
 import sys
 from subprocess import check_output
 
+import git
 import requests
-from git import Repo
 from launchpadlib.launchpad import Launchpad
 
 
@@ -21,16 +21,20 @@ def get_password(pass_name):
 parser = argparse.ArgumentParser()
 parser.add_argument("-n", "--dry-run", action="store_true")
 parser.add_argument("-f", "--force", action="store_true")
+parser.add_argument("--debug", action="store_true")
 args = parser.parse_args()
 
 FORGEJO_URL = "https://kernel.ubuntu.com/forgejo"
 FORGEJO_USER = os.getenv("USER")
 FORGEJO_TOKEN = get_password("canonical/forgejo/AUTH_TOKEN")
 
-repo = Repo(os.getcwd())
+repo = git.Repo()
 branch = repo.active_branch.name
 
 bug_id, series = branch.removeprefix("lp").split("--")
+
+print(f"Bug:    LP: #{bug_id}")
+print(F"Series: {series}")
 
 # Fetch details from Launchpad
 print(f"Fetch bug LP: #{bug_id} from Launchpad...")
@@ -66,13 +70,17 @@ data = {
     "base": series,
 }
 
-#print(data)
+if args.debug:
+    print("DD: headers:")
+    print(headers)
+    print("DD: data:")
+    print(data)
 
 if args.dry_run:
     print("(dry-run) Create PR on Forgejo...")
 else:
     print("Create PR on Forgejo...")
-    response = requests.post(url, headers=headers, json=data)
+    response = requests.post(url, headers=headers, json=data, timeout=5)
     response.raise_for_status()
     resp = response.json()
     print(f"Created PR: {resp['html_url']}")
