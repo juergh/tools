@@ -11,12 +11,15 @@ function filter_inbox() {
     // Filter rules
     const FILTERS = [
         // Trash
-        [({subject}) => subject.includes(' abi-testing: ABI testing report'),      "Trash"],
-        [({subject}) => subject.includes(' -proposed tracker'),                    "Trash"],
-        [({subject}) => subject.includes(' Workflow done!'),                       "Trash"],
-        [({subject}) => subject.includes(' uploaded (ABI bump)'),                  "Trash"],
-        [({subject}) => subject.includes(' Live Kernel Patching release tracker'), "Trash"],
-        [({subject}) => subject.includes(' build of livepatch-linux-'),            "Trash"],
+        [({subject}) => subject.includes(' abi-testing: ABI testing report'),        "Trash"],
+        [({subject}) => subject.includes(' -proposed tracker'),                      "Trash"],
+        [({subject}) => subject.includes(' Workflow done!'),                         "Trash"],
+        [({subject}) => subject.includes(' uploaded (ABI bump)'),                    "Trash"],
+        [({subject}) => subject.includes(' Live Kernel Patching release tracker'),   "Trash"],
+        [({subject}) => subject.includes(' build of livepatch-linux-'),              "Trash"],
+        [({to}) => to.includes('kernel-team-bot+ancillary@canonical.com'),           "Trash"],
+        [({to}) => to.includes('kernel-team-bot@canonical.com'),                     "Trash"],
+        [({to}) => to.includes('kernel-team-bot+ubuntu-kernel-gitea@canonical.com'), "Trash"],
 
         // Pre-filter
         [({subject}) => subject.includes('The Daily Bug Report for 20'),         "Canonical/Bugs"],
@@ -53,10 +56,7 @@ function filter_inbox() {
         [({body}) => body.includes('Launchpad-Message-For: juergh'),                         "Launchpad-Message-For/juergh"],
 
         // Post-filter
-        [({body}) => body.includes('Launchpad-Message-For: '),                         "Launchpad-Message-For"],
-        [({to}) => to.includes('kernel-team-bot@canonical.com'),                       "Canonical/Bots"],
-        [({to}) => to.includes('kernel-team-bot+ancillary@canonical.com'),             "Canonical/Bots"],
-        [({to}) => to.includes('kernel-team-bot+ubuntu-kernel-gitea@canonical.com'),   "Canonical/Bots"],
+        [({body}) => body.includes('Launchpad-Message-For: '), "Launchpad-Message-For"],
     ];
 
     /* --------------------------------------------------------------------------------------------------------------------------------- */
