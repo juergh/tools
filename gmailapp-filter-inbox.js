@@ -92,17 +92,17 @@ function filter_inbox() {
         const list_id = message.getHeader("List-Id") || "";
 
         // Find the first filter rule that matches
-        let action = "Inbox";
+        let dest = "Inbox";
         for (const filter of FILTERS) {
             if (filter[0]({from, to, subject, body, list_id})) {
-                action = filter[1];
+                dest = filter[1];
                 break;
             }
         }
 
-        console.log(action + " -- " + subject);
+        console.log(dest + " -- " + subject);
 
-        switch (action) {
+        switch (dest) {
         case "Inbox":
             inboxThreads.push(thread);
             break;
@@ -110,28 +110,28 @@ function filter_inbox() {
             trashThreads.push(thread);
             break;
         default:
-            if (!labelThreads[action]) {
-                labelThreads[action] = [];
+            if (!labelThreads[dest]) {
+                labelThreads[dest] = [];
             }
-            labelThreads[action].push(thread);
+            labelThreads[dest].push(thread);
             break;
         }
 
     }
 
-    // Batch-apply actions
+    // Batch-move threads
     if (inboxThreads.length) {
         GmailApp.moveThreadsToInbox(inboxThreads);
     }
     if (trashThreads.length) {
         GmailApp.moveThreadsToTrash(trashThreads);
     }
-    for (const [action, threads] of Object.entries(labelThreads)) {
-        if (!labels[action]) {
-            console.error(`Label not found: "${action}"`);
+    for (const [dest, threads] of Object.entries(labelThreads)) {
+        if (!labels[dest]) {
+            console.error(`Label not found: "${dest}"`);
             continue;
         }
-        labels[action].addToThreads(threads);
+        labels[dest].addToThreads(threads);
     }
 
     // Batch-remove the filter label
