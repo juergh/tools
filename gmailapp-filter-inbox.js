@@ -1,7 +1,12 @@
-// Note to self: Define a catch-all filter in the Gmail UI:
-//   if hasTheWords "-is:spam" and Size greater than 0 Bytes then
-//     skipTheInbox
-//     applyTheLabel "00-Inbox"
+//
+// Note to self: Define two filters in the Gmail UI in the exact order:
+//
+// 1. Matches: from:(@bugs.launchpad.net)
+//    Do this: Never send it to Spam
+//
+// 2. Matches: from:(*@)
+//    Do this: Skip Inbox, Apply label "00-Inbox"
+//
 
 function filter_inbox() {
 
@@ -73,22 +78,35 @@ function filter_inbox() {
     const labelThreads = {};
     const removeLabelThreads = [];
 
-    // Walk through 100 messages with the filter label and classify
-    // Important: There's a 100-thread cap for addToThreads / removeFromThreads
-    for (const thread of GmailApp.search(`label:"${FILTER_LABEL}"`, 0, 100)) {
+    // 1. Fetch the 100 threads
+    const threads = GmailApp.search(`label:"${FILTER_LABEL}"`, 0, 100);
+    if (threads.length === 0) {
+        return;
+    }
+
+    // 2. CRITICAL OPTIMIZATION: Fetch ALL messages for ALL threads in a single API call
+    const messages2D = GmailApp.getMessagesForThreads(threads);
+
+    // 3. Loop through the cached data (No API calls inside this loop!)
+    for (let i = 0; i < threads.length; i++) {
+        const thread = threads[i];
         removeLabelThreads.push(thread);
 
         if (thread.isInSpam()) {
             continue;
         }
 
-        const message = thread.getMessages()[0];
+        // Pull the pre-fetched message from our 2D array matrix
+        const threadMessages = messages2D[i];
+        if (!threadMessages || threadMessages.length === 0) {
+            continue;
+        }
+        const message = threadMessages[0];
 
         const from = message.getFrom().toLowerCase();
         const to = message.getTo().toLowerCase();
         const subject = message.getSubject();
         const body = message.getPlainBody() || "";
-
         const list_id = message.getHeader("List-Id") || "";
 
         // Find the first filter rule that matches
@@ -116,17 +134,19 @@ function filter_inbox() {
             labelThreads[dest].push(thread);
             break;
         }
-
     }
 
     // Batch-move threads
     if (inboxThreads.length) {
+        console.log("Move threads to Inbox")
         GmailApp.moveThreadsToInbox(inboxThreads);
     }
     if (trashThreads.length) {
+        console.log("Move threads to Trash")
         GmailApp.moveThreadsToTrash(trashThreads);
     }
     for (const [dest, threads] of Object.entries(labelThreads)) {
+        console.log("Label threads with " + dest)
         if (!labels[dest]) {
             console.error(`Label not found: "${dest}"`);
             continue;
