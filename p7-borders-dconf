@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+#
+# dconf dump  /org/gnome/shell/extensions/p7-borders/ | p7-borders-dconf  | dconf load /org/gnome/shell/extensions/p7-borders/
+#
+
+import json
+import re
+import sys
+
+def main():
+    # Target pattern for the specific line we want to modify
+    target_prefix = "app-configs='"
+
+    for line in sys.stdin:
+        # Check if this is the line containing the app-configs JSON string
+        if line.startswith(target_prefix):
+            # Extract the raw JSON string by stripping the prefix and the trailing quote/newline
+            # app-configs='{...}'\n -> {...}
+            raw_json = line[len(target_prefix) :].rstrip("\r\n").rstrip("'")
+
+            try:
+                # 1. Parse JSON into Python dict
+                app_configs = json.loads(raw_json)
+
+                #
+                # 2. Custom configs
+                #
+
+                app_configs["@juerghPreset"] = {
+                    "width": 1,
+                    "activeColor": "rgba(235, 235, 235, 1)",
+                    "inactiveColor": "rgba(94, 92, 100, 1)",
+                    "radius": {
+                        "tl": 15,
+                        "tr": 15,
+                    },
+                }
+                app_configs["class:emacs"] = "@juerghPreset"
+                app_configs["class:firefox"] = "@juerghPreset"
+                app_configs["class:firefox-esr"] = "@juerghPreset"
+                app_configs["class:org.gnome.Terminal"] = "@juerghPreset"
+
+                print(json.dumps(app_configs, indent=2), file=sys.stderr)
+
+                # 3. Serialize back to a dense JSON string
+                modified_json = json.dumps(app_configs, separators=(",", ":"))
+
+                # 4. Reconstruct the line and print it
+                sys.stdout.write(f"app-configs='{modified_json}'\n")
+
+            except json.JSONDecodeError as e:
+                # If JSON parsing fails, log to stderr and output the line unmodified
+                print(
+                    f"Warning: Failed to parse JSON: {e}", file=sys.stderr
+                )
+                sys.stdout.write(line)
+        else:
+            # Pass all other lines (headers, other configs) through completely untouched
+            sys.stdout.write(line)
+
+
+if __name__ == "__main__":
+    main()
