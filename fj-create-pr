@@ -31,7 +31,7 @@ FORGEJO_TOKEN = get_password("canonical/forgejo/AUTH_TOKEN")
 repo = git.Repo()
 branch = repo.active_branch.name
 
-bug_id, series = branch.removeprefix("lp").split("--")
+bug_id, series = branch.removeprefix("lp").split("--")[0:2]
 
 print(f"Bug:    LP: #{bug_id}")
 print(F"Series: {series}")
