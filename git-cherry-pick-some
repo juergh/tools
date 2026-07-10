@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+#
+# Wrapper around 'git cherry-pick' that only updates some files
+#
+
+import sys
+import os
+import textwrap
+from git import Repo, GitCommandError
+
+
+def parse_args():
+    args = sys.argv[1:]
+    if "--" not in args:
+        print("Error: Separate commits and files using '--'.")
+        print(
+            "Usage: git-cherry-pick-some <commit1> <commit2> ... -- <file1> <file2> ..."
+        )
+        sys.exit(1)
+
+    split_idx = args.index("--")
+    return args[:split_idx], args[split_idx + 1 :]
+
+
+def get_changed_files(commit):
+    """Get the set of files changed in a commit (parent -> commit direction)."""
+    if commit.parents:
+        diffs = commit.parents[0].diff(commit)
+    else:
+        # Root commit: diff against empty tree
+        diffs = commit.diff(None, R=True)
+    return {d.a_path for d in diffs if d.a_path} | {d.b_path for d in diffs if d.b_path}
+
+
+def main():
+    commits, target_files = parse_args()
+
+    try:
+        repo = Repo(os.getcwd(), search_parent_directories=True)
+    except Exception as e:
+        print(f"Error: Not a git repository: {e}")
+        sys.exit(1)
+
+    config = repo.config_reader()
+    user_name = config.get_value("user", "name", default="")
+    user_email = config.get_value("user", "email", default="")
+    if not user_name or not user_email:
+        print(
+            "Warning: user.name or user.email not set in git config.", file=sys.stderr
+        )
+    sob_line = f"Signed-off-by: {user_name} <{user_email}>"
+    current_user = os.environ.get("USER", "unknown")
+
+    for commit_ref in commits:
+        print(f"Process: {commit_ref}")
+        try:
+            commit = repo.commit(commit_ref)
+        except Exception:
+            print("  Error: Cannot find commit.", file=sys.stderr)
+            sys.exit(1)
+
+        # 1. Figure out the list of files that the commit modifies
+        changed_in_commit = get_changed_files(commit)
+
+        # 2. If the intersection of the modified list with the provided list is empty
+        actual_modified_files = [f for f in target_files if f in changed_in_commit]
+        if not actual_modified_files:
+            print(
+                f"  Warning: None of the specified files were modified by {commit_ref}. Skipping.",
+                file=sys.stderr,
+            )
+            continue
+
+        # 3. If all files in the modified list are in the provided list: do a native clean cherry-pick
+        if changed_in_commit.issubset(set(target_files)):
+            try:
+                repo.git.cherry_pick("-x", "-s", commit.hexsha)
+                print("  Clean native cherry-pick succeeded.")
+                continue
+            except GitCommandError as e:
+                print(f"  Native cherry-pick failed: {e}.", file=sys.stderr)
+                sys.exit(1)
+
+        # 4. Partial update via cherry-pick --no-commit + reset unwanted files
+        unwanted_files = list(changed_in_commit - set(actual_modified_files))
+        print("  Partial update: Cherry-picking with 3-way merge...")
+
+        cherry_pick_failed = False
+        try:
+            repo.git.cherry_pick("--no-commit", commit.hexsha)
+        except GitCommandError:
+            cherry_pick_failed = True
+
+        # If cherry-pick had conflicts, check if any are in wanted files
+        if cherry_pick_failed:
+            unmerged = set(repo.index.unmerged_blobs().keys())
+            conflicted_wanted = unmerged & set(actual_modified_files)
+            if conflicted_wanted:
+                print(
+                    f"  Error: Conflict in wanted file(s): {', '.join(sorted(conflicted_wanted))}",
+                    file=sys.stderr,
+                )
+                repo.git.cherry_pick("--abort")
+                sys.exit(1)
+            # All conflicts are in unwanted files — resolve by resetting to HEAD
+            print("  Conflicts only in unwanted files, resolving by reset...")
+
+        # Reset unwanted files back to HEAD state (index + worktree)
+        if unwanted_files:
+            try:
+                repo.git.checkout("HEAD", "--", *unwanted_files)
+            except GitCommandError:
+                # Some unwanted files may be newly added by the commit (not in HEAD),
+                # remove them from the index instead
+                for f in unwanted_files:
+                    try:
+                        repo.git.checkout("HEAD", "--", f)
+                    except GitCommandError:
+                        # File may be new (not in HEAD) or in an unmerged state.
+                        # Use 'git reset' to clear the index entry, then clean worktree.
+                        try:
+                            repo.git.reset("--", f)
+                        except GitCommandError:
+                            pass  # Already not in index
+                        # Also remove from worktree if it exists
+                        full_path = os.path.join(repo.working_dir, f)
+                        if os.path.exists(full_path):
+                            os.remove(full_path)
+
+        # 5. Format commit message & commit (preserving original authorship)
+        orig_msg_stripped = commit.message.strip()
+        lines = orig_msg_stripped.splitlines()
+        last_line = lines[-1] if lines else ""
+        spacing = "\n" if "Signed-off-by:" in last_line else "\n\n"
+
+        files_str = ", ".join(actual_modified_files)
+        raw_user_line = f"[{current_user}: Update only {files_str}.]"
+
+        wrapped_user_lines = textwrap.wrap(
+            raw_user_line, width=78, subsequent_indent=" "
+        )
+        formatted_user_text = "\n".join(wrapped_user_lines)
+
+        new_msg = f"{orig_msg_stripped}{spacing}(backported from commit {commit.hexsha})\n{formatted_user_text}\n{sob_line}"
+
+        # Format author date as git internal format: "<unix_ts> <+HHMM>"
+        tz = commit.author_tz_offset
+        tz_sign = "+" if tz >= 0 else "-"
+        tz_abs = abs(tz)
+        author_date = f"{commit.authored_date} {tz_sign}{tz_abs // 3600:02d}{(tz_abs % 3600) // 60:02d}"
+
+        repo.index.commit(
+            new_msg,
+            author=commit.author,
+            author_date=author_date,
+        )
+        print("  Successfully applied partial update!")
+
+
+if __name__ == "__main__":
+    main()
