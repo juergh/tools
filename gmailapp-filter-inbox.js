@@ -4,7 +4,7 @@
 // 1. Matches: from:(@bugs.launchpad.net)
 //    Do this: Never send it to Spam
 //
-// 2. Matches: from:(*@)
+// 2. Matches: -is:spam larger:0
 //    Do this: Skip Inbox, Apply label "00-Inbox"
 //
 
