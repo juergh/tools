@@ -8,8 +8,12 @@ function adb_uninstall()
 	local serial=$1 pkg=$2
 
 	echo "-- $pkg"
-	adb -s "$serial" uninstall --user 0 "$pkg" || true
-	adb -s "$serial" uninstall "$pkg" || true
+
+	adb -s "$serial" uninstall --user 0 "$pkg" </dev/null || true
+	adb -s "$serial" shell pm uninstall --user 0 "$pkg" </dev/null || true
+
+	adb -s "$serial" uninstall "$pkg" </dev/null || true
+	adb -s "$serial" shell pm uninstall "$pkg" </dev/null || true
 }
 
 if [ $# -lt 1 ] ; then
