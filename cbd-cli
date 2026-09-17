@@ -16,7 +16,7 @@ function out()
 	fi
 
 	if [ "${rc}" -ne 0 ] ; then
-		echo "-- Script failed" >&2
+		echo "EE: Script failed" >&2
 	fi
 
 	exit "${rc}"
@@ -27,7 +27,7 @@ function cbd_build()
 	local opts commit logfile
 
 	if [ -z "${SERIES}" ] ; then
-		echo "-- Not an Ubuntu kernel repository" >&2
+		echo "EE: Not an Ubuntu kernel repository" >&2
 		exit 1
 	fi
 
@@ -48,7 +48,7 @@ function cbd_build()
 	fi
 	opts+=("${@}" "-o" "vars")
 
-	echo "-- git push ${opts[*]}"
+	echo "II: git push ${opts[*]}"
 
 	# Kick off the build
 	logfile=${HOME}/.cache/cbd/${SERIES}--${SOURCE}.log
@@ -63,7 +63,7 @@ function cbd_build()
 	# Source the CBD variables
 	eval "$(sed -n 's/^remote: CBD/CBD/p' "${logfile}")"
 	if [ -z "${CBD_JOB:-}" ] ; then
-		echo "-- Failed to source CBD variables" >&2
+		echo "EE: Failed to source CBD variables" >&2
 		exit 1
 	fi
 
@@ -90,7 +90,7 @@ function cbd_download()
 	fi
 	mkdir -p "${OUT_DIR}"
 
-	echo "-- Download build artifacts to ${OUT_DIR}"
+	echo "II: Download build artifacts to ${OUT_DIR}"
 
 	TMP_DIR=$(mktemp -d)
 	# shellcheck disable=SC2029
@@ -115,11 +115,6 @@ function cbd_download()
 	echo "${cbd_job}" > "${OUT_DIR}"/cbd_job.id
 }
 
-function cbd_help()   { ssh cbd help ; }
-function cbd_list()   { ssh cbd list ; }
-function cbd_queue()  { ssh cbd queue ; }
-function cbd_status() { ssh cbd status ; }
-
 function usage()
 {
 	cat <<EOF
@@ -129,13 +124,18 @@ Usage: cbd-cli [-h] [-d DIR] [-n] [-s SERIES] build [COMMIT] [CBD_OPTS]
 
 Commandline interface for the CBD kernel builder.
 
-Supported commands:
+Supported wrapper commands:
   build                Build (and download) kernel packages.
   download             Download kernel packages.
+
+Supported native CBD commands:
   help                 Show CBD help.
+  job-status CBD_JOB   Show job status.
   list                 Show supported <series>.git.
+  log CBD_JOB          Download the build log.
   queue                Show currently queued jobs.
   status               Show CBD server status summary.
+  tarball CBD_JOB      Download build products as a tarball.
 
 Optional arguments:
   -h, --help           Show this help text and exit.
@@ -170,7 +170,11 @@ while [ $# -gt 0 ] ; do
 			shift
 			SERIES=${1}
 			;;
-		build|download|help|list|queue|status)
+		help|job-status|list|log|queue|status|tarball)
+			ssh cbd "${@}"
+			exit
+			;;
+		build|download)
 			cmd=${1}
 			shift
 			break
