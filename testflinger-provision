@@ -23,13 +23,14 @@ function out()
 function usage()
 {
 	cat <<EOF
-Usage: $(basename "${0}") [OPTS...] JOB_QUEUE IMAGE_URL
+Usage: $(basename "${0}") [OPTS...] JOB_QUEUE IMAGE_URL|SERIES
 
 Provision a device via testflinger.
 
 Positional arguments:
   JOB_QUEUE       Testflinger job queue name.
   IMAGE_URL       Image URL.
+  SERIES          Series name.
 
 Optional argument:
   -h, --help      Show this help text and exit.
@@ -42,7 +43,7 @@ dry_run=0
 lp_user=${USER}
 timeout=4800
 job_queue=
-image_url=
+url_or_series=
 
 while [ $# -gt 0 ] ; do
 	case "${1}" in
@@ -64,8 +65,8 @@ while [ $# -gt 0 ] ; do
 		*)
 			if [ -z "${job_queue}" ] ; then
 				job_queue=${1}
-			elif [ -z "${image_url}" ] ; then
-				image_url=${1}
+			elif [ -z "${url_or_series}" ] ; then
+				url_or_series=${1}
 			else
 				usage
 				exit 2
@@ -75,10 +76,19 @@ while [ $# -gt 0 ] ; do
 	shift
 done
 
-if [ -z "${job_queue}" ] || [ -z "${image_url}" ] ; then
+if [ -z "${job_queue}" ] || [ -z "${url_or_series}" ] ; then
 	usage
 	exit 2
 fi
+
+case "${url_or_series}" in
+	http*)
+		image_url=${url_or_series}
+		;;
+	*)
+		image_url=http://cdimage.ubuntu.com/ubuntu-server/${url_or_series}/daily-preinstalled/current/${url_or_series}-preinstalled-server-arm64+raspi.img.xz
+		;;
+esac
 
 #job_queue=rpi4b4g
 #job_queue=rpi5b8g
