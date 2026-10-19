@@ -203,7 +203,7 @@ Kernel selections:
     )
     parser.add_argument(
         "--pkg-type",
-        choices=("main", "meta", "signed", "lrm", "extra", "extra2", "snap"),
+        choices=("main", "meta", "signed", "lrm", "lmm", "extra", "extra2", "snap"),
         help="List only packages of the provided type. "
         "If not provided, lists all packages.",
     )
