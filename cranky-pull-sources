@@ -12,6 +12,22 @@ function out()
 	fi
 }
 
+function move_and_link_orig() {
+	local orig=${1}
+	local real_orig=../orig-tarballs/linux_${orig#*_}
+
+	if [ -f "${orig}" ] ; then
+		if [ -e "${real_orig}" ] ; then
+			rm "${orig}"
+		else
+			mv "${orig}" "${real_orig}"
+		fi
+	fi
+	if ! [ -e "${orig}" ] && [ -e "${real_orig}" ] ; then
+		ln -s "${real_orig}" "${orig}"
+	fi
+}
+
 function usage()
 {
 	cat <<EOF
@@ -63,16 +79,17 @@ while read -r path ; do
 	(
 		cd "${path}"
 
-		# Get the series and the source package names
 		if [ -e debian/debian.env ] ; then
 			# shellcheck disable=SC1091
 			. debian/debian.env
 			changelog=${DEBIAN}/changelog
+			main=1
 		else
 			changelog=debian/changelog
+			main=0
 		fi
 
-		m=$(grep '^linux' "${changelog}" | grep -m1 -F " (${abi}" || true)
+		m=$(grep '^linux' "${changelog}" | grep -m1 -F -e " (${abi}" -e " (${abi//-/.}" || true)
 		if [ -z "${m}" ] ; then
 			echo "EE: No package version found with ABI: ${abi}" >&2
 			exit 1
@@ -81,8 +98,14 @@ while read -r path ; do
 		version=${version//[()]/}
 		series=${series//;/}
 
+		orig=${package}_${version%%-*}.orig.tar.gz
+
 		# Download the source package into the parent directory
 		cd ..
+
+		if [ ${main} -eq 1 ] ; then
+			move_and_link_orig "${orig}"
+		fi
 
 		if [ "${use_series}" -eq 0 ] ; then
 			if ! "${CRANKY}" pull-source "${package}" "${version}" ; then
@@ -92,6 +115,10 @@ while read -r path ; do
 
 		if [ "${use_series}" -eq 1 ] ; then
 			"${CRANKY}" pull-source "${package}" "${version}" "${series}"
+		fi
+
+		if [ ${main} -eq 1 ] ; then
+			move_and_link_orig "${orig}"
 		fi
 	)
 done < <("${CRANKY}" shell-helper source-packages-path)
