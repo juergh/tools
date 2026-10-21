@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+
+import re
+import sys
+
+import yaml
+from launchpadlib.launchpad import Launchpad
+
+if len(sys.argv) != 2:
+    print("Usage: cranky-list-snap-builds <bugnumber|bug-url>  e.g. https://bugs.launchpad.net/kernel-sru-workflow/+bug/2169970")
+    sys.exit(1)
+
+arg = sys.argv[1]
+
+match = re.search(r"\+bug/(\d+)", arg)
+if not match:
+    match = re.match(r"^(\d+)$", arg)
+if not match:
+    print("Cannot parse bug number from: %s" % arg)
+    sys.exit(1)
+bugno = match.group(1)
+
+lp = Launchpad.login_with("tools", "production", version="devel")
+
+bug = lp.bugs[bugno]
+
+description = bug.description
+marker = "-- swm properties --"
+if marker not in description:
+    print("No '%s' section found in bug %s description" % (marker, bugno))
+    sys.exit(1)
+
+swm_props = yaml.safe_load(description.split(marker, 1)[1])
+
+snap_prepare = swm_props.get("snap-prepare")
+if not snap_prepare:
+    print("No snap-prepare properties found in bug %s" % bugno)
+    sys.exit(1)
+
+for target, build_request in snap_prepare.items():
+    print("%s: %s" % (target, build_request))
+    try:
+        lp_snap_build_request = lp.load(build_request)
+    except Exception as e:
+        print("WARNING: failed to load %s: %s" % (build_request, e), file=sys.stderr)
+        continue
+
+    store_name = None
+    try:
+        lp_snap = lp.load(lp_snap_build_request.snap_link)
+        store_name = lp_snap.store_name
+        channels = ", ".join(lp_snap.store_channels)
+        print(f"  store: https://snapcraft.io/{store_name} ({channels})")
+    except Exception as e:
+        print("WARNING: failed to load store info: %s" % e, file=sys.stderr)
+
+    for build in lp_snap_build_request.builds:
+        print(f"  {build.web_link}")
+        print(f"    {build.arch_tag}: {build.buildstate} / store: {build.store_upload_status}")
+        if store_name:
+            revision = build.store_upload_revision
+            if revision:
+                print(f"      https://dashboard.snapcraft.io/snaps/{store_name}/revisions/{revision}/")
+            else:
+                print(f"      https://dashboard.snapcraft.io/snaps/{store_name}/revisions/")
+        if build.store_upload_status == "Failed to upload":
+            for message in {m["message"] for m in (build.store_upload_error_messages or [])}:
+                print(f"      {message}")

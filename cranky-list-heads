@@ -1,0 +1,24 @@
+#!/bin/bash -eu
+
+function out()
+{
+	local rc=${?}
+
+	trap - EXIT
+
+	if [ "${rc}" -ne 0 ] ; then
+		echo "Script failed" >&2
+	fi
+
+	exit "${rc}"
+}
+
+trap out EXIT
+
+CRANKY=${CRANKY:-cranky}
+
+while IFS= read -r path ; do
+	. "${path}"/debian/debian.env 2>/dev/null || DEBIAN=debian
+	package=$(dpkg-parsechangelog -l "${path}/${DEBIAN}/changelog" -S source)
+	printf "%-30s: %s\n" "${package}" "$(git -C "${path}" --no-pager log --decorate --color=always --oneline -1)"
+done < <("${CRANKY}" shell-helper source-packages-path)
