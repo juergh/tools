@@ -42,17 +42,13 @@ function set_pkg_build_opts()
 function usage()
 {
 	cat <<EOF
-Usage: cranky-build-sources [-c] [-f] [-h] [-n] [-o] POCKET|OFFSET|ABI
+Usage: cranky-build-sources [-c] [-f] [-h] [-n] [-o] ABI
 
 Build a set of kernel packages.
 
 Positional arguments:
-  POCKET       Get the previous package versions from pocket POCKET. Valid
-               pockets: release,security,updates,proposed,updates#[0-9],proposed#[0-9],build#[0-9].
-  OFFSET       Get the previous package versions from the changelogs using
-               changelog entry offset OFFSET (-1 == previous changelog entry).
-  ABI          Get the previous package versions from the changelogs using
-               the newest changelog entry with abi number ABI.
+  ABI            Get the previous package versions from the changelogs using
+                 the newest changelog entry with abi number ABI.
 
 Optional arguments:
   -c, --current  Only build the source package for the current directory.
@@ -67,8 +63,7 @@ CRANKY=${CRANKY:-cranky}
 
 current=0
 force=0
-prev_type=
-prev_val=
+abi=
 build_opts=()
 
 BO_META=()
@@ -96,39 +91,18 @@ while [ "${#}" -gt 0 ] ; do
 		-o|--orig)
 			BO_MAIN+=("-sa")
 			;;
-		release|security|updates|proposed|updates#[0-9]|proposed#[0-9]|build#[0-9])
-			if [ -n "${prev_type}" ] ; then
-				echo "Invalid argument: ${1}" >&2
-				exit 2
-			fi
-			prev_type=pocket
-			prev_val=${1}
-			;;
-		-[1-9])
-			if [ -n "${prev_type}" ] ; then
-				echo "Invalid argument: ${1}" >&2
-				exit 2
-			fi
-			prev_type=offset
-			prev_val=${1#-}
-			;;
-		[0-9]*.[0-9]*.0-[0-9]*)
-			if [ -n "${prev_type}" ] ; then
-				echo "Invalid argument: ${1}" >&2
-				exit 2
-			fi
-			prev_type=abi
-			prev_val=${1}
-			;;
 		*)
-			echo "Invalid argument: ${1}" >&2
-			exit 2
+			if [ -n "${abi}" ] ; then
+				echo "Invalid argument: ${1}" >&2
+				exit 2
+			fi
+			abi=${1}
 			;;
 	esac
 	shift
 done
 
-if [ -z "${prev_type}" ] ; then
+if [ -z "${abi}" ] ; then
 	usage
 	exit 2
 fi
@@ -158,60 +132,29 @@ if [ "${force}" -eq 0 ] ; then
 	fi
 fi
 
-if [ "${prev_type}" = "pocket" ] ; then
-	# Get the previous versions from the provided pocket
-	found=0
-	while IFS=' ' read -r package version rest ; do
-		found=1
-		set_pkg_build_opts "${package}" "${version}"
-	done < <("${CRANKY}" rmadison -s -p "${prev_val}" .)
+while IFS= read -r path ; do
+	if [ ${current} -eq 1 ] && [ "${path}" != "$(realpath .)" ] ; then
+		continue
+	fi
 
-	if [ ${found} -eq 0 ] ; then
-		echo "Invalid pocket: ${prev_val}" >&2
+	DEBIAN=debian
+	if [ -e "${path}"/debian/debian.env ] ; then
+		# shellcheck disable=SC1091
+		. "${path}"/debian/debian.env
+	fi
+	changelog=${path}/${DEBIAN}/changelog
+
+	m=$(grep '^linux' "${changelog}" | grep -m1 -F -e " (${abi}" -e " (${abi//-/.}"|| true)
+	if [ -z "${m}" ] ; then
+		echo "EE: No package version found with ABI: ${abi}" >&2
 		exit 1
 	fi
-else
-	# Get the previous versions from the changelogs
-	while IFS= read -r path ; do
-		if [ ${current} -eq 1 ] && [ "${path}" != "$(realpath .)" ] ; then
-			continue
-		fi
+	read -r package version _ <<< "${m}"
+	version=${version//[()]/}
 
-		DEBIAN=debian
-		if [ -e "${path}"/debian/debian.env ] ; then
-			# shellcheck disable=SC1091
-			. "${path}"/debian/debian.env
-		fi
+	set_pkg_build_opts "${package}" "${version}"
 
-		package=
-		version=
-
-		if [ "${prev_type}" = "offset" ] ; then
-			# Use the provided offset
-			package=$(dpkg-parsechangelog -l "${path}"/"${DEBIAN}"/changelog \
-			          -o "${prev_val}" -c 1 -S source)
-			version=$(dpkg-parsechangelog -l "${path}"/"${DEBIAN}"/changelog \
-			          -o "${prev_val}" -c 1 -S version)
-		elif [ "${prev_type}" = "abi" ] ; then
-			# Use the provided ABI
-			v=${prev_val%-*}
-			v=${v//./\\.}
-			u=${prev_val#*-}
-			match=$(grep -m1 "^linux.* (${v}[-.]${u}\." \
-						 "${path}"/"${DEBIAN}"/changelog || true)
-			package=${match%% *}
-			version=${match#* \(}
-			version=${version%\) *}
-		fi
-
-		if [ -z "${package}" ] || [ -z "${version}" ] ; then
-			echo "Failed to determine package and/or version in ${path}" >&2
-			exit 1
-		fi
-
-		set_pkg_build_opts "${package}" "${version}"
-	done < <("${CRANKY}" shell-helper source-packages-path)
-fi
+done < <("${CRANKY}" shell-helper source-packages-path)
 
 if [ ${#BO_META[@]} -ne 0 ] ; then
 	build_opts+=("--build-opts" "meta:${BO_META[*]}")
