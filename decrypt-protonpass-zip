@@ -173,6 +173,12 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "-l",
+        "--list",
+        action="store_true",
+        help="Print a human-readable list of items in the vault instead of JSON",
+    )
+    parser.add_argument(
         "--raw",
         action="store_true",
         help="Output the raw decrypted JSON string without reformatting",
@@ -198,18 +204,21 @@ def main() -> int:
             inner_path=args.inner_path,
         )
 
-        for v, d in parsed_json["vaults"].items():
-            print(d["name"])
-            for i in d["items"]:
-                data = i["data"]
-                aliasEmail = i["aliasEmail"]
+        if args.list:
+            for v, d in parsed_json.get("vaults", {}).items():
+                print(d.get("name", v))
+                for i in d.get("items", []):
+                    data = i.get("data", {})
+                    aliasEmail = i.get("aliasEmail", "")
 
-                name = data["metadata"]["name"]
-                itemEmail = data["content"].get("itemEmail")
-                itemUsername = data["content"].get("itemUsername")
-                password = data["content"].get("password")
+                    name = data.get("metadata", {}).get("name", "")
+                    content = data.get("content", {})
+                    itemEmail = content.get("itemEmail")
+                    itemUsername = content.get("itemUsername")
+                    password = content.get("password")
 
-                print(name, itemEmail or itemUsername, password, aliasEmail)
+                    print(name, itemEmail or itemUsername, password, aliasEmail)
+            return 0
 
         if args.raw:
             sys.stdout.write(raw_text)
@@ -225,7 +234,6 @@ def main() -> int:
                 indent=args.indent,
                 ensure_ascii=False,
             )
-            sys.stdout.write("\n")
             sys.stdout.write("\n")
 
         sys.stdout.flush()

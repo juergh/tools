@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+"""
+Decrypt an Aegis vault JSON file and output the decrypted JSON contents to stdout.
+"""
+
+import argparse
+import base64
+import getpass
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Optional
+
+import cryptography.exceptions
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+
+backend = default_backend()
+
+
+def die(msg: str, code: int = 1) -> None:
+    print(msg, file=sys.stderr)
+    sys.exit(code)
+
+
+def decrypt_aegis_data(data: dict, password: Optional[str] = None) -> tuple[str, dict]:
+    # Check if the vault is already unencrypted
+    if "header" not in data and "entries" in data:
+        raw_text = json.dumps(data)
+        return raw_text, data
+
+    header = data.get("header")
+    if not isinstance(header, dict) or "slots" not in header:
+        die("error: unrecognized Aegis vault format")
+
+    slots = [slot for slot in header["slots"] if slot.get("type") == 1]
+    if not slots:
+        die("error: no password slots found in Aegis vault (vault may use biometric/keystore encryption only)")
+
+    # Ask for password if not provided
+    if password is None:
+        password = os.environ.get("PASSWORD")
+        if not password:
+            password = getpass.getpass("Enter password for Aegis vault: ")
+
+    password_bytes = password.encode("utf-8")
+
+    master_key = None
+    for slot in slots:
+        kdf = Scrypt(
+            salt=bytes.fromhex(slot["salt"]),
+            length=32,
+            n=slot["n"],
+            r=slot["r"],
+            p=slot["p"],
+            backend=backend,
+        )
+        key = kdf.derive(password_bytes)
+
+        cipher = AESGCM(key)
+        params = slot["key_params"]
+        try:
+            master_key = cipher.decrypt(
+                nonce=bytes.fromhex(params["nonce"]),
+                data=bytes.fromhex(slot["key"]) + bytes.fromhex(params["tag"]),
+                associated_data=None,
+            )
+            break
+        except cryptography.exceptions.InvalidTag:
+            pass
+
+    if master_key is None:
+        die("error: unable to decrypt the master key with the given password")
+
+    content = base64.b64decode(data["db"])
+    params = header["params"]
+    cipher = AESGCM(master_key)
+    try:
+        db_bytes = cipher.decrypt(
+            nonce=bytes.fromhex(params["nonce"]),
+            data=content + bytes.fromhex(params["tag"]),
+            associated_data=None,
+        )
+    except cryptography.exceptions.InvalidTag:
+        die("error: failed to decrypt vault contents (corrupted data or invalid tag)")
+
+    db_str = db_bytes.decode("utf-8")
+    try:
+        parsed_json = json.loads(db_str)
+    except json.JSONDecodeError as exc:
+        die(f"error: decrypted content is not valid JSON: {exc}")
+
+    return db_str, parsed_json
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Decrypt an Aegis vault JSON file")
+    parser.add_argument(
+        "json_file",
+        metavar="JSON_FILE",
+        help="path to encrypted Aegis vault file",
+    )
+    parser.add_argument(
+        "-p",
+        "--password",
+        help="password to decrypt vault (if omitted, PASSWORD env var or interactive prompt is used)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default="-",
+        help="output file ('-' for stdout, default: '-')",
+    )
+    parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="output the raw decrypted JSON string without reformatting",
+    )
+    parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="output compact JSON without extra whitespace/indentation",
+    )
+    parser.add_argument(
+        "--indent",
+        type=int,
+        default=2,
+        help="indentation spaces for pretty-printing JSON (default: 2)",
+    )
+
+    args = parser.parse_args()
+
+    input_path = Path(args.json_file).expanduser()
+    if not input_path.is_file():
+        die(f"error: file not found: {input_path}")
+
+    try:
+        with open(input_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:
+        die(f"error: failed to read JSON file: {exc}")
+
+    raw_text, parsed_json = decrypt_aegis_data(data, password=args.password)
+
+    if args.output != "-":
+        out_path = Path(args.output).expanduser()
+        with open(out_path, "w", encoding="utf-8") as f:
+            if args.raw:
+                f.write(raw_text)
+                if not raw_text.endswith("\n"):
+                    f.write("\n")
+            elif args.compact:
+                json.dump(parsed_json, f, separators=(",", ":"))
+                f.write("\n")
+            else:
+                json.dump(parsed_json, f, indent=args.indent, ensure_ascii=False)
+                f.write("\n")
+    else:
+        if args.raw:
+            sys.stdout.write(raw_text)
+            if not raw_text.endswith("\n"):
+                sys.stdout.write("\n")
+        elif args.compact:
+            json.dump(parsed_json, sys.stdout, separators=(",", ":"))
+            sys.stdout.write("\n")
+        else:
+            json.dump(parsed_json, sys.stdout, indent=args.indent, ensure_ascii=False)
+            sys.stdout.write("\n")
+        sys.stdout.flush()
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

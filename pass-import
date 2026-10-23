@@ -1,0 +1,402 @@
+#!/usr/bin/env python3
+"""
+Import credentials into a pass (passwordstore.org) repository from JSON.
+
+Supported input formats:
+  - Aegis Authenticator export (decrypted JSON)
+  - Proton Pass export (decrypted JSON)
+  - pass-export JSON format
+"""
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+
+def check_pass_installed() -> bool:
+    """Ensure the 'pass' executable is accessible in the PATH."""
+    try:
+        subprocess.run(
+            ["pass", "version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
+def get_pass_directory(custom_path: Optional[str] = None) -> Path:
+    """Determine the location of the password store directory."""
+    if custom_path:
+        path = Path(custom_path).expanduser()
+    else:
+        env_dir = os.environ.get("PASSWORD_STORE_DIR")
+        path = Path(env_dir).expanduser() if env_dir else Path.home() / ".password-store"
+
+    if not path.is_dir():
+        raise FileNotFoundError(f"Password store directory not found at: {path}")
+    return path
+
+
+def sanitize_segment(segment: str) -> str:
+    """Sanitize a path component by replacing slashes and invalid characters."""
+    # Replace slashes and backslashes with dashes
+    cleaned = re.sub(r"[/\\]+", "-", segment).strip()
+    # Remove leading dots or dashes
+    cleaned = re.sub(r"^[.-]+", "", cleaned)
+    # Remove trailing dots or dashes
+    cleaned = re.sub(r"[.-]+$", "", cleaned)
+    return cleaned or "unnamed"
+
+
+def detect_format(data: Any) -> str:
+    """Auto-detect the format of the parsed JSON data."""
+    if isinstance(data, list):
+        if data and isinstance(data[0], dict) and "path" in data[0]:
+            return "pass-export"
+        # Empty list fallback
+        return "pass-export"
+
+    if isinstance(data, dict):
+        if "vaults" in data:
+            return "protonpass"
+        if "entries" in data:
+            return "aegis"
+        if "header" in data and "db" in data:
+            raise ValueError(
+                "Input appears to be an encrypted Aegis vault. "
+                "Decrypt it first using 'decrypt-aegis-json'."
+            )
+
+    raise ValueError(
+        "Unable to auto-detect JSON format. Please specify --type [aegis|protonpass|pass-export]."
+    )
+
+
+class ItemToImport:
+    def __init__(self, path: str, password: str = "", notes: str = "") -> None:
+        self.path = path.strip("/")
+        self.password = password
+        self.notes = notes
+
+    def full_content(self) -> str:
+        if self.notes:
+            return f"{self.password}\n{self.notes}\n"
+        return f"{self.password}\n"
+
+
+def parse_aegis_entries(data: dict, prefix_override: Optional[str] = None) -> List[ItemToImport]:
+    """Parse Aegis Authenticator entries."""
+    prefix = prefix_override if prefix_override is not None else "totp"
+    items: List[ItemToImport] = []
+    seen_paths: Dict[str, int] = {}
+
+    for entry in data.get("entries", []):
+        issuer = (entry.get("issuer") or "").strip()
+        name = (entry.get("name") or "").strip()
+        info = entry.get("info") or {}
+        secret = (info.get("secret") or "").strip()
+
+        # Build relative path
+        name_seg = sanitize_segment(name) if name else "unnamed"
+        if issuer:
+            issuer_seg = sanitize_segment(issuer)
+            base_path = f"{prefix}/{issuer_seg}/{name_seg}" if prefix else f"{issuer_seg}/{name_seg}"
+        else:
+            base_path = f"{prefix}/{name_seg}" if prefix else name_seg
+
+        # Handle duplicate entry names
+        count = seen_paths.get(base_path, 0)
+        seen_paths[base_path] = count + 1
+        final_path = base_path if count == 0 else f"{base_path} ({count})"
+
+        # Collect additional metadata in notes
+        meta_lines: List[str] = []
+        entry_type = entry.get("type")
+        if entry_type and entry_type != "totp":
+            meta_lines.append(f"Type: {entry_type}")
+        algo = info.get("algo")
+        if algo and algo != "SHA1":
+            meta_lines.append(f"Algorithm: {algo}")
+        digits = info.get("digits")
+        if digits and digits != 6:
+            meta_lines.append(f"Digits: {digits}")
+        period = info.get("period")
+        if period and period != 30:
+            meta_lines.append(f"Period: {period}")
+        note = entry.get("note")
+        if note:
+            meta_lines.append(f"Note: {note}")
+
+        notes_str = "\n".join(meta_lines)
+        items.append(ItemToImport(path=final_path, password=secret, notes=notes_str))
+
+    return items
+
+
+def parse_protonpass_entries(data: dict, prefix_override: Optional[str] = None) -> List[ItemToImport]:
+    """Parse Proton Pass vault entries."""
+    prefix = prefix_override if prefix_override is not None else "protonpass"
+    items: List[ItemToImport] = []
+    seen_paths: Dict[str, int] = {}
+
+    for vault_id, vault_data in data.get("vaults", {}).items():
+        vault_name = sanitize_segment(vault_data.get("name") or vault_id)
+
+        for item in vault_data.get("items", []):
+            item_data = item.get("data", {})
+            metadata = item_data.get("metadata", {})
+            content = item_data.get("content", {})
+
+            raw_name = metadata.get("name") or "unnamed"
+            item_name = sanitize_segment(raw_name)
+
+            if prefix:
+                base_path = f"{prefix}/{vault_name}/{item_name}"
+            else:
+                base_path = f"{vault_name}/{item_name}"
+
+            count = seen_paths.get(base_path, 0)
+            seen_paths[base_path] = count + 1
+            final_path = base_path if count == 0 else f"{base_path} ({count})"
+
+            password = content.get("password") or ""
+            note_lines: List[str] = []
+
+            item_username = content.get("itemUsername")
+            if item_username:
+                note_lines.append(f"username: {item_username}")
+
+            item_email = content.get("itemEmail")
+            if item_email:
+                note_lines.append(f"email: {item_email}")
+
+            alias_email = item.get("aliasEmail")
+            if alias_email:
+                note_lines.append(f"alias_email: {alias_email}")
+
+            totp_uri = content.get("totpUri")
+            if totp_uri:
+                note_lines.append(f"totp: {totp_uri}")
+
+            urls = content.get("urls")
+            if isinstance(urls, list):
+                for u in urls:
+                    if u:
+                        note_lines.append(f"url: {u}")
+            elif isinstance(urls, str) and urls:
+                note_lines.append(f"url: {urls}")
+
+            note = content.get("note")
+            if note:
+                note_lines.append(f"\n{note}")
+
+            notes_str = "\n".join(note_lines).strip()
+            items.append(ItemToImport(path=final_path, password=password, notes=notes_str))
+
+    return items
+
+
+def parse_pass_export_entries(data: list, prefix_override: Optional[str] = None) -> List[ItemToImport]:
+    """Parse pass-export list of dictionaries."""
+    items: List[ItemToImport] = []
+    prefix = prefix_override.strip("/") if prefix_override else ""
+
+    for entry in data:
+        raw_path = entry.get("path") or "unnamed"
+        if prefix:
+            final_path = f"{prefix}/{raw_path.strip('/')}"
+        else:
+            final_path = raw_path.strip("/")
+
+        password = entry.get("password") or ""
+        notes = entry.get("notes") or ""
+        items.append(ItemToImport(path=final_path, password=password, notes=notes))
+
+    return items
+
+
+def import_item(
+    item: ItemToImport,
+    store_dir: Path,
+    force: bool = False,
+    dry_run: bool = False,
+) -> Tuple[str, str]:
+    """
+    Import a single item into pass.
+    Returns (status, message) where status is 'add', 'overwrite', 'skip', or 'error'.
+    """
+    target_file = store_dir / f"{item.path}.gpg"
+    exists = target_file.is_file()
+
+    if exists and not force:
+        return "skip", f"-- Skip existing: {item.path}"
+
+    action = "overwrite" if exists else "add"
+    action_label = "Overwrite" if exists else "Add"
+
+    if dry_run:
+        return action, f"-- Would {action_label.lower()}: {item.path}"
+
+    cmd = ["pass", "insert", "--multiline", "--force", item.path]
+    try:
+        subprocess.run(
+            cmd,
+            input=item.full_content(),
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        err = e.stderr.strip() if e.stderr else str(e)
+        return "error", f"-- Error adding {item.path}: {err}"
+
+    return action, f"-- {action_label}: {item.path}"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Import credentials into a pass (passwordstore.org) repository from JSON."
+    )
+    parser.add_argument(
+        "file",
+        nargs="?",
+        default="-",
+        help="Path to JSON file ('-' or omitted for stdin)",
+    )
+    parser.add_argument(
+        "-d",
+        "--dir",
+        type=str,
+        help="Custom path to password store directory (defaults to $PASSWORD_STORE_DIR or ~/.password-store).",
+    )
+    parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Overwrite existing entries in the password store.",
+    )
+    parser.add_argument(
+        "-n",
+        "--dry-run",
+        action="store_true",
+        help="Simulate import without modifying the password store.",
+    )
+    parser.add_argument(
+        "-p",
+        "--prefix",
+        type=str,
+        help="Custom prefix directory in password store (overrides default 'totp' or 'protonpass').",
+    )
+    parser.add_argument(
+        "-t",
+        "--type",
+        choices=["auto", "aegis", "protonpass", "pass-export"],
+        default="auto",
+        help="Format type of input JSON (default: auto).",
+    )
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Quiet mode: do not print individual entry statuses.",
+    )
+
+    args = parser.parse_args()
+
+    if not check_pass_installed() and not args.dry_run:
+        print("Error: 'pass' binary is not installed or not available in PATH.", file=sys.stderr)
+        return 1
+
+    try:
+        store_dir = get_pass_directory(args.dir)
+    except FileNotFoundError as e:
+        if not args.dry_run:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        store_dir = Path("/tmp")
+
+    # Read JSON content
+    try:
+        if args.file == "-":
+            raw_input = sys.stdin.read()
+        else:
+            with open(Path(args.file).expanduser(), "r", encoding="utf-8") as f:
+                raw_input = f.read()
+
+        if not raw_input.strip():
+            print("Error: Input is empty.", file=sys.stderr)
+            return 1
+
+        data = json.loads(raw_input)
+    except Exception as e:
+        print(f"Error reading JSON input: {e}", file=sys.stderr)
+        return 1
+
+    # Detect format
+    format_type = args.type
+    if format_type == "auto":
+        try:
+            format_type = detect_format(data)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+    # Parse items
+    try:
+        if format_type == "aegis":
+            items = parse_aegis_entries(data, prefix_override=args.prefix)
+        elif format_type == "protonpass":
+            items = parse_protonpass_entries(data, prefix_override=args.prefix)
+        elif format_type == "pass-export":
+            items = parse_pass_export_entries(data, prefix_override=args.prefix)
+        else:
+            print(f"Error: Unsupported format type '{format_type}'", file=sys.stderr)
+            return 1
+    except Exception as e:
+        print(f"Error parsing {format_type} data: {e}", file=sys.stderr)
+        return 1
+
+    added = 0
+    overwritten = 0
+    skipped = 0
+    errors = 0
+
+    for item in items:
+        status, msg = import_item(
+            item,
+            store_dir=store_dir,
+            force=args.force,
+            dry_run=args.dry_run,
+        )
+        if not args.quiet:
+            print(msg)
+
+        if status == "add":
+            added += 1
+        elif status == "overwrite":
+            overwritten += 1
+        elif status == "skip":
+            skipped += 1
+        elif status == "error":
+            errors += 1
+
+    total = len(items)
+    mode_str = " (dry run)" if args.dry_run else ""
+    summary = f"Processed {total} entries{mode_str}: {added} added, {overwritten} overwritten, {skipped} skipped"
+    if errors > 0:
+        summary += f", {errors} errors"
+    print(summary, file=sys.stderr)
+
+    return 1 if errors > 0 else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
