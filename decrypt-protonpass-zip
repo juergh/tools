@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+"""
+Tool to extract and decrypt 'Proton Pass/data.pgp' from inside a zip file
+and output the decrypted JSON contents to stdout.
+"""
+
+import argparse
+import getpass
+import json
+import os
+import shutil
+import subprocess
+import sys
+import zipfile
+from pathlib import Path
+from typing import Any, Optional
+
+
+def find_gpg_binary() -> str:
+    """Find the GPG executable in the system PATH."""
+    gpg = shutil.which("gpg") or shutil.which("gpg2")
+    if not gpg:
+        raise RuntimeError("GnuPG (gpg) command not found in PATH.")
+    return gpg
+
+
+def read_encrypted_payload(
+    zip_path: str | Path,
+    inner_path: str = "Proton Pass/data.pgp",
+) -> bytes:
+    """
+    Read the encrypted PGP file bytes from within the specified ZIP archive.
+    If the exact inner_path is not found, attempts to locate an entry ending
+    with the inner path or 'data.pgp'.
+    """
+    zip_path = Path(zip_path)
+    if not zip_path.exists():
+        raise FileNotFoundError(f"ZIP file not found: {zip_path}")
+    if not zip_path.is_file():
+        raise ValueError(f"Path is not a file: {zip_path}")
+
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        namelist = zf.namelist()
+
+        target_name = None
+        # Try exact match first
+        if inner_path in namelist:
+            target_name = inner_path
+        else:
+            # Fallback: case-insensitive match or match ending with inner_path
+            normalized_inner = inner_path.strip("/").lower()
+            for name in namelist:
+                norm = name.strip("/").lower()
+                if (
+                    norm == normalized_inner
+                    or norm.endswith("/" + normalized_inner)
+                    or norm.endswith("data.pgp")
+                ):
+                    target_name = name
+                    break
+
+        if not target_name:
+            available = ", ".join(namelist)
+            raise KeyError(
+                f"File '{inner_path}' not found in ZIP. Available: {available}"
+            )
+
+        return zf.read(target_name)
+
+
+def decrypt_pgp_payload(encrypted_data: bytes, password: str) -> str:
+    """
+    Decrypt symmetric PGP encrypted bytes using GPG with the given password.
+    Returns the decrypted string.
+    """
+    gpg_bin = find_gpg_binary()
+
+    # Pass password via a pipe fd to avoid exposing it in process tables
+    r_fd, w_fd = os.pipe()
+    try:
+        os.write(w_fd, password.encode("utf-8") + b"\n")
+        os.close(w_fd)
+        w_fd = -1
+
+        cmd = [
+            gpg_bin,
+            "--batch",
+            "--yes",
+            "--quiet",
+            "--pinentry-mode",
+            "loopback",
+            "--passphrase-fd",
+            str(r_fd),
+            "--decrypt",
+            "-",
+        ]
+
+        proc = subprocess.run(
+            cmd,
+            input=encrypted_data,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            pass_fds=[r_fd],
+        )
+    finally:
+        if w_fd != -1:
+            os.close(w_fd)
+        os.close(r_fd)
+
+    if proc.returncode != 0:
+        err_msg = proc.stderr.decode("utf-8", errors="replace").strip()
+        details = err_msg or "incorrect password or corrupted data"
+        raise RuntimeError(f"GPG decryption failed: {details}")
+
+    return proc.stdout.decode("utf-8")
+
+
+def load_proton_pass_json(
+    zip_path: str | Path,
+    password: Optional[str] = None,
+    inner_path: str = "Proton Pass/data.pgp",
+) -> tuple[str, Any]:
+    """
+    Extracts, decrypts, and validates the JSON content from Proton Pass
+    archive.
+    Returns a tuple of (raw_decrypted_text, parsed_json_data).
+    """
+    if password is None:
+        password = os.environ.get("PASSWORD")
+        if not password:
+            password = getpass.getpass(
+                "Enter password for Proton Pass data.pgp: "
+            )
+
+    encrypted_bytes = read_encrypted_payload(zip_path, inner_path=inner_path)
+    decrypted_text = decrypt_pgp_payload(encrypted_bytes, password=password)
+
+    try:
+        parsed_json = json.loads(decrypted_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Decrypted content is not valid JSON: {exc}"
+        ) from exc
+
+    return decrypted_text, parsed_json
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Extract and decrypt Proton Pass JSON data from a zip archive."
+        )
+    )
+    parser.add_argument(
+        "zip_path",
+        metavar="ZIP_FILE",
+        help="Path to the Proton Pass exported zip file",
+    )
+    parser.add_argument(
+        "-p",
+        "--password",
+        help=(
+            "Password to decrypt data.pgp (if omitted, PASSWORD "
+            "env var or interactive prompt is used)"
+        ),
+    )
+    parser.add_argument(
+        "--inner-path",
+        default="Proton Pass/data.pgp",
+        help=(
+            "Path of the encrypted file inside the zip "
+            "(default: 'Proton Pass/data.pgp')"
+        ),
+    )
+    parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="Output the raw decrypted JSON string without reformatting",
+    )
+    parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="Output compact JSON without extra whitespace/indentation",
+    )
+    parser.add_argument(
+        "--indent",
+        type=int,
+        default=2,
+        help="Indentation spaces for pretty-printing JSON (default: 2)",
+    )
+
+    args = parser.parse_args()
+
+    try:
+        raw_text, parsed_json = load_proton_pass_json(
+            zip_path=args.zip_path,
+            password=args.password,
+            inner_path=args.inner_path,
+        )
+
+        for v, d in parsed_json["vaults"].items():
+            print(d["name"])
+            for i in d["items"]:
+                data = i["data"]
+                aliasEmail = i["aliasEmail"]
+
+                name = data["metadata"]["name"]
+                itemEmail = data["content"].get("itemEmail")
+                itemUsername = data["content"].get("itemUsername")
+                password = data["content"].get("password")
+
+                print(name, itemEmail or itemUsername, password, aliasEmail)
+
+        if args.raw:
+            sys.stdout.write(raw_text)
+            if not raw_text.endswith("\n"):
+                sys.stdout.write("\n")
+        elif args.compact:
+            json.dump(parsed_json, sys.stdout, separators=(",", ":"))
+            sys.stdout.write("\n")
+        else:
+            json.dump(
+                parsed_json,
+                sys.stdout,
+                indent=args.indent,
+                ensure_ascii=False,
+            )
+            sys.stdout.write("\n")
+            sys.stdout.write("\n")
+
+        sys.stdout.flush()
+        return 0
+
+    except Exception as exc:
+        sys.stderr.write(f"Error: {exc}\n")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
