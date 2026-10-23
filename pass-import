@@ -3,9 +3,10 @@
 Import credentials into a pass (passwordstore.org) repository from JSON.
 
 Supported input formats:
+  - JSON Lines stream (one line per pass entry: {path, password, notes}) -
+    parsed and imported incrementally
   - Aegis Authenticator export (decrypted JSON)
   - Proton Pass export (decrypted JSON)
-  - pass-export JSON format
 """
 
 import argparse
@@ -14,8 +15,9 @@ import os
 import re
 import subprocess
 import sys
+from itertools import chain
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, TextIO, Tuple
 
 
 def check_pass_installed() -> bool:
@@ -56,30 +58,6 @@ def sanitize_segment(segment: str) -> str:
     return cleaned or "unnamed"
 
 
-def detect_format(data: Any) -> str:
-    """Auto-detect the format of the parsed JSON data."""
-    if isinstance(data, list):
-        if data and isinstance(data[0], dict) and "path" in data[0]:
-            return "pass-export"
-        # Empty list fallback
-        return "pass-export"
-
-    if isinstance(data, dict):
-        if "vaults" in data:
-            return "protonpass"
-        if "entries" in data:
-            return "aegis"
-        if "header" in data and "db" in data:
-            raise ValueError(
-                "Input appears to be an encrypted Aegis vault. "
-                "Decrypt it first using 'decrypt-aegis-json'."
-            )
-
-    raise ValueError(
-        "Unable to auto-detect JSON format. Please specify --type [aegis|protonpass|pass-export]."
-    )
-
-
 class ItemToImport:
     def __init__(self, path: str, password: str = "", notes: str = "") -> None:
         self.path = path.strip("/")
@@ -92,10 +70,52 @@ class ItemToImport:
         return f"{self.password}\n"
 
 
-def parse_aegis_entries(data: dict, prefix_override: Optional[str] = None) -> List[ItemToImport]:
-    """Parse Aegis Authenticator entries."""
+def iter_ndjson_items(
+    source: TextIO,
+    first_line: str,
+    prefix: str = "",
+    parse_errors: Optional[List[str]] = None,
+) -> Iterator[ItemToImport]:
+    """Yield items from a JSON Lines stream, parsing one line at a time."""
+    if parse_errors is None:
+        parse_errors = []
+
+    for line in chain((first_line,), source):
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        try:
+            obj = json.loads(stripped)
+        except json.JSONDecodeError as e:
+            msg = f"skipping malformed line: {e}"
+            parse_errors.append(msg)
+            print(f"[!] Warning: {msg}", file=sys.stderr)
+            continue
+
+        if not isinstance(obj, dict) or not isinstance(obj.get("path"), str):
+            msg = "skipping line: expected a JSON object with a 'path' key"
+            parse_errors.append(msg)
+            print(f"[!] Warning: {msg}", file=sys.stderr)
+            continue
+
+        path = obj["path"].strip("/")
+        if prefix:
+            path = f"{prefix.strip('/')}/{path}"
+
+        yield ItemToImport(
+            path=path,
+            password=str(obj.get("password") or ""),
+            notes=str(obj.get("notes") or ""),
+        )
+
+
+def iter_aegis_items(
+    data: dict,
+    prefix_override: Optional[str] = None,
+) -> Iterator[ItemToImport]:
+    """Yield items parsed from an Aegis Authenticator export."""
     prefix = prefix_override if prefix_override is not None else "totp"
-    items: List[ItemToImport] = []
     seen_paths: Dict[str, int] = {}
 
     for entry in data.get("entries", []):
@@ -135,16 +155,15 @@ def parse_aegis_entries(data: dict, prefix_override: Optional[str] = None) -> Li
         if note:
             meta_lines.append(f"Note: {note}")
 
-        notes_str = "\n".join(meta_lines)
-        items.append(ItemToImport(path=final_path, password=secret, notes=notes_str))
-
-    return items
+        yield ItemToImport(path=final_path, password=secret, notes="\n".join(meta_lines))
 
 
-def parse_protonpass_entries(data: dict, prefix_override: Optional[str] = None) -> List[ItemToImport]:
-    """Parse Proton Pass vault entries."""
+def iter_protonpass_items(
+    data: dict,
+    prefix_override: Optional[str] = None,
+) -> Iterator[ItemToImport]:
+    """Yield items parsed from a Proton Pass export."""
     prefix = prefix_override if prefix_override is not None else "protonpass"
-    items: List[ItemToImport] = []
     seen_paths: Dict[str, int] = {}
 
     for vault_id, vault_data in data.get("vaults", {}).items():
@@ -167,7 +186,6 @@ def parse_protonpass_entries(data: dict, prefix_override: Optional[str] = None) 
             seen_paths[base_path] = count + 1
             final_path = base_path if count == 0 else f"{base_path} ({count})"
 
-            password = content.get("password") or ""
             note_lines: List[str] = []
 
             item_username = content.get("itemUsername")
@@ -198,29 +216,11 @@ def parse_protonpass_entries(data: dict, prefix_override: Optional[str] = None) 
             if note:
                 note_lines.append(f"\n{note}")
 
-            notes_str = "\n".join(note_lines).strip()
-            items.append(ItemToImport(path=final_path, password=password, notes=notes_str))
-
-    return items
-
-
-def parse_pass_export_entries(data: list, prefix_override: Optional[str] = None) -> List[ItemToImport]:
-    """Parse pass-export list of dictionaries."""
-    items: List[ItemToImport] = []
-    prefix = prefix_override.strip("/") if prefix_override else ""
-
-    for entry in data:
-        raw_path = entry.get("path") or "unnamed"
-        if prefix:
-            final_path = f"{prefix}/{raw_path.strip('/')}"
-        else:
-            final_path = raw_path.strip("/")
-
-        password = entry.get("password") or ""
-        notes = entry.get("notes") or ""
-        items.append(ItemToImport(path=final_path, password=password, notes=notes))
-
-    return items
+            yield ItemToImport(
+                path=final_path,
+                password=content.get("password") or "",
+                notes="\n".join(note_lines).strip(),
+            )
 
 
 def import_item(
@@ -239,10 +239,10 @@ def import_item(
     if exists and not force:
         return "skip", f"-- Skip existing: {item.path}"
 
-    action = "overwrite" if exists else "add"
     action_label = "Overwrite" if exists else "Add"
 
     if dry_run:
+        action = "overwrite" if exists else "add"
         return action, f"-- Would {action_label.lower()}: {item.path}"
 
     cmd = ["pass", "insert", "--multiline", "--force", item.path]
@@ -258,7 +258,93 @@ def import_item(
         err = e.stderr.strip() if e.stderr else str(e)
         return "error", f"-- Error adding {item.path}: {err}"
 
+    action = "overwrite" if exists else "add"
     return action, f"-- {action_label}: {item.path}"
+
+
+def open_input(path: str) -> TextIO:
+    """Open the input file or return stdin for '-'."""
+    if path == "-":
+        return sys.stdin
+    return open(Path(path).expanduser(), "r", encoding="utf-8")
+
+
+def first_nonempty_line(source: TextIO) -> Optional[str]:
+    """Read the first non-empty line from the source."""
+    for line in source:
+        if line.strip():
+            return line
+    return None
+
+
+def classify_input(
+    source: TextIO,
+    first_line: str,
+    args: argparse.Namespace,
+    parse_errors: List[str],
+) -> Any:
+    """
+    Classify the input and return an item iterator.
+
+    Defaults to parsing the input line by line when each line is a complete
+    JSON object with a 'path' key (JSON Lines stream). Otherwise the input is
+    treated as an Aegis or Proton Pass export document.
+    """
+    doc: Optional[dict] = None
+
+    if args.type == "auto":
+        try:
+            first_obj: Any = json.loads(first_line)
+        except json.JSONDecodeError:
+            first_obj = None
+
+        if first_obj is not None:
+            if not isinstance(first_obj, dict):
+                raise ValueError(
+                    "Unsupported JSON input (expected pass entry lines, "
+                    "an Aegis or a Proton Pass export)"
+                )
+            doc = first_obj
+        else:
+            # Pretty-printed / multi-line document: read it completely
+            try:
+                raw = first_line + source.read()
+                parsed = json.loads(raw)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Input is not valid JSON: {e}")
+            if not isinstance(parsed, dict):
+                raise ValueError(
+                    "Unsupported JSON input (expected pass entry lines, "
+                    "an Aegis or a Proton Pass export)"
+                )
+            doc = parsed
+
+        if isinstance(doc.get("path"), str) and "entries" not in doc and "vaults" not in doc:
+            return iter_ndjson_items(
+                source, first_line, prefix=args.prefix, parse_errors=parse_errors
+            )
+        if isinstance(doc.get("entries"), list):
+            return iter_aegis_items(doc, prefix_override=args.prefix)
+        if isinstance(doc.get("vaults"), dict):
+            return iter_protonpass_items(doc, prefix_override=args.prefix)
+        raise ValueError(
+            "Unsupported JSON input (expected pass entry lines, "
+            "an Aegis or a Proton Pass export)"
+        )
+    else:
+        # Explicit type: read the whole document
+        try:
+            parsed = json.loads(first_line + source.read())
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Input is not valid JSON: {e}")
+
+        key = "entries" if args.type == "aegis" else "vaults"
+        if not isinstance(parsed, dict) or not isinstance(parsed.get(key), (list, dict)):
+            raise ValueError(f"Input does not look like a {args.type} export")
+
+        if args.type == "aegis":
+            return iter_aegis_items(parsed, prefix_override=args.prefix)
+        return iter_protonpass_items(parsed, prefix_override=args.prefix)
 
 
 def main() -> int:
@@ -287,7 +373,7 @@ def main() -> int:
         "-n",
         "--dry-run",
         action="store_true",
-        help="Simulate import without modifying the password store.",
+        help="Preview entries without modifying the password store.",
     )
     parser.add_argument(
         "-p",
@@ -298,7 +384,7 @@ def main() -> int:
     parser.add_argument(
         "-t",
         "--type",
-        choices=["auto", "aegis", "protonpass", "pass-export"],
+        choices=["auto", "aegis", "protonpass"],
         default="auto",
         help="Format type of input JSON (default: auto).",
     )
@@ -323,79 +409,66 @@ def main() -> int:
             return 1
         store_dir = Path("/tmp")
 
-    # Read JSON content
-    try:
-        if args.file == "-":
-            raw_input = sys.stdin.read()
-        else:
-            with open(Path(args.file).expanduser(), "r", encoding="utf-8") as f:
-                raw_input = f.read()
+    parse_errors: List[str] = []
+    items: Iterator[ItemToImport]
 
-        if not raw_input.strip():
+    try:
+        source = open_input(args.file)
+    except OSError as e:
+        print(f"Error reading input: {e}", file=sys.stderr)
+        return 1
+
+    with source:
+        first_line = first_nonempty_line(source)
+        if first_line is None:
             print("Error: Input is empty.", file=sys.stderr)
             return 1
 
-        data = json.loads(raw_input)
-    except Exception as e:
-        print(f"Error reading JSON input: {e}", file=sys.stderr)
-        return 1
-
-    # Detect format
-    format_type = args.type
-    if format_type == "auto":
         try:
-            format_type = detect_format(data)
+            items = classify_input(source, first_line, args, parse_errors)
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
-    # Parse items
-    try:
-        if format_type == "aegis":
-            items = parse_aegis_entries(data, prefix_override=args.prefix)
-        elif format_type == "protonpass":
-            items = parse_protonpass_entries(data, prefix_override=args.prefix)
-        elif format_type == "pass-export":
-            items = parse_pass_export_entries(data, prefix_override=args.prefix)
-        else:
-            print(f"Error: Unsupported format type '{format_type}'", file=sys.stderr)
+        added = 0
+        overwritten = 0
+        skipped = 0
+        imported_errors = 0
+
+        try:
+            for item in items:
+                status, msg = import_item(
+                    item,
+                    store_dir=store_dir,
+                    force=args.force,
+                    dry_run=args.dry_run,
+                )
+                if not args.quiet:
+                    print(msg)
+
+                if status == "add":
+                    added += 1
+                elif status == "overwrite":
+                    overwritten += 1
+                elif status == "skip":
+                    skipped += 1
+                elif status == "error":
+                    imported_errors += 1
+        except BrokenPipeError:
             return 1
-    except Exception as e:
-        print(f"Error parsing {format_type} data: {e}", file=sys.stderr)
-        return 1
 
-    added = 0
-    overwritten = 0
-    skipped = 0
-    errors = 0
-
-    for item in items:
-        status, msg = import_item(
-            item,
-            store_dir=store_dir,
-            force=args.force,
-            dry_run=args.dry_run,
-        )
-        if not args.quiet:
-            print(msg)
-
-        if status == "add":
-            added += 1
-        elif status == "overwrite":
-            overwritten += 1
-        elif status == "skip":
-            skipped += 1
-        elif status == "error":
-            errors += 1
-
-    total = len(items)
+    total = added + overwritten + skipped + imported_errors
+    error_count = len(parse_errors) + imported_errors
     mode_str = " (dry run)" if args.dry_run else ""
-    summary = f"Processed {total} entries{mode_str}: {added} added, {overwritten} overwritten, {skipped} skipped"
-    if errors > 0:
-        summary += f", {errors} errors"
+    summary = (
+        f"Processed {total} entries{mode_str}: "
+        f"{added} added, {overwritten} overwritten, {skipped} skipped"
+    )
+    if error_count > 0:
+        summary += f", {error_count} errors"
     print(summary, file=sys.stderr)
 
-    return 1 if errors > 0 else 0
+    return 1 if error_count > 0 else 0
 
 
 if __name__ == "__main__":

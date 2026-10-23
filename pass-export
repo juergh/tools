@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-Export a pass (passwordstore.org) repository into a JSON file.
+Export a pass (passwordstore.org) repository as a stream of JSON Lines.
+
+Every entry is decrypted and written as a single-line JSON object (one
+entry per line) as soon as it is processed, so the output can be piped
+into 'pass-import' without buffering the whole store in memory.
 """
 
 import argparse
@@ -9,7 +13,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Optional, TextIO, Tuple
 
 
 def check_pass_installed() -> bool:
@@ -54,25 +58,23 @@ def decrypt_entry(entry_name: str) -> Optional[str]:
         return None
 
 
-def parse_entry_content(content: str) -> Dict[str, str]:
-    """
-    Extract first line as password and treat all remaining lines as raw notes.
-    """
+def parse_entry_content(content: str) -> Tuple[str, str]:
+    """Extract the first line as password and treat all remaining lines as notes."""
     lines = content.splitlines()
     password = lines[0] if lines else ""
     notes = "\n".join(lines[1:]).strip() if len(lines) > 1 else ""
-
-    return {
-        "password": password,
-        "notes": notes,
-    }
+    return password, notes
 
 
 def export_store(
-    store_dir: Path, mask_passwords: bool = False, verbose: bool = False
-) -> List[Dict[str, Any]]:
-    """Traverse the store directory and decrypt all .gpg files."""
-    entries: List[Dict[str, Any]] = []
+    store_dir: Path,
+    out: TextIO,
+    mask_passwords: bool = False,
+    verbose: bool = False,
+) -> Tuple[int, int]:
+    """Traverse the store directory, decrypt all .gpg files and emit them immediately."""
+    exported = 0
+    failed = 0
 
     for root, dirs, files in os.walk(store_dir):
         # Skip git repository metadata
@@ -80,47 +82,51 @@ def export_store(
             dirs.remove(".git")
 
         for file in files:
-            if file.endswith(".gpg"):
-                full_path = Path(root) / file
-                rel_path = full_path.relative_to(store_dir)
-                entry_name = str(rel_path.with_suffix(""))
+            if not file.endswith(".gpg"):
+                continue
 
-                if verbose:
-                    print(f"Decrypting: {entry_name}", file=sys.stderr)
+            full_path = Path(root) / file
+            entry_name = str(full_path.relative_to(store_dir).with_suffix(""))
 
-                raw_content = decrypt_entry(entry_name)
-                if raw_content is None:
-                    continue
+            if verbose:
+                print(f"Decrypting: {entry_name}", file=sys.stderr)
 
-                parsed = parse_entry_content(raw_content)
-                password_val = "*****" if mask_passwords else parsed["password"]
+            raw_content = decrypt_entry(entry_name)
+            if raw_content is None:
+                failed += 1
+                continue
 
-                entries.append(
-                    {
-                        "path": entry_name,
-                        "password": password_val,
-                        "notes": parsed["notes"],
-                    }
-                )
+            password_val, notes = parse_entry_content(raw_content)
+            record = {
+                "path": entry_name,
+                "password": "*****" if mask_passwords else password_val,
+                "notes": notes,
+            }
+            out.write(json.dumps(record, ensure_ascii=False) + "\n")
+            out.flush()
+            exported += 1
 
-    return entries
+    return exported, failed
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Export a pass (passwordstore.org) database into structured JSON."
+        description=(
+            "Export a pass (passwordstore.org) repository as a stream of "
+            "JSON Lines (one entry per line)."
+        )
     )
     parser.add_argument(
         "-o",
         "--output",
         type=str,
-        help="Path to output JSON file. Output to stdout if omitted.",
+        help="Path to output file. Output to stdout if omitted.",
     )
     parser.add_argument(
         "-d",
         "--dir",
         type=str,
-        help="Custom path to password store directory (defaults to $PASSWORD_STORE_DIR or ~/.password_store).",
+        help="Custom path to password store directory (defaults to $PASSWORD_STORE_DIR or ~/.password-store).",
     )
     parser.add_argument(
         "--mask",
@@ -133,36 +139,35 @@ def main() -> None:
         action="store_true",
         help="Print processing progress to stderr.",
     )
-    parser.add_argument(
-        "--compact",
-        action="store_true",
-        help="Minify JSON output without indentation.",
-    )
 
     args = parser.parse_args()
 
     if not check_pass_installed():
         print("Error: 'pass' binary is not installed or not available in PATH.", file=sys.stderr)
-        sys.exit(1)
+        return 1
 
     try:
         store_dir = get_pass_directory(args.dir)
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+        return 1
 
-    entries = export_store(store_dir, mask_passwords=args.mask, verbose=args.verbose)
-    indent = None if args.compact else 2
-    json_output = json.dumps(entries, indent=indent, ensure_ascii=False)
+    try:
+        if args.output:
+            out_path = Path(args.output).expanduser()
+            with open(out_path, "w", encoding="utf-8") as f:
+                exported, failed = export_store(store_dir, f, args.mask, args.verbose)
+        else:
+            exported, failed = export_store(store_dir, sys.stdout, args.mask, args.verbose)
+    except BrokenPipeError:
+        return 1
 
-    if args.output:
-        out_path = Path(args.output).expanduser()
-        with open(out_path, "w", encoding="utf-8") as f:
-            f.write(json_output)
-        print(f"Successfully exported {len(entries)} entries to {out_path}", file=sys.stderr)
-    else:
-        print(json_output)
+    destination = f" to {args.output}" if args.output else ""
+    failed_part = f" ({failed} failed)" if failed else ""
+    print(f"Successfully exported {exported} entries{failed_part}{destination}", file=sys.stderr)
+
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
