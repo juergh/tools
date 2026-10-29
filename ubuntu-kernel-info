@@ -42,6 +42,8 @@ PKG_FIELDS = (
     "package.type",
     "package.repo.url",
     "package.repo.branch",
+    "package.repo-push.url",
+    "package.repo-push.branch",
 )
 
 
@@ -131,21 +133,32 @@ def parse_kernel_series(ks):
 
             for key in ("packages", "snaps"):
                 for package, package_data in source_data.get(key, {}).items():
-                    if not package_data:
+                    if not package_data or "repo" not in package_data:
                         continue
-                    repo = package_data.get("repo")
-                    if not repo:
-                        continue
+
+                    # Package repo
+                    pkg_repo = package_data["repo"]
+                    if len(pkg_repo) == 1:
+                        pkg_repo.append("master")
+
+                    # Package repo for PR pushes
+                    pkg_repo_push = package_data.get("repo-push", [None])
+                    if len(pkg_repo_push) == 1:
+                        pkg_repo_push.append(f"{pkg_repo[1]}--integration" if pkg_repo_push[0] else None)
+
+                    # Synthetic package format and type
+                    pkg_format = "snap" if key == "snaps" else "deb"
+                    pkg_type = "snap" if key == "snaps" else package_data.get("type", "main")
+
+                    # Assemble the package entry
                     package_entry = {
-                        "package.format": "snap" if key == "snaps" else "deb",
+                        "package.format": pkg_format,
                         "package.name": package,
-                        "package.type": (
-                            "snap"
-                            if key == "snaps"
-                            else package_data.get("type", "main")
-                        ),
-                        "package.repo.url": repo[0],
-                        "package.repo.branch": (repo[1] if len(repo) > 1 else "master"),
+                        "package.type": pkg_type,
+                        "package.repo.url": pkg_repo[0],
+                        "package.repo.branch": pkg_repo[0],
+                        "package.repo-push.url": pkg_repo_push[0],
+                        "package.repo-push.branch": pkg_repo_push[1],
                     }
 
                     entry = dict(series_entry)
