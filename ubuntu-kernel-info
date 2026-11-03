@@ -156,7 +156,7 @@ def parse_kernel_series(ks):
                         "package.name": package,
                         "package.type": pkg_type,
                         "package.repo.url": pkg_repo[0],
-                        "package.repo.branch": pkg_repo[0],
+                        "package.repo.branch": pkg_repo[1],
                         "package.repo-push.url": pkg_repo_push[0],
                         "package.repo-push.branch": pkg_repo_push[1],
                     }
