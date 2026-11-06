@@ -1,0 +1,14 @@
+#!/bin/bash
+
+if [ -e ubuntu/debian/changelog ] ; then
+	changelog=ubuntu/debian/changelog
+else
+	changelog=debian/changelog
+fi
+
+package=$(dpkg-parsechangelog -l "${changelog}" -S Source)
+version=$(dpkg-parsechangelog -l "${changelog}" -S Version)
+
+tag=Ubuntu${package#linux-firmware}-${version}
+
+git commit -s -m "UBUNTU: ${tag}"

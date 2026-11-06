@@ -1,0 +1,19 @@
+#!/bin/bash
+
+if [ -e ubuntu/debian/changelog ] ; then
+	changelog=ubuntu/debian/changelog
+else
+	changelog=debian/changelog
+fi
+
+package=$(dpkg-parsechangelog -l "${changelog}" -S Source)
+version=$(dpkg-parsechangelog -l "${changelog}" -S Version)
+
+tag=Ubuntu${package#linux-firmware}-${version}
+
+if [ "$(git log --format=%s -1)" != "UBUNTU: ${tag}" ] ; then
+	echo "Error: HEAD commit is not a release commit" >&2
+	exit 1
+fi
+
+git tag -s -m "${tag}" "${tag//~/_}"
