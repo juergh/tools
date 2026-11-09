@@ -334,7 +334,7 @@ def _wontfix_eol_bug(bug, series=None, dry_run=False):
         lp_series = lp_distro.getSeries(name_or_version=series)
         ubuntu_release = f"Ubuntu {lp_series.version} ({lp_series.title.removeprefix('The ')}"
     else:
-        ubuntu_release = "The Ubuntu release this bug has been reported for"
+        ubuntu_release = "The Ubuntu release (or kernel version) this bug has been reported for"
 
     comment = \
         f"{ubuntu_release} has reached end of life and this bug will not be fixed for that " + \
