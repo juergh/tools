@@ -6,23 +6,23 @@
 import sys
 import os
 import textwrap
-from git import NULL_TREE, Repo, GitCommandError
+from git import Repo, GitCommandError
 from git.objects.util import altz_to_utctz_str
 
 
 def parse_args():
     args = sys.argv[1:]
     if "--" not in args:
-        print("Error: Separate commits and files using '--'.")
+        print("Error: Separate commits and pathspecs using '--'.")
         print(
             "Usage: git-cherry-pick-some [--keep-message] "
-            "<commit1> <commit2> ... -- <file1> <file2> ..."
+            "<commit1> <commit2> ... -- <pathspec>..."
         )
         sys.exit(1)
 
     split_idx = args.index("--")
     commit_args = args[:split_idx]
-    target_files = args[split_idx + 1 :]
+    pathspecs = args[split_idx + 1 :]
 
     keep_message = False
     commits = []
@@ -35,17 +35,49 @@ def parse_args():
         else:
             commits.append(arg)
 
-    return commits, target_files, keep_message
+    if not pathspecs:
+        print("Error: No pathspecs given after '--'.", file=sys.stderr)
+        sys.exit(1)
+
+    return commits, pathspecs, keep_message
 
 
-def get_changed_files(commit):
-    """Get the set of files changed in a commit (parent -> commit direction)."""
+def get_changed_files(repo, commit, pathspecs=None):
+    """Get the set of files changed in a commit (parent -> commit direction).
+
+    If pathspecs are given, limit the result to files matching them. Pathspecs
+    are interpreted relative to the invocation directory, like regular git
+    commands, so magic such as ':^foo' and ':(top)' works as usual.
+    """
+    cmd = [
+        repo.git.GIT_PYTHON_GIT_EXECUTABLE,
+        "-C",
+        os.getcwd(),
+    ]
     if commit.parents:
-        diffs = commit.parents[0].diff(commit)
+        cmd += ["diff", "--name-only", "-z", "--no-relative", "--no-renames"]
+        cmd += [commit.parents[0].hexsha, commit.hexsha]
     else:
         # Root commit: diff against the empty tree
-        diffs = commit.diff(NULL_TREE)
-    return {d.a_path for d in diffs if d.a_path} | {d.b_path for d in diffs if d.b_path}
+        cmd += [
+            "diff-tree",
+            "--root",
+            "--no-commit-id",
+            "-r",
+            "--name-only",
+            "-z",
+            "--no-relative",
+            "--no-renames",
+            commit.hexsha,
+        ]
+    if pathspecs:
+        cmd += ["--"] + list(pathspecs)
+    try:
+        out = repo.git.execute(cmd, stdout_as_string=True)
+    except GitCommandError as e:
+        print(f"Error: Invalid pathspec: {e}", file=sys.stderr)
+        sys.exit(1)
+    return {p for p in out.split("\0") if p}
 
 
 def cherry_pick_state(repo):
@@ -98,7 +130,7 @@ def reset_unwanted(repo, unwanted_files):
 
 
 def main():
-    commits, target_files, keep_message = parse_args()
+    commits, pathspecs, keep_message = parse_args()
 
     try:
         repo = Repo(os.getcwd(), search_parent_directories=True)
@@ -146,19 +178,20 @@ def main():
             sys.exit(1)
 
         # 1. Figure out the list of files that the commit modifies
-        changed_in_commit = get_changed_files(commit)
+        changed_in_commit = get_changed_files(repo, commit)
 
-        # 2. If the intersection of the modified list with the provided list is empty
-        actual_modified_files = [f for f in target_files if f in changed_in_commit]
+        # 2. If no pathspec matches a file modified by the commit, skip it
+        actual_modified_files = sorted(get_changed_files(repo, commit, pathspecs))
         if not actual_modified_files:
             print(
-                f"  Warning: None of the specified files were modified by {commit_ref}. Skipping.",
+                f"  Warning: No pathspec matched files changed by {commit_ref}. Skipping.",
                 file=sys.stderr,
             )
             continue
 
-        # 3. If all files in the modified list are in the provided list: do a native clean cherry-pick
-        if changed_in_commit.issubset(set(target_files)):
+        # 3. If the pathspecs select all modified files: do a native clean cherry-pick
+        actual_set = set(actual_modified_files)
+        if actual_set == changed_in_commit:
             try:
                 if keep_message:
                     repo.git.cherry_pick(commit.hexsha)
@@ -172,7 +205,7 @@ def main():
                 sys.exit(1)
 
         # 4. Partial update via cherry-pick --no-commit + reset unwanted files
-        unwanted_files = sorted(changed_in_commit - set(actual_modified_files))
+        unwanted_files = sorted(changed_in_commit - actual_set)
         print("  Partial update: Cherry-picking with 3-way merge...")
 
         cherry_pick_failed = False
