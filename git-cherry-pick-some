@@ -6,7 +6,8 @@
 import sys
 import os
 import textwrap
-from git import Repo, GitCommandError
+from git import NULL_TREE, Repo, GitCommandError
+from git.objects.util import altz_to_utctz_str
 
 
 def parse_args():
@@ -27,9 +28,58 @@ def get_changed_files(commit):
     if commit.parents:
         diffs = commit.parents[0].diff(commit)
     else:
-        # Root commit: diff against empty tree
-        diffs = commit.diff(None, R=True)
+        # Root commit: diff against the empty tree
+        diffs = commit.diff(NULL_TREE)
     return {d.a_path for d in diffs if d.a_path} | {d.b_path for d in diffs if d.b_path}
+
+
+def cherry_pick_state(repo):
+    """True if a cherry-pick (or sequencer) operation is in progress."""
+    return any(
+        os.path.exists(os.path.join(repo.git_dir, p))
+        for p in ("CHERRY_PICK_HEAD", "sequencer")
+    )
+
+
+def quit_cherry_pick(repo):
+    """Clear cherry-pick state, keeping the current index and worktree."""
+    try:
+        repo.git.cherry_pick("--quit")
+    except GitCommandError:
+        pass
+
+
+def abort_cherry_pick(repo):
+    """Abort the in-progress cherry-pick, restoring the pre-pick state."""
+    try:
+        repo.git.cherry_pick("--abort")
+    except GitCommandError:
+        pass
+
+
+def path_in_head(repo, path):
+    """True if path exists in the HEAD tree."""
+    try:
+        repo.head.commit.tree / path
+        return True
+    except KeyError:
+        return False
+
+
+def reset_unwanted(repo, unwanted_files):
+    """Reset unwanted files back to their HEAD state (index + worktree)."""
+    for f in unwanted_files:
+        if path_in_head(repo, f):
+            # Tracked in HEAD: restore index and worktree from HEAD.
+            repo.git.checkout("HEAD", "--", f)
+        else:
+            # Added by the picked commit: drop it from the index, then remove
+            # the file/directory from the worktree.
+            try:
+                repo.git.reset("--", f)
+            except GitCommandError:
+                pass  # Already not in the index
+            repo.git.clean("-ffd", "--", f)
 
 
 def main():
@@ -40,6 +90,27 @@ def main():
     except Exception as e:
         print(f"Error: Not a git repository: {e}")
         sys.exit(1)
+
+    # Refuse to run on a dirty index or tracked worktree: 'cherry-pick
+    # --no-commit' applies on top of the index and repo.index.commit() would
+    # silently include unrelated staged changes in the backport commit.
+    if repo.is_dirty(untracked_files=False, submodules=False):
+        print(
+            "Error: The index or tracked working tree is dirty. "
+            "Commit or stash your changes first.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Never touch another in-progress git operation.
+    for state in ("CHERRY_PICK_HEAD", "REVERT_HEAD", "MERGE_HEAD", "sequencer"):
+        if os.path.exists(os.path.join(repo.git_dir, state)):
+            print(
+                f"Error: Another git operation is in progress ({state}). "
+                "Finish or abort it first.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     config = repo.config_reader()
     user_name = config.get_value("user", "name", default="")
@@ -79,55 +150,80 @@ def main():
                 continue
             except GitCommandError as e:
                 print(f"  Native cherry-pick failed: {e}.", file=sys.stderr)
+                abort_cherry_pick(repo)
                 sys.exit(1)
 
         # 4. Partial update via cherry-pick --no-commit + reset unwanted files
-        unwanted_files = list(changed_in_commit - set(actual_modified_files))
+        unwanted_files = sorted(changed_in_commit - set(actual_modified_files))
         print("  Partial update: Cherry-picking with 3-way merge...")
 
         cherry_pick_failed = False
+        cherry_pick_error = None
         try:
             repo.git.cherry_pick("--no-commit", commit.hexsha)
-        except GitCommandError:
+        except GitCommandError as e:
             cherry_pick_failed = True
+            cherry_pick_error = e
 
         # If cherry-pick had conflicts, check if any are in wanted files
         if cherry_pick_failed:
-            unmerged = set(repo.index.unmerged_blobs().keys())
+            unmerged = set(repo.index.unmerged_blobs())
+
+            if not unmerged:
+                # An already-applied commit can stop with state but no changes.
+                if cherry_pick_state(repo) and not repo.index.diff("HEAD"):
+                    print("  Nothing to apply; skipping empty pick.")
+                    quit_cherry_pick(repo)
+                    continue
+
+                # Otherwise this was a real failure (dirty state, untracked
+                # collision, merge commit, ...). Do not touch the index or
+                # worktree, only clean up state we created.
+                print(f"  Error: cherry-pick failed: {cherry_pick_error}", file=sys.stderr)
+                if cherry_pick_state(repo):
+                    abort_cherry_pick(repo)
+                sys.exit(1)
+
             conflicted_wanted = unmerged & set(actual_modified_files)
             if conflicted_wanted:
                 print(
-                    f"  Error: Conflict in wanted file(s): {', '.join(sorted(conflicted_wanted))}",
+                    f"  Error: Conflict in wanted file(s): "
+                    f"{', '.join(sorted(conflicted_wanted))}",
                     file=sys.stderr,
                 )
-                repo.git.cherry_pick("--abort")
+                if cherry_pick_state(repo):
+                    abort_cherry_pick(repo)
+                else:
+                    # 'cherry-pick --no-commit' conflicts leave no state to
+                    # abort; restore index and worktree from HEAD instead.
+                    # Safe: the preflight check required a clean tree.
+                    repo.git.reset("--hard", "HEAD")
                 sys.exit(1)
             # All conflicts are in unwanted files — resolve by resetting to HEAD
             print("  Conflicts only in unwanted files, resolving by reset...")
 
         # Reset unwanted files back to HEAD state (index + worktree)
         if unwanted_files:
-            try:
-                repo.git.checkout("HEAD", "--", *unwanted_files)
-            except GitCommandError:
-                # Some unwanted files may be newly added by the commit (not in HEAD),
-                # remove them from the index instead
-                for f in unwanted_files:
-                    try:
-                        repo.git.checkout("HEAD", "--", f)
-                    except GitCommandError:
-                        # File may be new (not in HEAD) or in an unmerged state.
-                        # Use 'git reset' to clear the index entry, then clean worktree.
-                        try:
-                            repo.git.reset("--", f)
-                        except GitCommandError:
-                            pass  # Already not in index
-                        # Also remove from worktree if it exists
-                        full_path = os.path.join(repo.working_dir, f)
-                        if os.path.exists(full_path):
-                            os.remove(full_path)
+            reset_unwanted(repo, unwanted_files)
 
-        # 5. Format commit message & commit (preserving original authorship)
+        # Make sure nothing is left unmerged before committing
+        if repo.index.unmerged_blobs():
+            print("  Error: Unresolved conflicts remain.", file=sys.stderr)
+            repo.git.reset("--hard", "HEAD")
+            if cherry_pick_state(repo):
+                quit_cherry_pick(repo)
+            sys.exit(1)
+
+        # Clear any leftover cherry-pick state, keeping the resolved index
+        if cherry_pick_state(repo):
+            quit_cherry_pick(repo)
+
+        # 5. Skip if the pick produced no changes to the selected files
+        if not repo.index.diff("HEAD"):
+            print("  No changes to selected files; skipping.")
+            continue
+
+        # 6. Format commit message & commit (preserving original authorship)
         orig_msg_stripped = commit.message.strip()
         lines = orig_msg_stripped.splitlines()
         last_line = lines[-1] if lines else ""
@@ -144,10 +240,9 @@ def main():
         new_msg = f"{orig_msg_stripped}{spacing}(backported from commit {commit.hexsha})\n{formatted_user_text}\n{sob_line}"
 
         # Format author date as git internal format: "<unix_ts> <+HHMM>"
-        tz = commit.author_tz_offset
-        tz_sign = "+" if tz >= 0 else "-"
-        tz_abs = abs(tz)
-        author_date = f"{commit.authored_date} {tz_sign}{tz_abs // 3600:02d}{(tz_abs % 3600) // 60:02d}"
+        author_date = (
+            f"{commit.authored_date} {altz_to_utctz_str(commit.author_tz_offset)}"
+        )
 
         repo.index.commit(
             new_msg,
