@@ -15,12 +15,27 @@ def parse_args():
     if "--" not in args:
         print("Error: Separate commits and files using '--'.")
         print(
-            "Usage: git-cherry-pick-some <commit1> <commit2> ... -- <file1> <file2> ..."
+            "Usage: git-cherry-pick-some [--keep-message] "
+            "<commit1> <commit2> ... -- <file1> <file2> ..."
         )
         sys.exit(1)
 
     split_idx = args.index("--")
-    return args[:split_idx], args[split_idx + 1 :]
+    commit_args = args[:split_idx]
+    target_files = args[split_idx + 1 :]
+
+    keep_message = False
+    commits = []
+    for arg in commit_args:
+        if arg in ("-k", "--keep-message"):
+            keep_message = True
+        elif arg.startswith("-"):
+            print(f"Error: Unknown option: {arg}", file=sys.stderr)
+            sys.exit(1)
+        else:
+            commits.append(arg)
+
+    return commits, target_files, keep_message
 
 
 def get_changed_files(commit):
@@ -83,7 +98,7 @@ def reset_unwanted(repo, unwanted_files):
 
 
 def main():
-    commits, target_files = parse_args()
+    commits, target_files, keep_message = parse_args()
 
     try:
         repo = Repo(os.getcwd(), search_parent_directories=True)
@@ -115,7 +130,7 @@ def main():
     config = repo.config_reader()
     user_name = config.get_value("user", "name", default="")
     user_email = config.get_value("user", "email", default="")
-    if not user_name or not user_email:
+    if not keep_message and (not user_name or not user_email):
         print(
             "Warning: user.name or user.email not set in git config.", file=sys.stderr
         )
@@ -145,7 +160,10 @@ def main():
         # 3. If all files in the modified list are in the provided list: do a native clean cherry-pick
         if changed_in_commit.issubset(set(target_files)):
             try:
-                repo.git.cherry_pick("-x", "-s", commit.hexsha)
+                if keep_message:
+                    repo.git.cherry_pick(commit.hexsha)
+                else:
+                    repo.git.cherry_pick("-x", "-s", commit.hexsha)
                 print("  Clean native cherry-pick succeeded.")
                 continue
             except GitCommandError as e:
@@ -224,20 +242,24 @@ def main():
             continue
 
         # 6. Format commit message & commit (preserving original authorship)
-        orig_msg_stripped = commit.message.strip()
-        lines = orig_msg_stripped.splitlines()
-        last_line = lines[-1] if lines else ""
-        spacing = "\n" if "Signed-off-by:" in last_line else "\n\n"
+        if keep_message:
+            # Keep the original commit message exactly as-is
+            new_msg = commit.message
+        else:
+            orig_msg_stripped = commit.message.strip()
+            lines = orig_msg_stripped.splitlines()
+            last_line = lines[-1] if lines else ""
+            spacing = "\n" if "Signed-off-by:" in last_line else "\n\n"
 
-        files_str = ", ".join(actual_modified_files)
-        raw_user_line = f"[{current_user}: Update only {files_str}.]"
+            files_str = ", ".join(actual_modified_files)
+            raw_user_line = f"[{current_user}: Update only {files_str}.]"
 
-        wrapped_user_lines = textwrap.wrap(
-            raw_user_line, width=78, subsequent_indent=" "
-        )
-        formatted_user_text = "\n".join(wrapped_user_lines)
+            wrapped_user_lines = textwrap.wrap(
+                raw_user_line, width=78, subsequent_indent=" "
+            )
+            formatted_user_text = "\n".join(wrapped_user_lines)
 
-        new_msg = f"{orig_msg_stripped}{spacing}(backported from commit {commit.hexsha})\n{formatted_user_text}\n{sob_line}"
+            new_msg = f"{orig_msg_stripped}{spacing}(backported from commit {commit.hexsha})\n{formatted_user_text}\n{sob_line}"
 
         # Format author date as git internal format: "<unix_ts> <+HHMM>"
         author_date = (
