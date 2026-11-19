@@ -13,10 +13,11 @@ from git.objects.util import altz_to_utctz_str
 def parse_args():
     args = sys.argv[1:]
     if "--" not in args:
-        print("Error: Separate commits and pathspecs using '--'.")
+        print("Error: Separate commits and pathspecs using '--'.", file=sys.stderr)
         print(
             "Usage: git-cherry-pick-some [--keep-message] "
-            "<commit1> <commit2> ... -- <pathspec>..."
+            "<commit1> <commit2> ... -- <pathspec>...",
+            file=sys.stderr,
         )
         sys.exit(1)
 
@@ -113,6 +114,23 @@ def path_in_head(repo, path):
         return False
 
 
+def print_pick_summary(commit, picked, omitted, multiple_commits):
+    """Print the picked and omitted files of a successful pick to stdout."""
+    if multiple_commits:
+        print(f"commit {commit.hexsha}")
+    print("Picked files:")
+    for f in picked:
+        print(f"  {f}")
+    print()
+    if omitted:
+        print("Omitted files:")
+        for f in omitted:
+            print(f"  {f}")
+    else:
+        print("Omitted files: none")
+    print()
+
+
 def reset_unwanted(repo, unwanted_files):
     """Reset unwanted files back to their HEAD state (index + worktree)."""
     for f in unwanted_files:
@@ -135,7 +153,7 @@ def main():
     try:
         repo = Repo(os.getcwd(), search_parent_directories=True)
     except Exception as e:
-        print(f"Error: Not a git repository: {e}")
+        print(f"Error: Not a git repository: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Refuse to run on a dirty index or tracked worktree: 'cherry-pick
@@ -169,8 +187,10 @@ def main():
     sob_line = f"Signed-off-by: {user_name} <{user_email}>"
     current_user = os.environ.get("USER", "unknown")
 
+    multiple_commits = len(commits) > 1
+
     for commit_ref in commits:
-        print(f"Process: {commit_ref}")
+        print(f"Process: {commit_ref}", file=sys.stderr)
         try:
             commit = repo.commit(commit_ref)
         except Exception:
@@ -191,13 +211,17 @@ def main():
 
         # 3. If the pathspecs select all modified files: do a native clean cherry-pick
         actual_set = set(actual_modified_files)
+        unwanted_files = sorted(changed_in_commit - actual_set)
         if actual_set == changed_in_commit:
             try:
                 if keep_message:
                     repo.git.cherry_pick(commit.hexsha)
                 else:
                     repo.git.cherry_pick("-x", "-s", commit.hexsha)
-                print("  Clean native cherry-pick succeeded.")
+                print("  Clean native cherry-pick succeeded.", file=sys.stderr)
+                print_pick_summary(
+                    commit, actual_modified_files, unwanted_files, multiple_commits
+                )
                 continue
             except GitCommandError as e:
                 print(f"  Native cherry-pick failed: {e}.", file=sys.stderr)
@@ -205,8 +229,7 @@ def main():
                 sys.exit(1)
 
         # 4. Partial update via cherry-pick --no-commit + reset unwanted files
-        unwanted_files = sorted(changed_in_commit - actual_set)
-        print("  Partial update: Cherry-picking with 3-way merge...")
+        print("  Partial update: Cherry-picking with 3-way merge...", file=sys.stderr)
 
         cherry_pick_failed = False
         cherry_pick_error = None
@@ -223,7 +246,7 @@ def main():
             if not unmerged:
                 # An already-applied commit can stop with state but no changes.
                 if cherry_pick_state(repo) and not repo.index.diff("HEAD"):
-                    print("  Nothing to apply; skipping empty pick.")
+                    print("  Nothing to apply; skipping empty pick.", file=sys.stderr)
                     quit_cherry_pick(repo)
                     continue
 
@@ -251,7 +274,10 @@ def main():
                     repo.git.reset("--hard", "HEAD")
                 sys.exit(1)
             # All conflicts are in unwanted files — resolve by resetting to HEAD
-            print("  Conflicts only in unwanted files, resolving by reset...")
+            print(
+                "  Conflicts only in unwanted files, resolving by reset...",
+                file=sys.stderr,
+            )
 
         # Reset unwanted files back to HEAD state (index + worktree)
         if unwanted_files:
@@ -271,7 +297,7 @@ def main():
 
         # 5. Skip if the pick produced no changes to the selected files
         if not repo.index.diff("HEAD"):
-            print("  No changes to selected files; skipping.")
+            print("  No changes to selected files; skipping.", file=sys.stderr)
             continue
 
         # 6. Format commit message & commit (preserving original authorship)
@@ -304,7 +330,10 @@ def main():
             author=commit.author,
             author_date=author_date,
         )
-        print("  Successfully applied partial update!")
+        print("  Successfully applied partial update!", file=sys.stderr)
+        print_pick_summary(
+            commit, actual_modified_files, unwanted_files, multiple_commits
+        )
 
 
 if __name__ == "__main__":
