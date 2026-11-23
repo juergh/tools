@@ -61,7 +61,7 @@ esac
 
 if [ ${ubuntu} -eq 1 ] ; then
 	tag=${head_subject#UBUNTU: }
-	msg=${head_subject}
+	msg=${tag}
 else
 	tag=${version}
 	src=$(dpkg-parsechangelog -S Source)
